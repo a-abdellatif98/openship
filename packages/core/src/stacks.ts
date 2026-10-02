@@ -809,6 +809,43 @@ export const STACKS = {
       rootMarkers: ["artisan", "composer.json"],
       deps: ["laravel/framework"],
     },
+    // queue and scheduler ship with laravel/framework, so they need no gate.
+    // Horizon replaces the plain worker: `queue` steps aside via `unless`
+    // and `horizon` takes over via `when`, so exactly one worker resolves.
+    // The scheduler sets `singleton: true` itself, because the parser's
+    // scheduler-forces-singleton rule never runs over stack presets.
+    //
+    // Commands use `exec` so PHP replaces the `sh -c` wrapper as PID 1 and
+    // receives SIGTERM. Without it, `queue:work` and `schedule:work` were
+    // killed after the grace period (Laravel 13.33.0, see #935). Horizon's
+    // shutdown was not measured separately.
+    //
+    // `deps` merges `require` and `require-dev`, so a dev-only
+    // laravel/horizon still selects `horizon`. Callers that need
+    // production-only matching must read `require` from composer.json.
+    //
+    // Once StackRole gains stopSignal/stopGracePeriod (#976), `queue` should
+    // set a grace period above queue:work's default 60s timeout.
+    defaultRoles: [
+      {
+        name: "queue",
+        kind: "worker",
+        command: "exec php artisan queue:work",
+        unless: { deps: ["laravel/horizon"] },
+      },
+      {
+        name: "horizon",
+        kind: "worker",
+        command: "exec php artisan horizon",
+        when: { deps: ["laravel/horizon"] },
+      },
+      {
+        name: "scheduler",
+        kind: "scheduler",
+        command: "exec php artisan schedule:work",
+        singleton: true,
+      },
+    ],
   },
   symfony: {
     name: "Symfony",
