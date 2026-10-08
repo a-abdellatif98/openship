@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db, repos, schema } from "@repo/db";
 import type { ExecutionContext } from "@repo/platform";
-import { seedDeployment, seedOrg, setActive } from "../../helpers/seed";
+import {
+  seedDeployment,
+  seedOrg,
+  seedProject,
+  seedService,
+  seedServiceDeployment,
+  setActive,
+} from "../../helpers/seed";
 
 const h = vi.hoisted(() => ({
   containers: [] as Array<{
@@ -164,6 +171,23 @@ describe("reading an external project", () => {
     expect(listed[0]?.labels).toEqual(kamal);
     expect(h.runtimeServers).toEqual([serverId]);
     expect(h.disposed).toBe(1);
+  });
+
+  it("hides a matched container that an Openship service deployment owns", async () => {
+    const project = await createShop();
+    const owner = await seedProject(ctx.organizationId);
+    const service = await seedService(owner.id, { name: "web" });
+    await seedServiceDeployment((await seedDeployment(owner)).id, service, {
+      containerId: "c-owned",
+    });
+    h.containers = [
+      container("c-web", "shop-web-1", "running", kamal),
+      container("c-owned", "shop-web-2", "running", kamal),
+    ];
+
+    const listed = await listExternalContainers(project.id, ctx.organizationId);
+
+    expect(listed.map((c) => c.id)).toEqual(["c-web"]);
   });
 
   it("reads logs from the running matched container, preferring it over a stopped one", async () => {
