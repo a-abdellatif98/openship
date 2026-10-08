@@ -58,7 +58,6 @@ import {
 } from "../../lib/secret-env";
 import {
   assertNotExternal,
-  assertNotExternalById,
   assertProjectMutable,
   assertProjectMutableById,
   assertResourceInOrg,
@@ -2470,9 +2469,11 @@ export async function execInServiceContainer(
   serviceId: string,
   opts: { command: string; cwd?: string; timeoutMs?: number; maxOutputBytes?: number },
 ) {
+  const project = await repos.project.findById(projectId);
+  assertResourceInOrg(project, "Project", ctx.organizationId, projectId);
+  assertNotExternal(project);
   const { runtime, containerId } = await resolveServiceContainer(ctx, projectId, serviceId);
   try {
-    await assertNotExternalById(projectId);
     if (!runtime.supports("isolatedExec") || !runtime.inContainerExecutor) {
       throw new Error(
         "This service does not run in an isolated container, so a command here would run on the host. " +

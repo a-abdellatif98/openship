@@ -65,9 +65,9 @@ export async function validateExternalProjectInput(
 
 function externalConfigOf(project: ProjectRow): ExternalProjectConfig {
   const config = project.externalConfig;
-  if (!config?.serverId) {
+  if (!config?.serverId || config.serverId !== project.serverId) {
     throw new AppError(
-      "This external project has no server configured.",
+      "This external project has no consistent server configured.",
       409,
       "EXTERNAL_PROJECT_UNCONFIGURED",
     );
@@ -84,17 +84,16 @@ async function loadExternalProject(projectId: string, organizationId: string) {
   return { project, config: externalConfigOf(project) };
 }
 
-/** Openship's own infra containers carry no project label, so they are denied by name. */
-const OPENSHIP_INFRA_NAMES = new Set([EDGE_CONTAINER_NAME, MAIL_CONTAINER, MAIL_DB_CONTAINER]);
-
 async function matchedContainers(runtime: DockerRuntime, config: ExternalProjectConfig) {
   const all = await runtime.listAllContainers();
   const ownStack = new Set(findOwnStack(all).map((c) => c.id));
+  // Openship's own infra containers carry no project label, so they are denied by name.
+  const infraNames = new Set([EDGE_CONTAINER_NAME, MAIL_CONTAINER, MAIL_DB_CONTAINER]);
   const candidates = all.filter(
     (c) =>
       !ownStack.has(c.id) &&
       !c.labels?.[OPENSHIP_LABEL.project] &&
-      !c.names.some((name) => OPENSHIP_INFRA_NAMES.has(name)) &&
+      !c.names.some((name) => infraNames.has(name)) &&
       matchesExternalContainer(config.matchers, c),
   );
   const managed = new Set(

@@ -1747,7 +1747,9 @@ export async function updateProject(
 ) {
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
-  if (data.publicEndpoints !== undefined) assertNotExternal(p);
+  const touchesRouting = (["publicEndpoints", "port", "routeStrategy", "routingConfig"] as const)
+    .some((key) => data[key] !== undefined);
+  if (touchesRouting) assertNotExternal(p);
 
   // Shared route validation covers custom hostnames and scoped free-domain
   // allowances before any accompanying project fields are written.

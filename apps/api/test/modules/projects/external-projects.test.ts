@@ -25,7 +25,21 @@ const h = vi.hoisted(() => ({
   logTargets: [] as string[],
   disposed: 0,
   refreshConnectionEnv: vi.fn(),
+  cloud: false,
 }));
+
+vi.mock("@repo/platform/engine/config/env", async (original) => {
+  const actual = await original<{ env: Record<string, unknown> }>();
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      get CLOUD_MODE() {
+        return h.cloud;
+      },
+    },
+  };
+});
 
 vi.mock("@repo/platform/engine/modules/projects/project-connection.service", async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -93,6 +107,7 @@ beforeEach(async () => {
   h.runtimeServers = [];
   h.logTargets = [];
   h.disposed = 0;
+  h.cloud = false;
   ctx = (await seedOrg()) as ExecutionContext;
   serverId = (
     await repos.server.create({ organizationId: ctx.organizationId, sshHost: "192.0.2.30" })
@@ -145,6 +160,32 @@ describe("creating an external project", () => {
         ctx.organizationId,
       ),
     ).rejects.toThrow(/container name or at least one label/);
+  });
+
+  it("refuses Cloud mode, managed servers, and migration-only connections", async () => {
+    const create = (id: string) =>
+      createExternalProject(
+        { name: "x", serverId: id, matchers: [{ name: "web" }] },
+        ctx.organizationId,
+      );
+    const workspace = await repos.cloudWorkspace.create({
+      organizationId: ctx.organizationId,
+      name: "Prod",
+    });
+    const managed = (await repos.server.findByWorkspace(workspace.id, ctx.organizationId))!;
+    const source = await repos.server.create({
+      organizationId: ctx.organizationId,
+      sshHost: "192.0.2.32",
+      purpose: "migration_source",
+      sshAuthMethod: "password",
+      sshPassword: "x",
+      sshHostKey: "AAAA",
+    });
+
+    await expect(create(managed.id)).rejects.toThrow(/Managed Cloud servers/);
+    await expect(create(source.id)).rejects.toMatchObject({ code: "MIGRATION_SOURCE_ONLY" });
+    h.cloud = true;
+    await expect(create(serverId)).rejects.toMatchObject({ code: "EXTERNAL_PROJECT_UNSUPPORTED" });
   });
 });
 
@@ -206,6 +247,16 @@ describe("reading an external project", () => {
     expect(h.logTargets).toEqual(["c-live", "c-live"]);
     expect(h.disposed).toBe(2);
   });
+
+  it("answers 404 when no container matches, and closes the runtime", async () => {
+    const project = await createShop();
+    h.containers = [container("c-other", "blog-web-1", "running", { service: "blog" })];
+
+    await expect(getRuntimeLogs(project.id, ctx.organizationId)).rejects.toThrow(
+      /No matching container/,
+    );
+    expect(h.disposed).toBe(1);
+  });
 });
 
 describe("external projects refuse every mutation", () => {
@@ -259,6 +310,9 @@ describe("external projects refuse every mutation", () => {
     ).rejects.toThrow(refused);
     await expect(
       crud.updateProject(project.id, { publicEndpoints: [] }, ctx.organizationId),
+    ).rejects.toThrow(refused);
+    await expect(
+      crud.updateProject(project.id, { port: 8080 }, ctx.organizationId),
     ).rejects.toThrow(refused);
     await expect(
       addDomain(ctx, { projectId: project.id, hostname: "shop.example.com" } as never),

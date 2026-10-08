@@ -42,14 +42,14 @@ import { env } from "../../config/env";
 import { createProvisionLock } from "../../lib/provision-lock";
 import { resolveProjectLiveDeployTarget } from "./project-deploy-target";
 import { streamLogsOwningRuntime } from "../../lib/runtime-log-stream";
-import { getExternalRuntimeLogs, streamExternalRuntimeLogs } from "./external-project.service";
 
 // ─── Runtime logs ────────────────────────────────────────────────────────────
 
 export async function getRuntimeLogs(projectId: string, organizationId: string, tail?: number) {
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
-  if (isExternalProject(p)) return getExternalRuntimeLogs(p, organizationId, tail);
+  if (isExternalProject(p))
+    return (await import("./external-project.service")).getExternalRuntimeLogs(p, organizationId, tail);
 
   if (!p.activeDeploymentId) {
     throw new NotFoundError("No active deployment for project", projectId);
@@ -80,7 +80,10 @@ export async function streamRuntimeLogs(
 ) {
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
-  if (isExternalProject(p)) return streamExternalRuntimeLogs(p, organizationId, onLog, opts);
+  if (isExternalProject(p)) {
+    const external = await import("./external-project.service");
+    return external.streamExternalRuntimeLogs(p, organizationId, onLog, opts);
+  }
 
   if (!p.activeDeploymentId) {
     throw new NotFoundError("No active deployment for project", projectId);
