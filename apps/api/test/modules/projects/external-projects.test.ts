@@ -17,6 +17,12 @@ const h = vi.hoisted(() => ({
   runtimeServers: [] as Array<string | undefined>,
   logTargets: [] as string[],
   disposed: 0,
+  refreshConnectionEnv: vi.fn(),
+}));
+
+vi.mock("@repo/platform/engine/modules/projects/project-connection.service", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  refreshConnectionEnv: h.refreshConnectionEnv,
 }));
 
 vi.mock("@repo/platform/engine/lib/deployment-runtime", async (original) => ({
@@ -274,13 +280,16 @@ describe("external projects refuse every mutation", () => {
         "requestBuildAccess",
         (x: Rows) => builds.requestBuildAccess(ctx, { projectId: x.project.id } as never),
       ],
-      ["redeployBuildSession", (x: Rows) => builds.redeployBuildSession(ctx, x.deployment)],
       ["previewRestore", (x: Rows) => previewRestore(x.deployment, ctx.organizationId)],
       ["verifyDomain", (x: Rows) => domains.verifyDomain(ctx, x.domain)],
       ["setPrimaryDomain", (x: Rows) => domains.setPrimaryDomain(ctx, x.domain)],
       [
         "startServiceContainer",
         (x: Rows) => services.startServiceContainer(ctx, x.project.id, x.service),
+      ],
+      [
+        "stopServiceContainer",
+        (x: Rows) => services.stopServiceContainer(ctx, x.project.id, x.service),
       ],
       [
         "syncComposeServices",
@@ -291,6 +300,16 @@ describe("external projects refuse every mutation", () => {
       ],
     ])("refuses %s", async (_name, run) => {
       await expect(run(await seedRows())).rejects.toThrow(/deployed by another tool/);
+    });
+
+    it("refuses a redeploy before it refreshes the project's environment", async () => {
+      const { deployment } = await seedRows();
+      h.refreshConnectionEnv.mockClear();
+
+      await expect(builds.redeployBuildSession(ctx, deployment)).rejects.toThrow(
+        /deployed by another tool/,
+      );
+      expect(h.refreshConnectionEnv).not.toHaveBeenCalled();
     });
 
     it("leaves external domains out of the pending verification sweep", async () => {
