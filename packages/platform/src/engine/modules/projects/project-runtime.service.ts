@@ -5,7 +5,13 @@ import { isArtifactRef } from "../../lib/container-ref";
 
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos } from "@repo/db";
-import { AppError, NotFoundError, ValidationError, safeErrorMessage } from "@repo/core";
+import {
+  AppError,
+  NotFoundError,
+  ValidationError,
+  isExternalProject,
+  safeErrorMessage,
+} from "@repo/core";
 import { checkEdge, edgeProxy } from "@repo/adapters";
 import type { LogEntry, ImportedSite, RuntimeAdapter } from "@repo/adapters";
 import {
@@ -17,7 +23,11 @@ import {
   disposeRuntime,
 } from "../../lib/deployment-runtime";
 import { isAbsent, isAlreadyInState } from "../../lib/remote-state";
-import { assertNotControlPlane, assertResourceInOrg } from "../../lib/resource-access";
+import {
+  assertNotControlPlane,
+  assertNotExternal,
+  assertResourceInOrg,
+} from "../../lib/resource-access";
 import { syncManagedEdgeRoutes, edgeUnsyncedWarning } from "../../lib/managed-edge-proxy";
 import { reconcileServerEdge } from "../../lib/edge-reconcile";
 import { resolveManagedHostname } from "../../lib/routing-domains";
@@ -31,12 +41,14 @@ import { assertCloudRuntimeLimits, assertCloudServiceAllowance } from "../../lib
 import { env } from "../../config/env";
 import { createProvisionLock } from "../../lib/provision-lock";
 import { resolveProjectLiveDeployTarget } from "./project-deploy-target";
+import { getExternalRuntimeLogs, streamExternalRuntimeLogs } from "./external-project.service";
 
 // ─── Runtime logs ────────────────────────────────────────────────────────────
 
 export async function getRuntimeLogs(projectId: string, organizationId: string, tail?: number) {
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
+  if (isExternalProject(p)) return getExternalRuntimeLogs(p, organizationId, tail);
 
   if (!p.activeDeploymentId) {
     throw new NotFoundError("No active deployment for project", projectId);
@@ -67,6 +79,7 @@ export async function streamRuntimeLogs(
 ) {
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
+  if (isExternalProject(p)) return streamExternalRuntimeLogs(p, organizationId, onLog, opts);
 
   if (!p.activeDeploymentId) {
     throw new NotFoundError("No active deployment for project", projectId);
@@ -147,10 +160,12 @@ export async function enableProject(projectId: string, organizationId: string) {
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
   assertNotControlPlane(p);
+  assertNotExternal(p);
 
   const result = await withLiveProjectRuntimeMutation(projectId, async (liveProject) => {
     assertResourceInOrg(liveProject, "Project", organizationId, projectId);
     assertNotControlPlane(liveProject);
+    assertNotExternal(liveProject);
     return env.CLOUD_MODE
       ? createProvisionLock(`cloud:service-quota:${organizationId}`).run(() => enableLiveProject(liveProject, organizationId))
       : enableLiveProject(liveProject, organizationId);
@@ -246,10 +261,12 @@ export async function disableProject(projectId: string, organizationId: string) 
   // Pausing the control plane means stopping the container that is handling this
   // request — it would answer with a dropped connection, not a result.
   assertNotControlPlane(p);
+  assertNotExternal(p);
 
   const result = await withLiveProjectRuntimeMutation(projectId, async (liveProject) => {
     assertResourceInOrg(liveProject, "Project", organizationId, projectId);
     assertNotControlPlane(liveProject);
+    assertNotExternal(liveProject);
     return disableLiveProject(liveProject);
   });
   if (!result) throw new NotFoundError("Project", projectId);
@@ -366,6 +383,7 @@ export async function retryProjectRouting(
 ): Promise<{ ok: boolean; warning?: string }> {
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
+  assertNotExternal(p);
 
   options.onLog?.("Waiting for exclusive access to the project's routing…");
   const result = await withLiveProjectRuntimeMutation(projectId, async (liveProject) => {

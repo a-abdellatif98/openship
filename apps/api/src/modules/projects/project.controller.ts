@@ -79,6 +79,16 @@ export async function create(c: Context) {
   return c.json({ data: result.data }, 201);
 }
 
+export async function createExternal(c: Context) {
+  const result = await getPlatformKernel().projects.createExternal(
+    operationContext(c),
+    await c.req.json(),
+  );
+  applyOperationContext(c, result.context);
+  c.set("createdResourceId", result.data.id);
+  return c.json({ data: result.data }, 201);
+}
+
 export async function getById(c: Context) {
   const result = await getPlatformKernel().projects.get(operationContext(c), param(c, "id"));
   applyOperationContext(c, result.context);
@@ -448,6 +458,15 @@ export async function listLocal(c: Context) {
 /**
  * GET /projects/:id/logs - one-shot fetch of recent runtime logs.
  */
+export async function listExternalContainers(c: Context) {
+  const result = await getPlatformKernel().projects.listExternalContainers(
+    operationContext(c),
+    param(c, "id"),
+  );
+  applyOperationContext(c, result.context);
+  return c.json({ data: result.data });
+}
+
 export async function runtimeLogs(c: Context) {
   const result = await getPlatformKernel().projects.runtimeLogs(
     operationContext(c),

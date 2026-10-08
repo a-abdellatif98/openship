@@ -1,6 +1,8 @@
 import type { ProjectDependencies } from "../../../projects";
 import type { CreateProjectInput, EnsureProjectInput } from "@repo/contracts";
 import type { ExecutionContext } from "../../../context";
+import { ValidationError, isExternalProject } from "@repo/core";
+import { repos } from "@repo/db";
 import { authorization } from "../../lib/authorization";
 import { audit } from "../../lib/audit-emitter";
 import { assertNativeSourcePath } from "../../native/source-policy";
@@ -14,6 +16,8 @@ import { subscribeProjectLogs, openProjectServerLogs } from "./project-logs.oper
 import { subscribeRoutingRetry } from "./project-routing-retry.operations";
 
 async function checkSource(input: Partial<CreateProjectInput>) {
+  if (input.gitProvider === "external")
+    throw new ValidationError("Create external projects with POST /api/projects/external.");
   if (input.localPath && process.env.OPENSHIP_NATIVE === "true")
     await assertNativeSourcePath(input.localPath);
   if (
@@ -59,6 +63,15 @@ export const projectDependencies: ProjectDependencies = {
   volumeEvents: clusterVolumeEvents,
   local: createProjectLocalDependencies(create),
   create,
+  async createExternal(ctx, input) {
+    const service = await import("./external-project.service");
+    return service.createExternalProject(
+      input,
+      ctx.organizationId,
+      ctx.tokenScope ?? undefined,
+      ctx,
+    );
+  },
   async ensure(ctx, input) {
     const service = await import("./project.service");
     await checkSource(input);
@@ -73,6 +86,8 @@ export const projectDependencies: ProjectDependencies = {
   async update(ctx, id, input) {
     const service = await import("./project.service");
     await checkSource(input);
+    if (input.gitProvider !== undefined && isExternalProject(await repos.project.findById(id)))
+      throw new ValidationError("An external project's source cannot be changed.");
     return service.updateProject(id, input, ctx.organizationId);
   },
   async list(ctx, input) {

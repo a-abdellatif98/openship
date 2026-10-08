@@ -1,6 +1,7 @@
 import {
   AppError,
   CreateProjectBody,
+  CreateExternalProjectBody,
   EnsureProjectBody,
   UpdateProjectBody,
   ListProjectsSchema,
@@ -19,6 +20,7 @@ import {
   type Project,
   type ProjectOperations,
   type CreateProjectInput,
+  type CreateExternalProjectInput,
   type EnsureProjectInput,
   type EnsureProjectResult,
   type UpdateProjectInput,
@@ -85,6 +87,7 @@ export interface ProjectDependencies {
     options: { signal?: AbortSignal },
   ): Promise<AsyncIterable<Uint8Array>>;
   create(ctx: ExecutionContext, input: CreateProjectInput): Promise<unknown>;
+  createExternal?(ctx: ExecutionContext, input: CreateExternalProjectInput): Promise<unknown>;
   ensure(ctx: ExecutionContext, input: EnsureProjectInput): Promise<EnsureProjectResult>;
   list(
     ctx: ExecutionContext,
@@ -322,6 +325,22 @@ export function createProjectOperations(
         gitOwner: data.gitOwner ?? null,
         gitRepo: data.gitRepo ?? null,
         gitBranch: data.gitBranch ?? null,
+      });
+      return { context, data };
+    },
+    async createExternal(ctx, value) {
+      const input = parseInput(CreateExternalProjectBody, value);
+      const context = await authorize(ctx, "*", "write", true);
+      const createExternal = resources().createExternal;
+      if (!createExternal)
+        throw new AppError("External projects are not configured", 501, "CAPABILITY_UNAVAILABLE");
+      const data = presentProject(await createExternal(context, input));
+      audit(context, data.id, true, {
+        name: data.name,
+        slug: data.slug,
+        gitProvider: "external",
+        serverId: input.serverId,
+        matchers: input.matchers,
       });
       return { context, data };
     },

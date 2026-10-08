@@ -1,4 +1,4 @@
-import { ForbiddenError, NotFoundError } from "@repo/core";
+import { ForbiddenError, NotFoundError, isExternalProject } from "@repo/core";
 import { repos } from "@repo/db";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
 
@@ -69,6 +69,27 @@ export function assertNotControlPlane(
  */
 export async function assertNotControlPlaneById(projectId: string): Promise<void> {
   assertNotControlPlane(await repos.project.findById(projectId));
+}
+
+export function assertNotExternal(
+  project: { gitProvider?: string | null } | null | undefined,
+): void {
+  if (isExternalProject(project)) {
+    throw new ForbiddenError(
+      "External projects are deployed by another tool; Openship only reads their logs and status.",
+    );
+  }
+}
+
+export async function assertNotExternalById(projectId: string): Promise<void> {
+  assertNotExternal(await repos.project.findById(projectId));
+}
+
+/** Both mutation policies for callers holding only a project id, in one lookup. */
+export async function assertProjectMutableById(projectId: string): Promise<void> {
+  const project = await repos.project.findById(projectId);
+  assertNotControlPlane(project);
+  assertNotExternal(project);
 }
 
 export async function isServerInOrg(

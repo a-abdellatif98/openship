@@ -91,6 +91,7 @@ import {
 import type { ExecutionContext as RequestContext } from "@repo/platform";
 import { type PortCheckResult } from "../../lib/deployment-runtime";
 import { requireOrgServer } from "../../lib/server-target";
+import { assertNotExternalById } from "../../lib/resource-access";
 import * as sessionManager from "./session-manager";
 import {
   requestDeploymentCancellation,
@@ -1344,6 +1345,7 @@ async function createQueuedDeploymentUnlocked(opts: {
   changedPaths?: string[] | null;
   changedPathsTruncated?: boolean;
 }) {
+  await assertNotExternalById(opts.projectId);
   // Persist the smart-deploy serviceIds onto the snapshot so the
   // executor can find them without re-resolving from request scope.
   let meta: DeploymentConfigSnapshot = opts.meta;

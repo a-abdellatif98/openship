@@ -29,7 +29,7 @@ import {
   SYSTEM,
   DOMAIN_VERIFY_GRACE_MS,
 } from "@repo/core";
-import { assertResourceInOrg } from "../../lib/resource-access";
+import { assertNotExternal, assertResourceInOrg } from "../../lib/resource-access";
 import { platform } from "../../lib/platform-config";
 import { buildBackgroundContext } from "../../lib/background-context";
 import { trackBackgroundWork } from "../../lib/background-work";
@@ -166,6 +166,7 @@ export async function addDomain(
 ): Promise<AddDomainResult> {
   const project = await repos.project.findById(data.projectId);
   assertResourceInOrg(project, "Project", ctx.organizationId, data.projectId);
+  assertNotExternal(project);
 
   // Reject obviously-bogus shapes before they ever reach the DB.
   const hostname = normalizeCustomHostname(data.hostname);

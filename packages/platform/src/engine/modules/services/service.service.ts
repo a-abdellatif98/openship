@@ -56,7 +56,13 @@ import {
   unmaskEnv,
   unmaskBuildArgs,
 } from "../../lib/secret-env";
-import { assertNotControlPlane, assertNotControlPlaneById, assertResourceInOrg } from "../../lib/resource-access";
+import {
+  assertNotControlPlane,
+  assertNotExternal,
+  assertNotExternalById,
+  assertProjectMutableById,
+  assertResourceInOrg,
+} from "../../lib/resource-access";
 import { platform } from "../../lib/platform-config";
 import { assertValidCustomDomains, customHostnamesOf } from "../../lib/custom-domain-guard";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
@@ -590,6 +596,7 @@ export async function createService(
   data: TCreateServiceBody,
 ) {
   const project = await repos.project.findById(projectId);
+  assertNotExternal(project);
   assertResourceInOrg(project, "Project", ctx.organizationId, projectId);
 
   const name = data.name.trim();
@@ -1314,6 +1321,7 @@ export async function deleteService(ctx: RequestContext, projectId: string, serv
   // The self-app project's services ARE the Openship stack (api, dashboard, edge,
   // postgres, redis), linked so the dashboard can show their state, logs and shell.
   assertNotControlPlane(project);
+  assertNotExternal(project);
 
   const deleted = await withLiveProjectRuntimeMutation(projectId, async (liveProject) => {
     // Re-read the service under the shared teardown lock. Authorization above is
@@ -1324,6 +1332,7 @@ export async function deleteService(ctx: RequestContext, projectId: string, serv
       throw new Error("service-not-found");
     }
     assertNotControlPlane(liveProject);
+    assertNotExternal(liveProject);
     await assertServiceNotShared(serviceId);
     await deleteLiveService(liveProject, liveService);
     return true;
@@ -2294,7 +2303,7 @@ export async function startServiceContainer(
 }
 
 async function startServiceContainerUnlocked(ctx: RequestContext, projectId: string, serviceId: string) {
-  await assertNotControlPlaneById(projectId);
+  await assertProjectMutableById(projectId);
   // Existing container → just start it. No container yet → provision it on its
   // own (image → container/workspace), decoupled from the project deploy.
   const existing = await prepareServiceStart(ctx, projectId, serviceId, true);
@@ -2323,7 +2332,7 @@ export async function stopServiceContainer(
 }
 
 async function stopServiceContainerUnlocked(ctx: RequestContext, projectId: string, serviceId: string) {
-  await assertNotControlPlaneById(projectId);
+  await assertProjectMutableById(projectId);
   const { runtime, containerId, row } = await resolveServiceContainer(ctx, projectId, serviceId);
   try {
     await runtime.stop(containerId);
@@ -2366,7 +2375,7 @@ export async function restartServiceContainer(
 async function restartServiceContainerUnlocked(
   ctx: RequestContext, projectId: string, serviceId: string, opts?: { force?: boolean },
 ) {
-  await assertNotControlPlaneById(projectId);
+  await assertProjectMutableById(projectId);
 
   // Match the Environment tab's actual value comparison. A timestamp alone
   // mistakes secret-visibility edits for runtime changes and misses deletions.
@@ -2462,6 +2471,7 @@ export async function execInServiceContainer(
   serviceId: string,
   opts: { command: string; cwd?: string; timeoutMs?: number; maxOutputBytes?: number },
 ) {
+  await assertNotExternalById(projectId);
   const { runtime, containerId } = await resolveServiceContainer(ctx, projectId, serviceId);
   try {
     if (!runtime.supports("isolatedExec") || !runtime.inContainerExecutor) {

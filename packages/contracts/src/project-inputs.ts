@@ -339,6 +339,25 @@ export const SetReleaseSourceBody = Type.Object({
   imageTemplate: Type.String({ minLength: 1, maxLength: 500 }),
 });
 
+export const ExternalContainerMatcherSchema = Type.Object(
+  {
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
+    labels: Type.Optional(
+      Type.Record(Type.String({ minLength: 1, maxLength: 255 }), Type.String({ maxLength: 1024 })),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const CreateExternalProjectBody = Type.Object(
+  {
+    name: Type.String({ minLength: 1, maxLength: 100 }),
+    serverId: Type.String({ minLength: 1 }),
+    matchers: Type.Array(ExternalContainerMatcherSchema, { minItems: 1, maxItems: 20 }),
+  },
+  { additionalProperties: false },
+);
+
 export const CreateProjectBody = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 100 }),
   /**
@@ -713,3 +732,4 @@ export type TCreateProjectEnvironmentBody = Static<typeof CreateProjectEnvironme
 export type TMergeEnvVarsBody = Static<typeof MergeEnvVarsBody>;
 export type TUpdateResourcesBody = Static<typeof UpdateResourcesBody>;
 export type TSetReleaseSourceBody = Static<typeof SetReleaseSourceBody>;
+export type TCreateExternalProjectBody = Static<typeof CreateExternalProjectBody>;

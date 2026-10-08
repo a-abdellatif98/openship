@@ -303,6 +303,15 @@ export const ProjectDriftSchema = Type.Union([
   }),
 ]);
 
+const ExternalContainerSchema = Type.Object({
+  id: Type.String(),
+  name: Type.String(),
+  image: Type.String(),
+  state: Type.String(),
+  status: Type.String(),
+  labels: Type.Record(Type.String(), Type.String()),
+});
+
 export const ProjectControlSchemas = {
   ...ProjectDatabaseSchemas,
   ...ProjectVolumeSchemas,
@@ -495,6 +504,7 @@ export const ProjectControlSchemas = {
     optionalInput: true,
     output: Type.Array(LogEntrySchema),
   },
+  listExternalContainers: { action: "read", output: Type.Array(ExternalContainerSchema) },
   getCloneToken: { action: "read", output: CloneTokenStateSchema },
   updateCloneToken: {
     action: "admin",

@@ -1184,6 +1184,13 @@
       "when": 1791473791431,
       "tag": "0168_cloud_static_hosting",
       "breakpoints": true
+    },
+    {
+      "idx": 169,
+      "version": "7",
+      "when": 1791560191431,
+      "tag": "0169_external_project",
+      "breakpoints": true
     }
   ]
 }
