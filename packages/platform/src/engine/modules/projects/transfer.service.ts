@@ -44,7 +44,7 @@ import { withProjectRuntimeLock } from "../../lib/project-runtime-lock";
 import { linkedCloudIdentity } from "../../lib/cloud/server-link";
 import { sameCloudIdentity } from "../../lib/cloud/transport";
 import { isProjectPromotion, projectPromotionDigest, type ProjectPromotion } from "../../lib/cloud/project-promotion";
-import { assertNotControlPlane, assertNotExternal } from "../../lib/resource-access";
+import { assertProjectMutable } from "../../lib/resource-access";
 
 // ─── Typed errors ────────────────────────────────────────────────────────────
 
@@ -156,8 +156,7 @@ async function transferProjectToCloudLocked(input: TransferToCloudInput): Promis
   // 1) Pre-flight: project exists in this org and isn't already on cloud.
   const project = await loadProject(input.projectId, input.organizationId);
   if (!project) throw new TransferProjectNotFoundError(input.projectId);
-  assertNotControlPlane(project);
-  assertNotExternal(project);
+  assertProjectMutable(project);
   if (project.workspaceId) {
     throw new TransferAlreadyOnTargetError("cloud");
   }

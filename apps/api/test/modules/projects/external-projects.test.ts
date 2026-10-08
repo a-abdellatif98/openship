@@ -55,6 +55,8 @@ const { createQueuedDeployment } =
 const { createService } = await import("@repo/platform/engine/modules/services/service.service");
 const { triggerDeployment } =
   await import("@repo/platform/engine/modules/deployments/build.service");
+const { projectRoutingOperations } =
+  await import("@repo/platform/engine/modules/projects/project-routing.operations");
 const crud = await import("@repo/platform/engine/modules/projects/project-crud.service");
 const { addDomain } = await import("@repo/platform/engine/modules/domains/domain.service");
 const { projectDependencies } =
@@ -150,6 +152,7 @@ describe("reading an external project", () => {
     h.containers = [
       container("c-web", "shop-web-1", "running", { ...kamal, "secret.token": "s3cr3t" }),
       container("c-other", "blog-web-1", "running", { service: "blog", role: "web" }),
+      container("c-edge", "openship-edge", "running", kamal),
       container("c-managed", "shop-managed", "running", { ...kamal, "openship.project": "p" }),
       ownStack("c-api", "api"),
       ownStack("c-dash", "dashboard"),
@@ -238,6 +241,9 @@ describe("external projects refuse every mutation", () => {
     ).rejects.toThrow(refused);
     await expect(
       crud.createProjectEnvironment(project.id, ctx, { environmentName: "Preview" } as never),
+    ).rejects.toThrow(refused);
+    await expect(
+      projectRoutingOperations.removeRouteRule(ctx, project.id, "rule-1"),
     ).rejects.toThrow(refused);
     expect(await repos.project.findById(project.id)).toMatchObject({ gitProvider: "external" });
   });

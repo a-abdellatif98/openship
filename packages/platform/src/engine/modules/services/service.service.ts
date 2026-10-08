@@ -57,9 +57,9 @@ import {
   unmaskBuildArgs,
 } from "../../lib/secret-env";
 import {
-  assertNotControlPlane,
   assertNotExternal,
   assertNotExternalById,
+  assertProjectMutable,
   assertProjectMutableById,
   assertResourceInOrg,
 } from "../../lib/resource-access";
@@ -1320,8 +1320,7 @@ export async function deleteService(ctx: RequestContext, projectId: string, serv
   const { project } = await assertServiceAccess(ctx, projectId, serviceId);
   // The self-app project's services ARE the Openship stack (api, dashboard, edge,
   // postgres, redis), linked so the dashboard can show their state, logs and shell.
-  assertNotControlPlane(project);
-  assertNotExternal(project);
+  assertProjectMutable(project);
 
   const deleted = await withLiveProjectRuntimeMutation(projectId, async (liveProject) => {
     // Re-read the service under the shared teardown lock. Authorization above is
@@ -1331,8 +1330,7 @@ export async function deleteService(ctx: RequestContext, projectId: string, serv
     if (!liveService || liveService.projectId !== projectId) {
       throw new Error("service-not-found");
     }
-    assertNotControlPlane(liveProject);
-    assertNotExternal(liveProject);
+    assertProjectMutable(liveProject);
     await assertServiceNotShared(serviceId);
     await deleteLiveService(liveProject, liveService);
     return true;

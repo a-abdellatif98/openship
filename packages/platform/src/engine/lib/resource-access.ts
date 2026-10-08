@@ -85,11 +85,16 @@ export async function assertNotExternalById(projectId: string): Promise<void> {
   assertNotExternal(await repos.project.findById(projectId));
 }
 
-/** Both mutation policies for callers holding only a project id, in one lookup. */
-export async function assertProjectMutableById(projectId: string): Promise<void> {
-  const project = await repos.project.findById(projectId);
+/** Both runtime-mutation policies: neither the control plane nor an external project. */
+export function assertProjectMutable(
+  project: { appTemplateId?: string | null; gitProvider?: string | null } | null | undefined,
+): void {
   assertNotControlPlane(project);
   assertNotExternal(project);
+}
+
+export async function assertProjectMutableById(projectId: string): Promise<void> {
+  assertProjectMutable(await repos.project.findById(projectId));
 }
 
 export async function isServerInOrg(

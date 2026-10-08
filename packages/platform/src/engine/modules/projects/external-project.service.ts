@@ -8,10 +8,17 @@ import {
   matchesExternalContainer,
   type ExternalProjectConfig,
 } from "@repo/core";
-import type { LogEntry } from "@repo/adapters";
+import {
+  EDGE_CONTAINER_NAME,
+  MAIL_CONTAINER,
+  MAIL_DB_CONTAINER,
+  OPENSHIP_LABEL,
+  type LogEntry,
+} from "@repo/adapters";
 import type { TCreateExternalProjectBody } from "@repo/contracts";
 import { createServerDockerRuntime, disposeRuntime } from "../../lib/deployment-runtime";
 import { assertResourceInOrg } from "../../lib/resource-access";
+import { streamLogsOwningRuntime } from "../../lib/runtime-log-stream";
 import { assertDeploymentServer } from "../system/server-access";
 import { findOwnStack } from "../../lib/startup/self-services";
 import { env } from "../../config/env";
@@ -77,13 +84,27 @@ async function loadExternalProject(projectId: string, organizationId: string) {
   return { project, config: externalConfigOf(project) };
 }
 
+/** Openship's own infra containers carry no project label, so they are denied by name. */
+const OPENSHIP_INFRA_NAMES = new Set([EDGE_CONTAINER_NAME, MAIL_CONTAINER, MAIL_DB_CONTAINER]);
+
 async function matchedContainers(runtime: DockerRuntime, config: ExternalProjectConfig) {
   const all = await runtime.listAllContainers();
   const ownStack = new Set(findOwnStack(all).map((c) => c.id));
+  const candidates = all.filter(
+    (c) =>
+      !ownStack.has(c.id) &&
+      !c.labels?.[OPENSHIP_LABEL.project] &&
+      !c.names.some((name) => OPENSHIP_INFRA_NAMES.has(name)) &&
+      matchesExternalContainer(config.matchers, c),
+  );
+  const managed = new Set(
+    (await repos.service.findByContainerIds(candidates.map((c) => c.id))).map(
+      (row) => row.containerId,
+    ),
+  );
   const labelKeys = new Set(config.matchers.flatMap((m) => Object.keys(m.labels ?? {})));
-  return all
-    .filter((c) => !ownStack.has(c.id) && !c.labels?.["openship.project"])
-    .filter((c) => matchesExternalContainer(config.matchers, c))
+  return candidates
+    .filter((c) => !managed.has(c.id))
     .map<ExternalContainer>((c) => ({
       id: c.id,
       name: c.names[0] ?? c.id,
@@ -154,23 +175,7 @@ export async function streamExternalRuntimeLogs(
   opts?: { tail?: number },
 ) {
   const { runtime, container, serverId } = await openExternalLogTarget(project, organizationId);
-  try {
-    const stop = await runtime.streamRuntimeLogs(container.id, onLog, opts);
-    let closed = false;
-    const cleanup = () => {
-      if (closed) return;
-      closed = true;
-      try {
-        stop();
-      } finally {
-        disposeRuntime(runtime);
-      }
-    };
-    return { cleanup, serverId };
-  } catch (error) {
-    disposeRuntime(runtime);
-    throw error;
-  }
+  return streamLogsOwningRuntime(runtime, container.id, onLog, opts, serverId);
 }
 
 export async function createExternalProject(

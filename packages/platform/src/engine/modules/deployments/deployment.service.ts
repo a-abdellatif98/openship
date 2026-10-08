@@ -19,7 +19,7 @@ import {
 } from "../../lib/deployment-runtime";
 import {
   assertNotControlPlane,
-  assertNotExternal,
+  assertProjectMutable,
   assertProjectMutableById,
   assertResourceInOrg,
 } from "../../lib/resource-access";
@@ -149,8 +149,7 @@ async function deleteDeploymentLocked(deploymentId: string, organizationId: stri
   const dep = await getDeployment(deploymentId, organizationId);
 
   const project = await repos.project.findById(dep.projectId);
-  assertNotControlPlane(project);
-  assertNotExternal(project);
+  assertProjectMutable(project);
 
   if (
     ["queued", "building", "deploying"].includes(dep.status) ||

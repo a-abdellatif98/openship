@@ -24,8 +24,8 @@ import {
 } from "../../lib/deployment-runtime";
 import { isAbsent, isAlreadyInState } from "../../lib/remote-state";
 import {
-  assertNotControlPlane,
   assertNotExternal,
+  assertProjectMutable,
   assertResourceInOrg,
 } from "../../lib/resource-access";
 import { syncManagedEdgeRoutes, edgeUnsyncedWarning } from "../../lib/managed-edge-proxy";
@@ -41,6 +41,7 @@ import { assertCloudRuntimeLimits, assertCloudServiceAllowance } from "../../lib
 import { env } from "../../config/env";
 import { createProvisionLock } from "../../lib/provision-lock";
 import { resolveProjectLiveDeployTarget } from "./project-deploy-target";
+import { streamLogsOwningRuntime } from "../../lib/runtime-log-stream";
 import { getExternalRuntimeLogs, streamExternalRuntimeLogs } from "./external-project.service";
 
 // ─── Runtime logs ────────────────────────────────────────────────────────────
@@ -99,23 +100,7 @@ export async function streamRuntimeLogs(
     disposeRuntime(runtime);
     throw new NotFoundError("No running container for project", projectId);
   }
-  try {
-    const stop = await runtime.streamRuntimeLogs(containerId, onLog, opts);
-    let closed = false;
-    const cleanup = () => {
-      if (closed) return;
-      closed = true;
-      try {
-        stop();
-      } finally {
-        disposeRuntime(runtime);
-      }
-    };
-    return { cleanup, serverId };
-  } catch (error) {
-    disposeRuntime(runtime);
-    throw error;
-  }
+  return streamLogsOwningRuntime(runtime, containerId, onLog, opts, serverId);
 }
 
 // ─── Enable / Disable ────────────────────────────────────────────────────────
@@ -159,13 +144,11 @@ async function stopEdgeServing(project: Pick<ProjectRow, "id">, dep: DeploymentR
 export async function enableProject(projectId: string, organizationId: string) {
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
-  assertNotControlPlane(p);
-  assertNotExternal(p);
+  assertProjectMutable(p);
 
   const result = await withLiveProjectRuntimeMutation(projectId, async (liveProject) => {
     assertResourceInOrg(liveProject, "Project", organizationId, projectId);
-    assertNotControlPlane(liveProject);
-    assertNotExternal(liveProject);
+    assertProjectMutable(liveProject);
     return env.CLOUD_MODE
       ? createProvisionLock(`cloud:service-quota:${organizationId}`).run(() => enableLiveProject(liveProject, organizationId))
       : enableLiveProject(liveProject, organizationId);
@@ -260,13 +243,11 @@ export async function disableProject(projectId: string, organizationId: string) 
   assertResourceInOrg(p, "Project", organizationId, projectId);
   // Pausing the control plane means stopping the container that is handling this
   // request — it would answer with a dropped connection, not a result.
-  assertNotControlPlane(p);
-  assertNotExternal(p);
+  assertProjectMutable(p);
 
   const result = await withLiveProjectRuntimeMutation(projectId, async (liveProject) => {
     assertResourceInOrg(liveProject, "Project", organizationId, projectId);
-    assertNotControlPlane(liveProject);
-    assertNotExternal(liveProject);
+    assertProjectMutable(liveProject);
     return disableLiveProject(liveProject);
   });
   if (!result) throw new NotFoundError("Project", projectId);

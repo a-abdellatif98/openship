@@ -331,6 +331,12 @@ export function createProjectOperations(
     async createExternal(ctx, value) {
       const input = parseInput(CreateExternalProjectBody, value);
       const context = await authorize(ctx, "*", "write", true);
+      // Observing a server reads every container on it, so it needs the server grant too.
+      await authorization.authorize(context, {
+        resourceType: "server",
+        resourceId: input.serverId,
+        action: "write",
+      });
       const createExternal = resources().createExternal;
       if (!createExternal)
         throw new AppError("External projects are not configured", 501, "CAPABILITY_UNAVAILABLE");
