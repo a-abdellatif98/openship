@@ -303,6 +303,7 @@ describe("migration chain applies to an existing, populated database", () => {
           ...previous,
           cloud_promotion: null,
           cloud_static_hosting: "pages",
+          external_config: null,
           server_id: previous.workspace_id
             ? managed.find((server) => server.workspace_id === previous.workspace_id)!.id
             : previous.server_id,
