@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { repos } from "@repo/db";
+import { db, repos, schema } from "@repo/db";
 import type { ExecutionContext } from "@repo/platform";
-import { seedOrg } from "../../helpers/seed";
+import { seedDeployment, seedOrg, setActive } from "../../helpers/seed";
 
 const h = vi.hoisted(() => ({
   containers: [] as Array<{
@@ -53,6 +53,12 @@ const crud = await import("@repo/platform/engine/modules/projects/project-crud.s
 const { addDomain } = await import("@repo/platform/engine/modules/domains/domain.service");
 const { projectDependencies } =
   await import("@repo/platform/engine/modules/projects/project.operations");
+
+const builds = await import("@repo/platform/engine/modules/deployments/build.service");
+const domains = await import("@repo/platform/engine/modules/domains/domain.service");
+const services = await import("@repo/platform/engine/modules/services/service.service");
+const { previewRestore } =
+  await import("@repo/platform/engine/modules/deployments/deployment.service");
 
 const container = (id: string, name: string, state: string, labels: Record<string, string>) => ({
   id,
@@ -240,4 +246,63 @@ describe("external projects refuse every mutation", () => {
       projectDependencies.update(ctx, project.id, { gitProvider: "external" }),
     ).rejects.toThrow(/POST \/api\/projects\/external/);
   });
+
+  describe("with rows a project could have acquired", () => {
+    const seedRows = async () => {
+      const project = await createShop();
+      const deployment = await seedDeployment(project as never);
+      const [domain] = await db
+        .insert(schema.domain)
+        .values({
+          id: `dom-${project.id}`,
+          hostname: `${project.id}.example.com`,
+          projectId: project.id,
+          verificationToken: "t",
+          domainType: "custom",
+          createdAt: new Date(0),
+        })
+        .returning();
+      const [service] = await db
+        .insert(schema.service)
+        .values({ id: `svc-${project.id}`, projectId: project.id, name: "web", image: "shop:1" })
+        .returning();
+      return { project, deployment: deployment.id, domain: domain!.id, service: service!.id };
+    };
+
+    it.each([
+      [
+        "requestBuildAccess",
+        (x: Rows) => builds.requestBuildAccess(ctx, { projectId: x.project.id } as never),
+      ],
+      ["redeployBuildSession", (x: Rows) => builds.redeployBuildSession(ctx, x.deployment)],
+      ["previewRestore", (x: Rows) => previewRestore(x.deployment, ctx.organizationId)],
+      ["verifyDomain", (x: Rows) => domains.verifyDomain(ctx, x.domain)],
+      ["setPrimaryDomain", (x: Rows) => domains.setPrimaryDomain(ctx, x.domain)],
+      [
+        "startServiceContainer",
+        (x: Rows) => services.startServiceContainer(ctx, x.project.id, x.service),
+      ],
+      [
+        "syncComposeServices",
+        (x: Rows) =>
+          services.syncComposeServices(ctx, x.project.id, [
+            { name: "db", image: "postgres:16" },
+          ] as never),
+      ],
+    ])("refuses %s", async (_name, run) => {
+      await expect(run(await seedRows())).rejects.toThrow(/deployed by another tool/);
+    });
+
+    it("leaves external domains out of the pending verification sweep", async () => {
+      const { project, deployment, domain } = await seedRows();
+      await setActive(project.id, deployment);
+
+      const result = await domains.verifyPendingDomains({ organizationId: ctx.organizationId });
+
+      expect(result.total).toBe(0);
+      expect((await repos.domain.findById(domain))?.lastCheckedAt ?? null).toBeNull();
+    });
+  });
 });
+
+type Rows = { project: { id: string }; deployment: string; domain: string; service: string };

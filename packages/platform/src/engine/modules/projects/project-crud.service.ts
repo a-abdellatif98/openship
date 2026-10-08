@@ -1677,11 +1677,19 @@ export async function getProject(projectId: string, organizationId: string) {
 
 // ─── Create project ──────────────────────────────────────────────────────────
 
-/** @scope org — only reads organizationId as a DB key. */
 /** Columns no request body may set; only internal creators (external projects) pass them. */
-type ProjectColumnOverrides = Partial<Pick<NewProject, "externalConfig" | "runtimeMode" | "autoDeploy">>;
+type ProjectColumnOverrides = Partial<
+  Pick<NewProject, "externalConfig" | "runtimeMode" | "autoDeploy">
+>;
 
-export async function createProject(data: EnsureProjectBody, organizationId: string, access?: { tokenId: string }, ctx?: RequestContext, columns?: ProjectColumnOverrides) {
+/** @scope org — only reads organizationId as a DB key. */
+export async function createProject(
+  data: EnsureProjectBody,
+  organizationId: string,
+  access?: { tokenId: string },
+  ctx?: RequestContext,
+  columns?: ProjectColumnOverrides,
+) {
   const slug = slugify(data.name);
 
   const existing = await findProjectByAppSlug(organizationId, slug);

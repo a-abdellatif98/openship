@@ -1464,6 +1464,7 @@ export async function syncComposeServices(
 ) {
   const project = await repos.project.findById(projectId);
   assertResourceInOrg(project, "Project", ctx.organizationId, projectId);
+  assertNotExternal(project);
 
   // #336: env is masked on read, so the client may echo the mask sentinel back.
   // Restore each service's masked values from its stored row (matched by name)
