@@ -309,7 +309,9 @@ const ExternalContainerSchema = Type.Object({
   image: Type.String(),
   state: Type.String(),
   status: Type.String(),
-  labels: Type.Record(Type.String(), Type.String()),
+  labels: Type.Record(Type.String(), Type.String(), {
+    description: "Only the labels whose keys appear in the project's matchers.",
+  }),
 });
 
 export const ProjectControlSchemas = {

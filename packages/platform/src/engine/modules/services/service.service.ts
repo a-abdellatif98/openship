@@ -596,8 +596,8 @@ export async function createService(
   data: TCreateServiceBody,
 ) {
   const project = await repos.project.findById(projectId);
-  assertNotExternal(project);
   assertResourceInOrg(project, "Project", ctx.organizationId, projectId);
+  assertNotExternal(project);
 
   const name = data.name.trim();
   if (!name) {
@@ -2471,9 +2471,9 @@ export async function execInServiceContainer(
   serviceId: string,
   opts: { command: string; cwd?: string; timeoutMs?: number; maxOutputBytes?: number },
 ) {
-  await assertNotExternalById(projectId);
   const { runtime, containerId } = await resolveServiceContainer(ctx, projectId, serviceId);
   try {
+    await assertNotExternalById(projectId);
     if (!runtime.supports("isolatedExec") || !runtime.inContainerExecutor) {
       throw new Error(
         "This service does not run in an isolated container, so a command here would run on the host. " +

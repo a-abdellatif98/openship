@@ -13,6 +13,7 @@ import type { TCreateExternalProjectBody } from "@repo/contracts";
 import { createServerDockerRuntime, disposeRuntime } from "../../lib/deployment-runtime";
 import { assertResourceInOrg } from "../../lib/resource-access";
 import { assertDeploymentServer } from "../system/server-access";
+import { findOwnStack } from "../../lib/startup/self-services";
 import { env } from "../../config/env";
 import type { createProject } from "./project-crud.service";
 
@@ -78,7 +79,10 @@ async function loadExternalProject(projectId: string, organizationId: string) {
 
 async function matchedContainers(runtime: DockerRuntime, config: ExternalProjectConfig) {
   const all = await runtime.listAllContainers();
+  const ownStack = new Set(findOwnStack(all).map((c) => c.id));
+  const labelKeys = new Set(config.matchers.flatMap((m) => Object.keys(m.labels ?? {})));
   return all
+    .filter((c) => !ownStack.has(c.id) && !c.labels?.["openship.project"])
     .filter((c) => matchesExternalContainer(config.matchers, c))
     .map<ExternalContainer>((c) => ({
       id: c.id,
@@ -86,7 +90,10 @@ async function matchedContainers(runtime: DockerRuntime, config: ExternalProject
       image: c.image,
       state: c.state,
       status: c.status,
-      labels: c.labels ?? {},
+      // Only the labels the operator matched on; the rest can carry secrets.
+      labels: Object.fromEntries(
+        Object.entries(c.labels ?? {}).filter(([key]) => labelKeys.has(key)),
+      ),
     }));
 }
 
@@ -173,8 +180,8 @@ export async function createExternalProject(
   ctx?: Parameters<typeof createProject>[3],
 ) {
   const externalConfig = await validateExternalProjectInput(organizationId, input);
-  const { createProject, enrichProject } = await import("./project-crud.service");
-  const created = await createProject(
+  const { createProject } = await import("./project-crud.service");
+  return createProject(
     {
       name: input.name,
       serverId: externalConfig.serverId,
@@ -185,11 +192,6 @@ export async function createExternalProject(
     organizationId,
     access,
     ctx,
+    { externalConfig, runtimeMode: "docker", autoDeploy: false },
   );
-  await repos.project.update(created.id, {
-    externalConfig,
-    runtimeMode: "docker",
-    autoDeploy: false,
-  });
-  return enrichProject((await repos.project.findById(created.id))!);
 }

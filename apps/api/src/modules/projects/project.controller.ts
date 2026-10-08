@@ -453,11 +453,7 @@ export async function listLocal(c: Context) {
   return c.json(result.data);
 }
 
-// ─── Runtime logs ────────────────────────────────────────────────────────────
-
-/**
- * GET /projects/:id/logs - one-shot fetch of recent runtime logs.
- */
+/** GET /projects/:id/external/containers - containers an external project observes. */
 export async function listExternalContainers(c: Context) {
   const result = await getPlatformKernel().projects.listExternalContainers(
     operationContext(c),
@@ -467,6 +463,11 @@ export async function listExternalContainers(c: Context) {
   return c.json({ data: result.data });
 }
 
+// ─── Runtime logs ────────────────────────────────────────────────────────────
+
+/**
+ * GET /projects/:id/logs - one-shot fetch of recent runtime logs.
+ */
 export async function runtimeLogs(c: Context) {
   const result = await getPlatformKernel().projects.runtimeLogs(
     operationContext(c),

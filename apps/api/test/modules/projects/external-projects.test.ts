@@ -11,6 +11,8 @@ const h = vi.hoisted(() => ({
     state: string;
     status: string;
     labels: Record<string, string>;
+    composeProject?: string;
+    composeService?: string;
   }>,
   runtimeServers: [] as Array<string | undefined>,
   logTargets: [] as string[],
@@ -45,6 +47,12 @@ const { getRuntimeLogs, streamRuntimeLogs } =
 const { createQueuedDeployment } =
   await import("@repo/platform/engine/modules/deployments/build.service");
 const { createService } = await import("@repo/platform/engine/modules/services/service.service");
+const { triggerDeployment } =
+  await import("@repo/platform/engine/modules/deployments/build.service");
+const crud = await import("@repo/platform/engine/modules/projects/project-crud.service");
+const { addDomain } = await import("@repo/platform/engine/modules/domains/domain.service");
+const { projectDependencies } =
+  await import("@repo/platform/engine/modules/projects/project.operations");
 
 const container = (id: string, name: string, state: string, labels: Record<string, string>) => ({
   id,
@@ -120,16 +128,25 @@ describe("creating an external project", () => {
 });
 
 describe("reading an external project", () => {
-  it("lists only the matched containers on the configured server", async () => {
+  it("lists matched containers, never Openship's own, with only the matched labels", async () => {
     const project = await createShop();
+    const ownStack = (id: string, service: string) => ({
+      ...container(id, `openship-${service}-1`, "running", kamal),
+      composeProject: "openship",
+      composeService: service,
+    });
     h.containers = [
-      container("c-web", "shop-web-1", "running", kamal),
+      container("c-web", "shop-web-1", "running", { ...kamal, "secret.token": "s3cr3t" }),
       container("c-other", "blog-web-1", "running", { service: "blog", role: "web" }),
+      container("c-managed", "shop-managed", "running", { ...kamal, "openship.project": "p" }),
+      ownStack("c-api", "api"),
+      ownStack("c-dash", "dashboard"),
     ];
 
     const listed = await listExternalContainers(project.id, ctx.organizationId);
 
     expect(listed.map((c) => c.id)).toEqual(["c-web"]);
+    expect(listed[0]?.labels).toEqual(kamal);
     expect(h.runtimeServers).toEqual([serverId]);
     expect(h.disposed).toBe(1);
   });
@@ -171,5 +188,56 @@ describe("external projects refuse every mutation", () => {
       createService(ctx, project.id, { name: "db", image: "postgres:16" } as never),
     ).rejects.toThrow(/deployed by another tool/);
     expect(await repos.deployment.listInFlightByProject(project.id)).toEqual([]);
+  });
+
+  it("refuses deploy entry points before they write anything", async () => {
+    const project = await createShop();
+
+    await expect(triggerDeployment(ctx, { projectId: project.id })).rejects.toThrow(
+      /deployed by another tool/,
+    );
+    expect(await repos.deployment.listInFlightByProject(project.id)).toEqual([]);
+    expect(await repos.domain.listByProject(project.id)).toEqual([]);
+  });
+
+  it("refuses source, route, domain, and environment changes", async () => {
+    const project = await createShop();
+    const refused = /deployed by another tool/;
+
+    await expect(crud.ensureProject({ name: project.name }, ctx.organizationId)).rejects.toThrow(
+      refused,
+    );
+    await expect(
+      crud.linkProjectRepo(ctx, project.id, { owner: "acme", repo: "shop" }),
+    ).rejects.toThrow(refused);
+    await expect(
+      crud.setProjectReleaseImageSource(project.id, ctx.organizationId, {
+        artifactKind: "image",
+        mode: "github",
+        repo: "acme/shop",
+        imageTemplate: "ghcr.io/acme/shop:{tag}",
+      } as never),
+    ).rejects.toThrow(refused);
+    await expect(
+      crud.updateProject(project.id, { publicEndpoints: [] }, ctx.organizationId),
+    ).rejects.toThrow(refused);
+    await expect(
+      addDomain(ctx, { projectId: project.id, hostname: "shop.example.com" } as never),
+    ).rejects.toThrow(refused);
+    await expect(
+      crud.createProjectEnvironment(project.id, ctx, { environmentName: "Preview" } as never),
+    ).rejects.toThrow(refused);
+    expect(await repos.project.findById(project.id)).toMatchObject({ gitProvider: "external" });
+  });
+
+  it("keeps the external provider off the generic create and update bodies", async () => {
+    const project = await createShop();
+
+    await expect(
+      projectDependencies.create(ctx, { name: "sneaky", gitProvider: "external" }),
+    ).rejects.toThrow(/POST \/api\/projects\/external/);
+    await expect(
+      projectDependencies.update(ctx, project.id, { gitProvider: "external" }),
+    ).rejects.toThrow(/POST \/api\/projects\/external/);
   });
 });

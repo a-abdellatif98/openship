@@ -431,6 +431,12 @@ contain the server's messages. A terminal `complete` event carries `status: "com
 `status: "failed"`; a disconnected stream alone does not establish success. Cancelling the stream
 stops log delivery while an accepted repair continues under the project's runtime lock.
 
+## Observe an externally deployed app
+
+`POST /api/projects/external` links containers that another tool deploys, matched by name or labels
+on one server. Openship only reads them. Project logs show one container: a running match first,
+then the first by name. A log stream must reconnect after that container is replaced.
+
 ## Errors
 
 <Callout title="400 — validation failed" type="warn">

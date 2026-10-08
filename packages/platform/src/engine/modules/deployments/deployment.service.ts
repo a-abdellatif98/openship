@@ -19,7 +19,6 @@ import {
 } from "../../lib/deployment-runtime";
 import {
   assertNotControlPlane,
-  assertNotControlPlaneById,
   assertNotExternal,
   assertProjectMutableById,
   assertResourceInOrg,
@@ -207,7 +206,7 @@ export async function rollbackDeployment(deploymentId: string, organizationId: s
  */
 export async function previewRestore(deploymentId: string, organizationId: string) {
   const dep = await getDeployment(deploymentId, organizationId);
-  await assertNotControlPlaneById(dep.projectId);
+  await assertProjectMutableById(dep.projectId);
   const { target, project, plan } = await resolveRestorePlan(deploymentId);
   const consequences =
     plan.mode === "ineligible"
@@ -327,7 +326,7 @@ export async function setDeploymentPin(
   pinned: boolean,
 ) {
   const dep = await getDeployment(deploymentId, organizationId);
-  await assertNotControlPlaneById(dep.projectId);
+  await assertProjectMutableById(dep.projectId);
   await setPin(deploymentId, pinned);
   return (await repos.deployment.findById(dep.id)) ?? dep;
 }

@@ -1,8 +1,7 @@
 import type { ProjectDependencies } from "../../../projects";
 import type { CreateProjectInput, EnsureProjectInput } from "@repo/contracts";
 import type { ExecutionContext } from "../../../context";
-import { ValidationError, isExternalProject } from "@repo/core";
-import { repos } from "@repo/db";
+import { ValidationError } from "@repo/core";
 import { authorization } from "../../lib/authorization";
 import { audit } from "../../lib/audit-emitter";
 import { assertNativeSourcePath } from "../../native/source-policy";
@@ -86,8 +85,6 @@ export const projectDependencies: ProjectDependencies = {
   async update(ctx, id, input) {
     const service = await import("./project.service");
     await checkSource(input);
-    if (input.gitProvider !== undefined && isExternalProject(await repos.project.findById(id)))
-      throw new ValidationError("An external project's source cannot be changed.");
     return service.updateProject(id, input, ctx.organizationId);
   },
   async list(ctx, input) {

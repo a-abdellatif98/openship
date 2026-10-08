@@ -51,7 +51,7 @@ import {
 import { resolveLatestImageDigest } from "../../lib/image-registry";
 import { normalizeProjectRootDirectory } from "../../lib/project-root-detector";
 import { env } from "../../config/index";
-import { assertResourceInOrg } from "../../lib/resource-access";
+import { assertNotExternal, assertResourceInOrg } from "../../lib/resource-access";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
 import {
   resolveDefaultBranch,
@@ -889,6 +889,7 @@ async function createProductionProject(
   organizationId: string,
   access?: { tokenId: string },
   ctx?: RequestContext,
+  columns?: ProjectColumnOverrides,
 ) {
   // The project type is derived from persisted service rows. Accepting an
   // explicit monorepo without app metadata creates a different project from
@@ -989,7 +990,7 @@ async function createProductionProject(
 
   try {
     const created = await repos.project.create(
-      buildProductionProjectInput(app.id, data, slug, routing, organizationId),
+      { ...buildProductionProjectInput(app.id, data, slug, routing, organizationId), ...columns },
       access,
     );
     await persistProjectRouteState(created.id, routing.publicEndpoints);
@@ -1113,6 +1114,7 @@ export async function linkProjectRepo(
       } catch {
         return { ok: false, code: "not_found" } as const;
       }
+      assertNotExternal(project);
 
       const sourceWebBaseUrl = await resolveGitHubWebBaseUrl(organizationId, owner).catch(
         () => null,
@@ -1238,6 +1240,7 @@ export async function setProjectReleaseImageSource(
 ) {
   const project = await repos.project.findById(projectId);
   assertResourceInOrg(project, "Project", organizationId, projectId);
+  assertNotExternal(project);
 
   const source = normalizeReleaseSource(input as ReleaseSource);
   if (releaseArtifactKind(source) !== "image") {
@@ -1479,6 +1482,7 @@ export async function ensureProject(data: EnsureProjectBody, organizationId: str
   if (project && project.organizationId !== organizationId) {
     throw new NotFoundError("Project", data.projectId ?? desiredSlug);
   }
+  assertNotExternal(project);
   if (project && options?.mustCreate)
     throw new ConflictError("A project with this name already exists. Choose another name for the import.");
   if (project?.workspaceId && data.serverId && data.serverId !== project.serverId) throw new AppError(
@@ -1674,7 +1678,10 @@ export async function getProject(projectId: string, organizationId: string) {
 // ─── Create project ──────────────────────────────────────────────────────────
 
 /** @scope org — only reads organizationId as a DB key. */
-export async function createProject(data: EnsureProjectBody, organizationId: string, access?: { tokenId: string }, ctx?: RequestContext) {
+/** Columns no request body may set; only internal creators (external projects) pass them. */
+type ProjectColumnOverrides = Partial<Pick<NewProject, "externalConfig" | "runtimeMode" | "autoDeploy">>;
+
+export async function createProject(data: EnsureProjectBody, organizationId: string, access?: { tokenId: string }, ctx?: RequestContext, columns?: ProjectColumnOverrides) {
   const slug = slugify(data.name);
 
   const existing = await findProjectByAppSlug(organizationId, slug);
@@ -1682,7 +1689,7 @@ export async function createProject(data: EnsureProjectBody, organizationId: str
 
   // installationId is resolved server-side inside createProductionProject, which
   // both creating entry points share — see the comment there.
-  const p = await createProductionProject(data, slug, organizationId, access, ctx);
+  const p = await createProductionProject(data, slug, organizationId, access, ctx, columns);
   // Keep create and ensure on the same compose persistence helper. Most create
   // callers carry no services and this is a no-op; scanner-backed local imports
   // carry the canonical unmasked rows and must materialize them immediately.
@@ -1732,6 +1739,7 @@ export async function updateProject(
 ) {
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
+  if (data.publicEndpoints !== undefined) assertNotExternal(p);
 
   // Shared route validation covers custom hostnames and scoped free-domain
   // allowances before any accompanying project fields are written.
@@ -1993,6 +2001,7 @@ export async function createProjectEnvironment(
   const { userId, organizationId } = ctx;
   const base = await repos.project.findById(projectId);
   assertResourceInOrg(base, "Project", organizationId, projectId);
+  assertNotExternal(base);
   if (base.workspaceId) {
     const { authorization } = await import("../../lib/authorization");
     const { requireWorkspaceServer } = await import("../../lib/cloud-workspace-scope");
