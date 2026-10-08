@@ -193,8 +193,12 @@ export interface StackRole {
   command: string;
   /** Process count. Omit for the runtime default (1). */
   replicas?: number;
-  /** Run as at most one instance regardless of `replicas` - always true for "scheduler". */
+  /** Exactly one instance; incompatible with `replicas` > 1. Always true for "scheduler". */
   singleton?: boolean;
+  /** Signal sent on stop (e.g. "SIGQUIT"). Absent means the runtime default (SIGTERM). */
+  stopSignal?: string;
+  /** Wait after the stop signal before SIGKILL, compose duration (e.g. "90s", "10m"). */
+  stopGracePeriod?: string;
   health?: RoleHealth;
   /** Preset gating only: every signal must match. Ignored for openship.json roles. */
   when?: {
@@ -748,6 +752,8 @@ export const STACKS = {
       // The conjunction is encoded as an override in stack-detector.
       rootMarkers: ["Gemfile", "bin/rails", "config/routes.rb"],
     },
+    // Commands use `exec` so the worker replaces the `sh -c` wrapper as PID 1
+    // and receives SIGTERM.
     // Only one queue backend is registered per app in practice, but a repo can
     // carry both gems mid-migration - resolveStackRoles drops the worker role
     // entirely when that happens rather than guessing which one runs.
@@ -755,13 +761,13 @@ export const STACKS = {
       {
         name: "jobs",
         kind: "worker",
-        command: "bin/jobs",
+        command: "exec bin/jobs",
         when: { deps: ["solid_queue"], files: ["bin/jobs"] },
       },
       {
         name: "sidekiq",
         kind: "worker",
-        command: "bundle exec sidekiq",
+        command: "exec bundle exec sidekiq",
         when: { deps: ["sidekiq"] },
       },
     ],

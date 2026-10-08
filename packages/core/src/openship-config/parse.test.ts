@@ -489,6 +489,79 @@ describe("parseOpenshipConfig", () => {
       expect(e2.some((e) => e.includes("roles[0].replicas"))).toBe(true);
     });
 
+    it("rejects replicas > 1 on a scheduler role instead of capping it", () => {
+      const { errors } = parseOpenshipConfig({
+        roles: [{ name: "cron", kind: "scheduler", command: "bin/cron", replicas: 3 }],
+      });
+      expect(errors.some((e) => e.includes("roles[0].replicas") && e.includes("scheduler"))).toBe(true);
+    });
+
+    it("rejects replicas > 1 on a singleton worker, accepts replicas: 1", () => {
+      const { errors } = parseOpenshipConfig({
+        roles: [{ name: "jobs", kind: "worker", command: "bin/jobs", singleton: true, replicas: 2 }],
+      });
+      expect(errors.some((e) => e.includes("roles[0].replicas") && e.includes("singleton"))).toBe(true);
+
+      const { errors: ok, config } = parseOpenshipConfig({
+        roles: [{ name: "jobs", kind: "worker", command: "bin/jobs", singleton: true, replicas: 1 }],
+      });
+      expect(ok).toEqual([]);
+      expect(config?.roles?.[0]?.replicas).toBe(1);
+    });
+
+    it("rejects health.kind http for roles and accepts process and exec", () => {
+      const { errors } = parseOpenshipConfig({
+        roles: [{ name: "jobs", kind: "worker", command: "bin/jobs", health: { kind: "http", path: "/up" } }],
+      });
+      expect(errors.some((e) => e.startsWith("roles[0].health.kind") && e.includes("portless"))).toBe(true);
+
+      const { errors: ok } = parseOpenshipConfig({
+        roles: [
+          { name: "a", kind: "worker", command: "x", health: { kind: "process" } },
+          { name: "b", kind: "worker", command: "y", health: { kind: "exec", command: "true" } },
+        ],
+      });
+      expect(ok).toEqual([]);
+    });
+
+    it("accepts SIG names and positive integers for stopSignal", () => {
+      for (const stopSignal of ["SIGTERM", "SIGQUIT", "SIGUSR1", "3"]) {
+        const { errors, config } = parseOpenshipConfig({
+          roles: [{ name: "jobs", kind: "worker", command: "bin/jobs", stopSignal }],
+        });
+        expect(errors).toEqual([]);
+        expect(config?.roles?.[0]?.stopSignal).toBe(stopSignal);
+      }
+    });
+
+    it("rejects an invalid stopSignal", () => {
+      for (const stopSignal of ["", "term", "SIG", "SIG TERM", "0", "-1", "1.5", 9]) {
+        const { errors } = parseOpenshipConfig({
+          roles: [{ name: "jobs", kind: "worker", command: "bin/jobs", stopSignal }],
+        });
+        expect(errors.some((e) => e.includes("roles[0].stopSignal"))).toBe(true);
+      }
+    });
+
+    it("accepts compose durations and bare seconds for stopGracePeriod", () => {
+      for (const stopGracePeriod of ["90", "1.5", "90s", "10m", "1m30s", "500ms", "2h", "100us", "100µs", "5ns"]) {
+        const { errors, config } = parseOpenshipConfig({
+          roles: [{ name: "jobs", kind: "worker", command: "bin/jobs", stopGracePeriod }],
+        });
+        expect(errors).toEqual([]);
+        expect(config?.roles?.[0]?.stopGracePeriod).toBe(stopGracePeriod);
+      }
+    });
+
+    it("rejects a stopGracePeriod that would parse to nothing", () => {
+      for (const stopGracePeriod of ["", "soon", "10x", "s", "1m30", "10 m", "-5s", 30]) {
+        const { errors } = parseOpenshipConfig({
+          roles: [{ name: "jobs", kind: "worker", command: "bin/jobs", stopGracePeriod }],
+        });
+        expect(errors.some((e) => e.includes("roles[0].stopGracePeriod"))).toBe(true);
+      }
+    });
+
     it("forces singleton true for a scheduler role regardless of what was declared", () => {
       const { config, errors } = parseOpenshipConfig({
         roles: [{ name: "cron", kind: "scheduler", command: "bin/cron", singleton: false }],

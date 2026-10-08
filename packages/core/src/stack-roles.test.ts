@@ -7,13 +7,13 @@ import { STACKS, type StackRole } from "./stacks";
 const jobs: StackRole = {
   name: "jobs",
   kind: "worker",
-  command: "bin/jobs",
+  command: "exec bin/jobs",
   when: { deps: ["solid_queue"], files: ["bin/jobs"] },
 };
 const sidekiq: StackRole = {
   name: "sidekiq",
   kind: "worker",
-  command: "bundle exec sidekiq",
+  command: "exec bundle exec sidekiq",
   when: { deps: ["sidekiq"] },
 };
 const defaultRoles = [jobs, sidekiq];

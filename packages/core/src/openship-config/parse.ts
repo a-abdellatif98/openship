@@ -398,6 +398,13 @@ function parseRoleHealth(ctx: Ctx, v: unknown, path: string): RoleHealth | undef
   }
   const kind = ctx.enumOf(v.kind, `${path}.kind`, ROLE_HEALTH_KINDS);
   if (kind === undefined) return undefined;
+  if (kind === "http") {
+    ctx.err(
+      `${path}.kind`,
+      '"http" is not supported for roles: roles run portless, so an HTTP probe has nothing to call; use "process" or "exec"',
+    );
+    return undefined;
+  }
   return {
     kind,
     path: ctx.str(v.path, `${path}.path`),
@@ -447,9 +454,20 @@ function parseRoles(ctx: Ctx, v: unknown, path: string): StackRole[] | undefined
       return;
     }
     const replicas = parseReplicas(ctx, item.replicas, `${p}.replicas`);
-    // A scheduler is, by definition, one instance - force it regardless of
-    // what (if anything) was declared.
-    const singleton = kind === "scheduler" ? true : ctx.bool(item.singleton, `${p}.singleton`);
+    const declaredSingleton = ctx.bool(item.singleton, `${p}.singleton`);
+    // A scheduler is, by definition, one instance.
+    const singleton = kind === "scheduler" ? true : declaredSingleton;
+    if (singleton && replicas !== undefined && replicas > 1) {
+      ctx.err(
+        `${p}.replicas`,
+        kind === "scheduler"
+          ? `conflicts with kind "scheduler", which is always a singleton; remove \`replicas\` or use kind "worker"`
+          : "conflicts with `singleton: true`; a singleton runs exactly one instance",
+      );
+      return;
+    }
+    const stopSignal = parseStopSignal(ctx, item.stopSignal, `${p}.stopSignal`);
+    const stopGracePeriod = parseStopGracePeriod(ctx, item.stopGracePeriod, `${p}.stopGracePeriod`);
     out.push({
       name,
       kind,
@@ -457,9 +475,36 @@ function parseRoles(ctx: Ctx, v: unknown, path: string): StackRole[] | undefined
       replicas,
       singleton,
       health: parseRoleHealth(ctx, item.health, `${p}.health`),
+      stopSignal,
+      stopGracePeriod,
     });
   });
   return out;
+}
+
+function parseStopSignal(ctx: Ctx, v: unknown, path: string): string | undefined {
+  const sig = ctx.str(v, path);
+  if (sig === undefined) return undefined;
+  if (!/^SIG[A-Z0-9]+$/.test(sig) && !/^[1-9]\d*$/.test(sig)) {
+    ctx.err(path, 'must be a signal name like "SIGTERM" or a positive integer');
+    return undefined;
+  }
+  return sig;
+}
+
+// Anchored on purpose, stricter than the runtime's own scan: `parseDurationNs`
+// reads "1m30" as one minute and drops the 30, and a grace period silently
+// shorter than the one asked for is the failure these fields exist to prevent.
+const STOP_GRACE_PERIOD_RE = /^(?:\d+(?:\.\d+)?|(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+)$/;
+
+function parseStopGracePeriod(ctx: Ctx, v: unknown, path: string): string | undefined {
+  const dur = ctx.str(v, path);
+  if (dur === undefined) return undefined;
+  if (!STOP_GRACE_PERIOD_RE.test(dur)) {
+    ctx.err(path, 'must be a duration like "90s", "1m30s", "10m", or a bare number of seconds');
+    return undefined;
+  }
+  return dur;
 }
 
 function parseReplicas(ctx: Ctx, v: unknown, path: string): number | undefined {
