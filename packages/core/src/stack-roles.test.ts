@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { phpLanguageDetector } from "./languages/php";
+import { parseOpenshipConfig } from "./openship-config/parse";
 import { resolveStackRoles } from "./stack-roles";
 import { STACKS, type StackRole } from "./stacks";
 
@@ -145,6 +146,23 @@ describe("STACKS.laravel.defaultRoles", () => {
   it("the scheduler preset is a singleton", () => {
     const scheduler = STACKS.laravel.defaultRoles?.find((r) => r.name === "scheduler");
     expect(scheduler?.singleton).toBe(true);
+  });
+
+  it("every preset sets a 90s stop grace period the openship.json parser accepts", () => {
+    const roles: readonly StackRole[] = STACKS.laravel.defaultRoles ?? [];
+    expect(roles.map((r) => r.stopGracePeriod)).toEqual(["90s", "90s", "90s"]);
+    // Presets bypass the parser, so run each value through it here.
+    const { config, errors } = parseOpenshipConfig({
+      roles: roles.map(({ name, kind, command, singleton, stopGracePeriod }) => ({
+        name,
+        kind,
+        command,
+        singleton,
+        stopGracePeriod,
+      })),
+    });
+    expect(errors).toEqual([]);
+    expect(config?.roles?.map((r) => r.stopGracePeriod)).toEqual(["90s", "90s", "90s"]);
   });
 
   // "web" is never part of defaultRoles - it is derived from

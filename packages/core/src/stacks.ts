@@ -830,25 +830,33 @@ export const STACKS = {
     // laravel/horizon still selects `horizon`. Callers that need
     // production-only matching must read `require` from composer.json.
     //
-    // Once StackRole gains stopSignal/stopGracePeriod (#976), `queue` should
-    // set a grace period above queue:work's default 60s timeout.
+    // Explicit shutdown budgets for the later runtime slice. 90s exceeds the
+    // default 60s queue and Horizon supervisor timeouts, so size these to the
+    // application's own configured timeouts. Horizon's internal settings still
+    // govern worker draining, and scheduler grace is provisional because
+    // shutdown behaviour depends on the Laravel version. An explicit
+    // openship.json `roles` array replaces all presets, so declare grace
+    // periods there to keep these values.
     defaultRoles: [
       {
         name: "queue",
         kind: "worker",
         command: "exec php artisan queue:work",
+        stopGracePeriod: "90s",
         unless: { deps: ["laravel/horizon"] },
       },
       {
         name: "horizon",
         kind: "worker",
         command: "exec php artisan horizon",
+        stopGracePeriod: "90s",
         when: { deps: ["laravel/horizon"] },
       },
       {
         name: "scheduler",
         kind: "scheduler",
         command: "exec php artisan schedule:work",
+        stopGracePeriod: "90s",
         singleton: true,
       },
     ],
