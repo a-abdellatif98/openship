@@ -46,7 +46,7 @@ describe("whole-instance remote migration guard (#869)", () => {
         ssh: { ok: true },
         releaseDist: { ok: true },
         domain: { ok: true },
-        deployment: { ok: false, detail: expect.stringContaining("Data transfer") },
+        deployment: { ok: false, detail: expect.stringContaining("Instance location") },
       },
     });
   });
@@ -59,7 +59,7 @@ describe("whole-instance remote migration guard (#869)", () => {
     expect(response.status).toBe(501);
     expect(await response.json()).toMatchObject({
       code: "SERVER_MIGRATION_UNAVAILABLE",
-      error: expect.stringContaining("Data transfer"),
+      error: expect.stringContaining("Instance location"),
     });
     expect(io.ssh).not.toHaveBeenCalled();
     expect(await repos.instanceSettings.get()).toEqual(before);

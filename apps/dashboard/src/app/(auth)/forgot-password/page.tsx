@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useState } from "react";
@@ -40,6 +41,7 @@ export default function ForgotPasswordPage() {
       // not the credential, the code is.
       router.push(`/reset-password?email=${encodeURIComponent(email)}`);
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(auth)/forgot-password/page");
       toast("error", isNetworkError(err)
         ? t.auth.errors.serverUnreachable
         : t.auth.errors.generic);

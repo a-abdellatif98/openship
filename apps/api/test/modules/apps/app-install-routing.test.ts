@@ -59,6 +59,10 @@ vi.mock("@repo/platform/engine/lib/cloud/require-cloud", () => ({
   requireCloud: requireCloudMock,
 }));
 
+vi.mock("@repo/platform/engine/lib/cloud-workspace-scope", () => ({
+  workspaceForServer: async () => ({ workspace: { id: "cloud-workspace" }, server: { id: "cloud-server" } }),
+}));
+
 import {
   installApp,
   installServicePorts,
@@ -111,6 +115,19 @@ beforeEach(() => {
 });
 
 describe("app install — routing comes from the operator's choice", () => {
+  it("persists Cloud Ghost without a domain as internal, and publishes only a chosen domain", async () => {
+    const input = { templateId: "ghost", serverId: "cloud-server" };
+    await installApp(ctx, { ...input, routes: [{ service: "ghost", port: 2368, mode: "port" }] });
+    expect(payloadFor("ghost")).toMatchObject({ exposed: false, publicEndpoints: [], ports: [] });
+    createServiceMock.mockClear();
+    await installApp(ctx, { ...input, routes: [{ service: "ghost", port: 2368, mode: "free" }] });
+    expect(payloadFor("ghost")).toMatchObject({
+      exposed: true,
+      ports: [],
+      publicEndpoints: [{ port: 2368, domainType: "free" }],
+    });
+    expect(payloadFor("ghost-db")).toMatchObject({ exposed: false, ports: [], publicEndpoints: [] });
+  });
   it("keeps catalog resource recommendations advisory on self-hosted installs", async () => {
     await installApp(ctx, { templateId: "supabase" });
     expect(createServiceMock.mock.calls).toHaveLength(9);
@@ -240,6 +257,16 @@ describe("app install — routing comes from the operator's choice", () => {
 });
 
 describe("installServicePorts", () => {
+  it("keeps Cloud No-domain endpoints private and removes stale host-port promises", () => {
+    const ghost = getAppTemplate("ghost")!.services!.find((svc) => svc.name === "ghost")!;
+    const routes = [{ service: "ghost", port: 2368, mode: "port" as const }];
+    expect(installServicePorts("ghost", ghost.ports, routes, ghost.ports, "cloud")).toEqual([]);
+    expect(
+      installServicePorts("ghost", ghost.ports, routes, ["0.0.0.0:8212:2368", "9000:9000"], "cloud"),
+    ).toEqual(["9000:9000"]);
+    expect(installServicePorts("ghost", ghost.ports, routes)).toEqual(["0.0.0.0:8212:2368"]);
+  });
+
   it("publishes Supabase Kong and gives its publicUrl token a real URL", () => {
     const kong = getAppTemplate("supabase")!.services!.find((svc) => svc.name === "kong")!;
     const ports = installServicePorts(kong.name, kong.ports, [

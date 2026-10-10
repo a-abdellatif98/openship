@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -85,7 +86,7 @@ export function NotificationsTab({ serverId, primaryDomain }: NotificationsTabPr
         notificationsApi
           .listChannels()
           .then((x) => x.channels)
-          .catch(() => [] as NotificationChannel[]),
+          .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/notifications-tab"); return [] as NotificationChannel[]; }),
       ]);
       setRules(r.rules);
       setChannels(c);

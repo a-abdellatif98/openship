@@ -24,6 +24,7 @@
  *     if some fail - to avoid leaving half-routed state behind.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   buildMailServerRoutes,
   type MailRoute,
@@ -70,6 +71,7 @@ export async function registerMailServerRoutes(
       });
       results.push({ routeId: route.id, hostname: route.hostname, ok: true });
     } catch (err) {
+      observeCaughtError(err, "api/modules/mail-server/routing/register.service");
       results.push({
         routeId: route.id,
         hostname: route.hostname,
@@ -99,6 +101,7 @@ export async function removeMailServerRoutes(
       await routing.removeRoute(route.hostname);
       results.push({ routeId: route.id, hostname: route.hostname, ok: true });
     } catch (err) {
+      observeCaughtError(err, "api/modules/mail-server/routing/register.service");
       results.push({
         routeId: route.id,
         hostname: route.hostname,

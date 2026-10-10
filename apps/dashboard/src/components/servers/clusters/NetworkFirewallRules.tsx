@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -76,7 +77,8 @@ export function NetworkFirewallRules({
       if (timer.current) clearTimeout(timer.current);
       setCopied(key);
       timer.current = setTimeout(() => setCopied(null), 1600);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/servers/clusters/NetworkFirewallRules");
       setCopied(null);
       setCopyError(true);
     }

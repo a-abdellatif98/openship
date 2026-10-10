@@ -13,6 +13,7 @@
  * throws (private repo without a token, curl/tar missing, network error).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor, LogEntry } from "../types";
 import { sq } from "./build-pipeline";
 
@@ -77,7 +78,9 @@ export async function downloadTarballOnRemote(
     const cleanup = () => executor.exec(`rm -f ${tmp}`, { timeout: 10_000 });
     await (executor.runWithAbortSignal
       ? executor.runWithAbortSignal(AbortSignal.timeout(10_000), cleanup)
-      : cleanup()).catch(() => {});
+      : cleanup()).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/source-tarball");
+      });
     throw error;
   }
 }

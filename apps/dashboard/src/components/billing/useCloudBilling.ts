@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useBillingScope } from "./BillingWorkspaceContext";
 import { useEffect, useRef, useState } from "react";
 import type { PlanTierId } from "@repo/core";
@@ -33,7 +34,8 @@ export function useCloudPlans() {
     setError(null);
     api.get<{ data: PlansPayload }>(`${endpoints.billing.plans}?locale=${encodeURIComponent(locale)}`)
       .then((res) => { if (!cancelled) setPayload(res.data); })
-      .catch(() => { if (!cancelled) setError(t.billing.plansRoute.loadError); })
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/billing/useCloudBilling"); if (!cancelled) setError(t.billing.plansRoute.loadError); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [locale, attempt, t.billing.plansRoute.loadError]);

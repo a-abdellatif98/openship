@@ -11,6 +11,7 @@
  *   - Local/desktop never talks to Oblien directly for preflight
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { DeploymentConfigSnapshot } from "./build.service";
 import { platform } from "../../lib/platform-config";
 import {
@@ -85,7 +86,8 @@ async function projectLiveHostnames(projectId: string | undefined): Promise<Set<
     if (!project?.activeDeploymentId) return new Set();
     const domains = await repos.domain.listByProject(projectId);
     return new Set(domains.map((d) => d.hostname.toLowerCase()));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight");
     return new Set();
   }
 }
@@ -218,10 +220,10 @@ async function checkGitHubAppInstallation(
   // the per-user row.
   let installationId: number | null = null;
   if (ctx.organizationId) {
-    installationId = await getInstallationIdByOrg(ctx.organizationId, owner).catch(() => null);
+    installationId = await getInstallationIdByOrg(ctx.organizationId, owner).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight"); return null; });
   }
   if (!installationId) {
-    installationId = await getInstallationId(ctx, owner).catch(() => null);
+    installationId = await getInstallationId(ctx, owner).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight"); return null; });
   }
   if (installationId) {
     return { ...baseCheck, status: "pass" };
@@ -296,7 +298,7 @@ async function checkRemoteBuildTokenLeak(
   // A per-server credential means the clone authenticates as the SERVER, not by
   // shipping the operator's gh-cli token off-host — so the leak concern (and the
   // cli hard-fail below) doesn't apply.
-  if (serverId && (await canResolveServerGitCredential(serverId).catch(() => false))) {
+  if (serverId && (await canResolveServerGitCredential(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight"); return false; }))) {
     return { ...baseCheck, status: "pass" };
   }
 
@@ -377,7 +379,7 @@ async function checkRemoteCloneToken(
 
   // A per-server GitHub credential (device token / PAT / SSH key) satisfies the
   // clone directly — check it FIRST (matches clone-auth's precedence).
-  if (serverId && (await canResolveServerGitCredential(serverId).catch(() => false))) {
+  if (serverId && (await canResolveServerGitCredential(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight"); return false; }))) {
     return { ...baseCheck, status: "pass" };
   }
 
@@ -386,7 +388,7 @@ async function checkRemoteCloneToken(
   const source = await canResolveTokenFor(ctx, "remote", {
     projectId,
     owner,
-  }).catch(() => null);
+  }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight"); return null; });
   if (source) return { ...baseCheck, status: "pass" };
 
   // Desktop relay: clones on the build host via the reverse tunnel (nothing
@@ -446,14 +448,14 @@ async function checkCloneOnServerCredential(
 
   // A per-server GitHub credential clones directly on the server — satisfies
   // this check outright.
-  if (serverId && (await canResolveServerGitCredential(serverId).catch(() => false))) {
+  if (serverId && (await canResolveServerGitCredential(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight"); return false; }))) {
     return { ...baseCheck, status: "pass" };
   }
 
   const source = await canResolveTokenFor(ctx, "remote", {
     projectId,
     owner,
-  }).catch(() => null);
+  }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight"); return null; });
   if (source) return { ...baseCheck, status: "pass" };
 
   return {
@@ -1247,7 +1249,7 @@ async function checkCustomDomainSelfHosted(
     edgeServerId = runtime.plan.hosts.find(host => host.role === "server")!.serverId;
   }
   const serverHost = snapshot?.organizationId
-    ? await resolveServerHost(snapshot.organizationId, edgeServerId).catch(() => null)
+    ? await resolveServerHost(snapshot.organizationId, edgeServerId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight"); return null; })
     : null;
   let serverIps: string[] = [];
   if (serverHost) {
@@ -1413,7 +1415,7 @@ async function checkHostCapacity(
   serverId: string | undefined,
   isLocalTarget: boolean,
 ): Promise<PreflightCheck | null> {
-  const template = await getTemplateForOrg(organizationId, appTemplateId).catch(() => undefined);
+  const template = await getTemplateForOrg(organizationId, appTemplateId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight"); return undefined; });
   const min = template?.minResources;
   if (!template || !hasMinResources(min)) return null;
 
@@ -1515,7 +1517,7 @@ export async function runPreflightChecks(
   // cloud requirement applies.
   const cloudConnected =
     !cloudPreflight && cloudRequirement !== "none" && snapshot.organizationId
-      ? await isCloudConnectedForOrg(snapshot.organizationId).catch(() => false)
+      ? await isCloudConnectedForOrg(snapshot.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/preflight"); return false; })
       : false;
   checks.push(await checkCloudRuntime(cloudPreflight, cloudRequirement, cloudConnected));
 

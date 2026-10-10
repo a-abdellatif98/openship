@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { AppError, type DeploymentEvent } from "@repo/contracts";
 import { subscriptionEvents } from "../../event-stream";
 import type { RunBus } from "./run-bus";
@@ -52,6 +53,7 @@ export function runEvents<E extends { type: string }, Row>(options: {
         timer = setTimeout(() => {
           timer = undefined;
           void refresh().catch((error) => {
+            observeCaughtError(error, "platform/engine/lib/run-events");
             cleanup();
             failure.abort(error);
           });

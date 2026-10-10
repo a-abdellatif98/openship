@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useState } from "react";
@@ -39,7 +40,8 @@ export default function CopyCommand({
       await navigator.clipboard.writeText(command);
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/shared/CopyCommand");
       // Non-HTTPS origin (a plain-IP self-hosted box) has no clipboard API —
       // the command is still there to read and type, so fail silently.
     }

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   buildImage,
   imageExistsLocally,
@@ -57,7 +58,7 @@ export async function deliverManagedImage(
   // (1) The content-derived tag is already present → the box is already on this exact
   // source. Skipping here keeps a per-reconcile deliver from re-shipping + rebuilding
   // unchanged source on every deploy.
-  if (await imageExistsLocally(targetExecutor, image).catch(() => false)) {
+  if (await imageExistsLocally(targetExecutor, image).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/deliver-managed-image"); return false; })) {
     return { delivered: true };
   }
 
@@ -67,7 +68,7 @@ export async function deliverManagedImage(
   // (2) Is the checkout readable on the target itself? True for the self/local control
   // plane and a "This Machine" server row (same filesystem); false for a remote box.
   const dockerfileOnTarget = posix.join(spec.context, spec.dockerfile);
-  if (await targetExecutor.exists(dockerfileOnTarget).catch(() => false)) {
+  if (await targetExecutor.exists(dockerfileOnTarget).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/deliver-managed-image"); return false; })) {
     await buildImage(targetExecutor, image, spec, onLog, kind);
     return { delivered: true };
   }
@@ -87,7 +88,9 @@ export async function deliverManagedImage(
       kind,
     );
   } finally {
-    await targetExecutor.rm(remoteContext).catch(() => {});
+    await targetExecutor.rm(remoteContext).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/deliver-managed-image");
+    });
   }
   return { delivered: true };
 }

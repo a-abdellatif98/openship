@@ -17,6 +17,7 @@
  * the caller falls back to host mode. Never mutates `next.config`.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { cp, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -31,7 +32,8 @@ async function exists(p: string): Promise<boolean> {
   try {
     await stat(p);
     return true;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/runtime/nextjs-standalone");
     return false;
   }
 }

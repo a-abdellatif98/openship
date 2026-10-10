@@ -129,7 +129,15 @@
     "acceptedTitle": "Você entrou",
     "acceptedRedirect": "Redirecionando para o painel...",
     "errorTitle": "Não é possível aceitar este convite",
-    "backToDashboard": "Voltar ao painel"
+    "backToDashboard": "Voltar ao painel",
+    "invitedBy": "Convite de {name}",
+    "roleLabel": "Função:",
+    "desktopOpen": "Abrir no Desktop",
+    "desktopCopy": "Copiar link do convite",
+    "desktopCopied": "Link copiado",
+    "desktopFallback": "O Desktop não abriu? Cole este link em Configurações → Instância → Conectar a uma instância.",
+    "desktopDescription": "Use o Desktop ou continue aqui no navegador.",
+    "switchAccount": "Entrar com a conta convidada"
   },
   "cloudAuthorize": {
     "missingRedirect": "Parâmetro de redirecionamento ausente.",

@@ -27,6 +27,7 @@
  * outage for nothing.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { deriveProjectDeployTarget } from "@repo/core";
 import { repos } from "@repo/db";
 
@@ -344,7 +345,9 @@ export async function loadProjectMoveWorkload(
   try {
     ourContainerIds = await rt.listProjectContainerIds(project.id);
   } finally {
-    await rt.dispose().catch(() => {});
+    await rt.dispose().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/project-move");
+    });
   }
 
   // Nothing of ours is running → don't scan at all. `planProjectMove` refuses on an empty

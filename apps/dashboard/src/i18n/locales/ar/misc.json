@@ -129,7 +129,15 @@
     "acceptedTitle": "أنت الآن عضو",
     "acceptedRedirect": "جارٍ التوجيه إلى لوحة التحكم...",
     "errorTitle": "تعذّر قبول هذه الدعوة",
-    "backToDashboard": "العودة إلى لوحة التحكم"
+    "backToDashboard": "العودة إلى لوحة التحكم",
+    "invitedBy": "دعوة من {name}",
+    "roleLabel": "الدور:",
+    "desktopOpen": "فتح في تطبيق سطح المكتب",
+    "desktopCopy": "نسخ رابط الدعوة",
+    "desktopCopied": "تم نسخ الرابط",
+    "desktopFallback": "لم يفتح التطبيق؟ الصق رابط الدعوة في الإعدادات ← النسخة ← الاتصال بنسخة.",
+    "desktopDescription": "استخدم تطبيق سطح المكتب أو تابع هنا في المتصفح.",
+    "switchAccount": "تسجيل الدخول بالحساب المدعو"
   },
   "cloudAuthorize": {
     "missingRedirect": "معلمة إعادة التوجيه مفقودة.",

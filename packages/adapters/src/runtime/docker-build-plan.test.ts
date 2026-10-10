@@ -146,7 +146,8 @@ describe("generateDockerfile — PHP with a JS asset pipeline", () => {
   it("preludes corepack for a non-npm package manager in the asset stage", () => {
     const pnpm = generateDockerfile(phpConfig({ buildCommand: "pnpm install && pnpm build" }));
     // The project PM is `composer`, so the prelude has to come from the command.
-    expect(pnpm).toContain("corepack enable pnpm");
+    expect(pnpm).toContain("COREPACK_DEFAULT_TO_LATEST=0");
+    expect(pnpm).toContain("pnpm-lock.yaml");
   });
 });
 
@@ -331,7 +332,7 @@ describe("generateDockerfile — a project env var named PATH cannot unset the b
       .split("\n")
       .filter((line) => line.startsWith("RUN "))
       .flatMap((line) => line.slice("RUN ".length).split(" && "))
-      .filter((step) => step.startsWith("export "));
+      .filter((step) => step.startsWith("export ") && !step.startsWith("export COREPACK_"));
   }
 
   function envPathLines(df: string): string[] {

@@ -763,7 +763,8 @@
       "error": "Erreur",
       "inactive": "Inactif",
       "external": "TLS externe",
-      "manual": "Certificat manuel"
+      "manual": "Certificat manuel",
+      "unknown": "Inconnu"
     },
     "typeCustom": "Domaine personnalisé",
     "typeFree": "Sous-domaine gratuit",
@@ -978,7 +979,8 @@
         "manual_certificate": "Ce domaine utilise un certificat importé. Importez un certificat de remplacement valide, puis vérifiez-le. Openship ne le renouvelle pas automatiquement.",
         "managed_certificate": "TLS est géré par votre proxy externe ou Openship Cloud. Vérifiez la configuration de ce fournisseur.",
         "route_missing": "Cette route configurée n’a pas encore été appliquée. Réessayez le routage pour l’appliquer. Aucune nouvelle tentative automatique de routage n’est planifiée.",
-        "manual_dns": "Ce certificat utilise la vérification TXT manuelle. Ouvrez la configuration HTTPS pour confirmer un nouvel enregistrement TXT, ou choisissez un fournisseur DNS connecté pour le renouvellement automatique."
+        "manual_dns": "Ce certificat utilise la vérification TXT manuelle. Ouvrez la configuration HTTPS pour confirmer un nouvel enregistrement TXT, ou choisissez un fournisseur DNS connecté pour le renouvellement automatique.",
+        "managed_owner": "Ce nom d’hôte et son certificat sont gérés par le service propriétaire. Vérifiez les paramètres de domaine de ce service."
       }
     },
     "wildcard": {

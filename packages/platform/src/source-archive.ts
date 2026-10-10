@@ -1,4 +1,5 @@
 /** Validate untrusted source archives before extracting into an owned empty directory. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createReadStream } from "node:fs";
 import { posix } from "node:path";
 import { Transform } from "node:stream";
@@ -47,6 +48,7 @@ export async function extractSourceArchive(archive: string, destination: string)
         if (bytes > MAX_SOURCE_BYTES) throw new ValidationError("Source exceeds the 300MB limit");
         members.set(path, entry.type);
       } catch (error) {
+        observeCaughtError(error, "platform/source-archive");
         validationError = error instanceof Error ? error : new Error(String(error));
         parser.abort(validationError);
       } finally {

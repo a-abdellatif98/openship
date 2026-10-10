@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect, useMemo, useState } from "react";
@@ -177,7 +178,9 @@ export function ProjectConnectionForm({
 
   const copyUsage = async () => {
     if (!usageCode) return;
-    await navigator.clipboard.writeText(usageCode).catch(() => {});
+    await navigator.clipboard.writeText(usageCode).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/UseInProjectModal");
+    });
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -451,7 +454,8 @@ function EnvKeyField({
       await navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/UseInProjectModal");
       /* clipboard unavailable */
     }
   };

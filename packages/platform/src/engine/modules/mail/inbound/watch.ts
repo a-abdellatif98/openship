@@ -9,6 +9,7 @@
  * mail servers.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { safeErrorMessage } from "@repo/core";
 import { repos, type MailInboundScope } from "@repo/db";
 import { getInstanceSmtpSenders } from "@repo/platform/engine/modules/mail/inbound/senders";
@@ -30,13 +31,13 @@ export async function runInboundWatch(): Promise<InboundWatchResult> {
 
   // Only servers that actually have rules. `listEnabled` is one indexed read across the
   // instance, versus a per-server probe that would cost SSH on every box every minute.
-  const rules = await repos.mailInbound.listEnabled().catch(() => []);
+  const rules = await repos.mailInbound.listEnabled().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/inbound/watch"); return []; });
   if (rules.length === 0) return result;
 
   // The addresses this instance sends its OWN mail from. Passed into the loop guard so a
   // notification email that lands back inside a watched domain is recognised as ours and
   // cannot feed itself.
-  const openshipSenders = await getInstanceSmtpSenders().catch(() => []);
+  const openshipSenders = await getInstanceSmtpSenders().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/inbound/watch"); return []; });
 
   const byServer = new Map<string, string>();
   for (const rule of rules) byServer.set(rule.serverId, rule.organizationId);
@@ -52,11 +53,11 @@ export async function runInboundWatch(): Promise<InboundWatchResult> {
         result.errors += r.errors.length;
         // Per-domain failures are already summarized by runInboundForServer. Logged rather
         // than thrown: one unreachable mail box must not stop the rest of the sweep.
-        console.warn(`[mail:inbound-watch] ${serverId}: ${r.errors.join("; ")}`);
+        errorDiagnostics.warn("platform/engine/modules/mail/inbound/watch", `[mail:inbound-watch] ${serverId}: ${r.errors.join("; ")}`);
       }
     } catch (err) {
       result.errors++;
-      console.warn(`[mail:inbound-watch] ${serverId} failed: ${safeErrorMessage(err)}`);
+      errorDiagnostics.warn("platform/engine/modules/mail/inbound/watch", `[mail:inbound-watch] ${serverId} failed: ${safeErrorMessage(err)}`, err);
     }
   }
 
@@ -98,7 +99,7 @@ export async function runInboundReconcile(): Promise<InboundReconcileResult> {
     errors: 0,
   };
 
-  const rules = await repos.mailInbound.listEnabled().catch(() => []);
+  const rules = await repos.mailInbound.listEnabled().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/inbound/watch"); return []; });
   if (rules.length === 0) return result;
 
   // Group the WANTED set per server. `all` short-circuits the domain list: reconcile
@@ -127,13 +128,13 @@ export async function runInboundReconcile(): Promise<InboundReconcileResult> {
       result.refused += r.refused.length;
       if (r.refused.length > 0) {
         // A foreign BCC is reported, never touched — the operator has to resolve it.
-        console.warn(
+        errorDiagnostics.warn("platform/engine/modules/mail/inbound/watch",
           `[mail:inbound-reconcile] ${serverId}: left alone (foreign BCC or failed arm): ${r.refused.join(", ")}`,
         );
       }
     } catch (err) {
       result.errors++;
-      console.warn(`[mail:inbound-reconcile] ${serverId} failed: ${safeErrorMessage(err)}`);
+      errorDiagnostics.warn("platform/engine/modules/mail/inbound/watch", `[mail:inbound-reconcile] ${serverId} failed: ${safeErrorMessage(err)}`, err);
     }
   }
 

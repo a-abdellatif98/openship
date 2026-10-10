@@ -5,6 +5,7 @@
  * so no dashboard/web changes are needed.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { BrowserWindow, nativeTheme } from "electron";
 import { changelogUrl } from "@repo/core";
 import { join } from "node:path";
@@ -151,7 +152,7 @@ export function openUpdateWindow(
   // off-origin page inherit the preload bridge.
   const denyNav = (e: Electron.Event, url: string) => {
     e.preventDefault();
-    console.warn(`[security] blocked update-window navigation to ${url}`);
+    errorDiagnostics.warn("desktop/main/update-window", `[security] blocked update-window navigation to ${url}`);
   };
   updateWin.webContents.on("will-navigate", denyNav);
   updateWin.webContents.on("will-redirect", denyNav);

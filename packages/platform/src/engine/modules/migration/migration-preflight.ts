@@ -9,6 +9,7 @@
  * BLOCKED — the adopted project has no linked source to rebuild on the target.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { edgeProxy } from "@repo/adapters";
 import { posix } from "node:path";
 import { discoverServerStack } from "./docker-inspect.service";
@@ -134,10 +135,11 @@ async function previewSslByDomain(
       const proxy = await edgeProxy(exec);
       if (!proxy) return;
       for (const domain of tlsDomains) {
-        if (await proxy.certFor(domain).catch(() => null)) carried.add(domain);
+        if (await proxy.certFor(domain).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration-preflight"); return null; })) carried.add(domain);
       }
     });
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration-preflight");
     // Source unreachable — every domain reports "will issue".
   }
   return [...all].map((domain) => ({ domain, hasCert: carried.has(domain) }));
@@ -266,7 +268,8 @@ export async function buildMigrationPreview(opts: {
         customPaths: customPaths.map((c) => c.source),
       }));
       plan = { totalBytes: sized.totalBytes, partial: sized.partial, items: sized.perItem };
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration-preflight");
       /* sizing is best-effort — leave `plan` undefined */
     }
   }
@@ -321,7 +324,8 @@ export async function buildMigrationPreview(opts: {
         }
         if (flat.length > 0) conflicts = flat;
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration-preflight");
       /* best-effort — leave `conflicts` undefined */
     }
   }

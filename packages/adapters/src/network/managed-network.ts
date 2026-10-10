@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   classifyConnectivityError,
   managedInterfaceName,
@@ -107,12 +108,14 @@ async function run<T>(
       { timeout },
     );
   } catch (error) {
+    observeCaughtError(error, "adapters/network/managed-network");
     throw hostCommandFailure(action, error, timeout);
   }
   let data: T & { error?: unknown; code?: string };
   try {
     data = JSON.parse(output.trim());
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/network/managed-network");
     throw new PrivateNetworkError(
       "The host returned an invalid managed network receipt.",
       "MANAGED_NETWORK_REPORT_INVALID",

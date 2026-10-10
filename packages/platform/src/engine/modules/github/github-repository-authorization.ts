@@ -1,5 +1,6 @@
 /** Repository grants are independent of Openship sign-in identities. One GitHub
  * user may authorize several Openship accounts without transferring a login. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { repos } from "@repo/db";
 import { AppError } from "@repo/core";
@@ -49,7 +50,8 @@ function readGrant(encrypted: string): StoredGrant {
   let value: Partial<RepositoryGrant> & { disconnected?: boolean };
   try {
     value = JSON.parse(decrypt(encrypted));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-repository-authorization");
     throw new AppError(
       "Saved GitHub authorization is invalid. Reconnect GitHub.",
       409,
@@ -143,7 +145,8 @@ export async function getRepositoryAuthorizationToken(
   let initial: StoredGrant;
   try {
     initial = readGrant(encrypted);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-repository-authorization");
     return null;
   } // A corrupt grant requires reconnect, never login-token fallback.
   if ("disconnected" in initial) return null;
@@ -366,7 +369,9 @@ export async function completeRepositoryAuthorization(input: {
           : "GitHub could not complete authorization. Please try again.";
       await repos.githubInstallState
         .failAuthorization(input.state, binding.userId, message)
-        .catch(() => {});
+        .catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-repository-authorization");
+        });
       throw error;
     }
     return { state: input.state, callbackMode: binding.payload.callbackMode ?? "dashboard" };

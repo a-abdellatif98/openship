@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 /**
@@ -194,7 +195,8 @@ function JsonBlock({ value, label }: { value: unknown; label: string }) {
   const text = useMemo(() => {
     try {
       return JSON.stringify(value, null, 2) ?? "null";
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/audit/_components/AuditLog");
       return String(value);
     }
   }, [value]);
@@ -569,7 +571,7 @@ export function AuditLog() {
       })
       .catch((err) => {
         if (cancelled) return;
-        console.error("Failed to load audit events", err);
+        errorDiagnostics.error("dashboard/app/(dashboard)/audit/_components/AuditLog", "Failed to load audit events", err);
         setEvents([]);
         setTotal(0);
       })
@@ -591,7 +593,7 @@ export function AuditLog() {
         if (!cancelled) setFacets(res);
       })
       .catch((err) => {
-        if (!cancelled) console.error("Failed to load audit facets", err);
+        if (!cancelled) errorDiagnostics.error("dashboard/app/(dashboard)/audit/_components/AuditLog", "Failed to load audit facets", err);
       });
     return () => {
       cancelled = true;
@@ -637,7 +639,7 @@ export function AuditLog() {
           "error",
           t.settings.common.toast.settings,
         );
-        const fresh = await auditApi.facets(query).catch(() => null);
+        const fresh = await auditApi.facets(query).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/audit/_components/AuditLog"); return null; });
         if (fresh) setFacets(fresh);
       } finally {
         setSavingSettings(false);

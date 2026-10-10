@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import React, { useState, useEffect } from "react";
@@ -205,7 +206,8 @@ function SelfHostedConnectionCard({
         const app = res?.state?.sources?.openshipApp;
         setAppStatus({ connected: Boolean(app?.connected), login: app?.login ?? null });
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/library/components/LibrarySidebar");
         // Cloud unreachable / no link — leave the row neutral rather than
         // asserting a false "disconnected".
         if (!cancelled) setAppStatus({ connected: false, login: null });

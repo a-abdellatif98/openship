@@ -5,6 +5,7 @@
  * keeping this module focused on data transformation and business rules.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { randomBytes } from "crypto";
 import { githubFetch, getGitHubAuthMode } from "./github.auth";
 import { ghFetch } from "./github.http";
@@ -77,7 +78,7 @@ async function listRepositoryTreeViaContents(
     const entries = await listFiles(ctx, owner, repo, {
       ...opts,
       ...(currentPath ? { path: currentPath } : {}),
-    }).catch(() => [] as GitHubFileContent[]);
+    }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service"); return [] as GitHubFileContent[]; });
 
     for (const entry of entries) {
       const entryType: "file" | "dir" = entry.type === "dir" ? "dir" : "file";
@@ -410,7 +411,8 @@ export async function getCommitByRef(
       url: `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(ref)}`,
     });
     return { sha: data.sha, message: data.commit.message };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service");
     return null;
   }
 }
@@ -474,7 +476,8 @@ export async function getRecentCommits(
       date: c.commit.author?.date ?? "",
       url: c.html_url,
     }));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service");
     return [];
   }
 }
@@ -519,8 +522,8 @@ export async function compareCommits(
   if (cacheable) {
     store = await cacheStore<CompareCommitsResult>("github-commit-comparisons", {
       maxSize: 5_000,
-    }).catch(() => null);
-    const cached = await store?.get(key).catch(() => null);
+    }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service"); return null; });
+    const cached = await store?.get(key).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service"); return null; });
     if (cached) return cached;
   }
 
@@ -549,9 +552,12 @@ export async function compareCommits(
         // suppressing a real update whose matching file was omitted by GitHub.
         truncated: returnedFiles.length >= MAX_COMPARE_FILES_PER_RESPONSE,
       };
-      if (store) await store.set(key, result, COMPARE_CACHE_TTL_SECONDS).catch(() => {});
+      if (store) await store.set(key, result, COMPARE_CACHE_TTL_SECONDS).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service");
+      });
       return result;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service");
       return null;
     }
   })();
@@ -615,7 +621,7 @@ export async function listRepositoryTree(
   }
 
   const fallbackTree = await listRepositoryTreeViaContents(ctx, owner, repo, opts).catch(
-    () => tree,
+    (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service"); return tree; },
   );
   return fallbackTree.length > 0 ? fallbackTree : tree;
 }
@@ -823,9 +829,9 @@ export async function createCheckRun(
     // case report the generic "connect your GitHub account" — misleading on a
     // self-host that HAS a working gh CLI or PAT, since neither can ever post a
     // check run. The App is the requirement, not a GitHub connection per se.
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/github/github.service",
       `[GitHub Checks] create failed for ${owner}/${repo} ${opts.name}@${opts.headSha.slice(0, 7)}: ${safeErrorMessage(err)} ` +
-        `(check runs require a GitHub App installation — a gh-CLI/PAT credential cannot post one)`,
+        `(check runs require a GitHub App installation — a gh-CLI/PAT credential cannot post one)`, err,
     );
     return null;
   }
@@ -865,8 +871,8 @@ export async function updateCheckRun(
     });
   } catch (err) {
     // Best-effort — never fails the deployment, never silent either (see create).
-    console.warn(
-      `[GitHub Checks] update failed for ${owner}/${repo} check ${checkRunId}: ${safeErrorMessage(err)}`,
+    errorDiagnostics.warn("platform/engine/modules/github/github.service",
+      `[GitHub Checks] update failed for ${owner}/${repo} check ${checkRunId}: ${safeErrorMessage(err)}`, err,
     );
   }
 }
@@ -917,7 +923,7 @@ export async function resolveWebhookStrategy(
   organizationId?: string,
 ): Promise<WebhookStrategy> {
   const orgId = organizationId ?? project?.organizationId ?? undefined;
-  if (orgId && (await hasActiveGitHubSource(orgId).catch(() => false))) return "app";
+  if (orgId && (await hasActiveGitHubSource(orgId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service"); return false; }))) return "app";
   const base = getWebhookStrategy();
   if (base === "app") return "app";
 
@@ -1058,7 +1064,7 @@ export function resolveProjectWebhookSecret(
     } catch {
       // Encryption key rotation / corrupted row — fall through to env
       // rather than silently rejecting every webhook for this project.
-      console.warn(
+      errorDiagnostics.warn("platform/engine/modules/github/github.service",
         "[GitHub Webhook] project.webhookSecret failed to decrypt; falling back to env.GITHUB_WEBHOOK_SECRET",
       );
     }
@@ -1076,13 +1082,13 @@ export function resolveProjectWebhookSecret(
  * (legacy) global env var and one project's leak can't verify another's.
  */
 async function ensureProjectWebhookSecret(projectId: string): Promise<string> {
-  const proj = await dbRepos.project.findById(projectId).catch(() => null);
+  const proj = await dbRepos.project.findById(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service"); return null; });
   if (proj?.webhookSecret) {
     try {
       return decrypt(proj.webhookSecret);
     } catch {
       // Corrupted row / key rotation — mint a fresh one below and overwrite.
-      console.warn(
+      errorDiagnostics.warn("platform/engine/modules/github/github.service",
         "[GitHub Webhook] existing project.webhookSecret failed to decrypt; minting a fresh secret",
       );
     }
@@ -1173,11 +1179,11 @@ export async function registerWebhook(
  */
 export async function backfillWebhookSecrets(): Promise<void> {
   if (env.CLOUD_MODE) return;
-  const projects = await dbRepos.project.listNeedingWebhookBackfill().catch(() => []);
+  const projects = await dbRepos.project.listNeedingWebhookBackfill().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service"); return []; });
   for (const p of projects) {
     if (!p.gitOwner || !p.gitRepo) continue;
     try {
-      const owner = await resolveOrgOwner(p.organizationId).catch(() => null);
+      const owner = await resolveOrgOwner(p.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.service"); return null; });
       if (!owner?.userId) continue;
       const ctx = buildBackgroundContext({
         userId: owner.userId,
@@ -1190,8 +1196,8 @@ export async function backfillWebhookSecrets(): Promise<void> {
         `[GitHub Webhook] backfilled per-project secret for ${p.gitOwner}/${p.gitRepo} (project ${p.id})`,
       );
     } catch (err) {
-      console.warn(
-        `[GitHub Webhook] webhook-secret backfill failed for project ${p.id}: ${safeErrorMessage(err)}`,
+      errorDiagnostics.warn("platform/engine/modules/github/github.service",
+        `[GitHub Webhook] webhook-secret backfill failed for project ${p.id}: ${safeErrorMessage(err)}`, err,
       );
     }
   }

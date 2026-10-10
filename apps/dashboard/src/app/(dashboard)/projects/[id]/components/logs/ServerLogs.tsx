@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -127,7 +128,8 @@ export const ServerLogs: React.FC<ServerLogsProps> = ({
           mergeServerLogs(entries);
         }
       }
-    }).catch(() => {
+    }).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/logs/ServerLogs");
       // Non-fatal - live stream stays active even if history fetch fails.
     });
 

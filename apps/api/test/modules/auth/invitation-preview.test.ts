@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
     role: string;
     expiresAt: Date;
     inviterId: string;
+    inviterName: string;
     inviterIsInstanceAdmin: boolean;
     organization: { id: string; name: string };
   },
@@ -45,6 +46,7 @@ beforeEach(() => {
     role: "member",
     expiresAt: new Date("2026-09-03T00:00:00.000Z"),
     inviterId: "usr_admin",
+    inviterName: "Alex",
     inviterIsInstanceAdmin: true,
     organization: { id: "org_1", name: "Acme" },
   };
@@ -66,6 +68,7 @@ describe("public invitation preview", () => {
           expiresAt: "2026-09-03T00:00:00.000Z",
         },
         organization: { id: "org_1", name: "Acme" },
+        inviter: { name: "Alex" },
         accountCreation: "invited",
       },
     });

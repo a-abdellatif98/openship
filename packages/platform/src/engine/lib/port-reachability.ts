@@ -8,6 +8,7 @@
  * implementation and one set of resource limits.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { probeTcpDetailed, type PortScanResult, type TcpProbeResult } from "@repo/adapters";
 
 export interface PortReachabilityOptions {
@@ -54,11 +55,11 @@ export async function probePortsFromControlPlane(
 
   const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
     for (let port = queue.shift(); port !== undefined; port = queue.shift()) {
-      const result = await probe(host.trim(), port, timeoutMs).catch((err: unknown) => ({
+      const result = await probe(host.trim(), port, timeoutMs).catch((err: unknown) => { observeCaughtError(err, "platform/engine/lib/port-reachability"); return ({
         ok: false as const,
         reason: "error" as const,
         message: err instanceof Error ? err.message : "TCP probe failed",
-      }));
+      }); });
       observations.set(port, result);
     }
   });

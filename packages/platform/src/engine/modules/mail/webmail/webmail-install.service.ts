@@ -26,6 +26,7 @@
  * so the operator cannot repoint it and we front it for them.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import {
   AppError,
@@ -390,8 +391,8 @@ async function enableRestartLoopWatch(
     if ((row.advanced as ComposeAdvanced | null)?.readiness) return;
     await updateService(ctx, projectId, row.id, { advanced: { readiness: WEBMAIL_READINESS } });
   } catch (err) {
-    console.warn(
-      `[webmail] could not enable the restart-loop watch on ${projectId}: ${safeErrorMessage(err)}`,
+    errorDiagnostics.warn("platform/engine/modules/mail/webmail/webmail-install.service",
+      `[webmail] could not enable the restart-loop watch on ${projectId}: ${safeErrorMessage(err)}`, err,
     );
   }
 }
@@ -461,7 +462,7 @@ export async function startWebmailDeploy(
   // Org-scope guard (IDOR). The route is tagged mail_server:write with NO :id
   // param, so the framework proved org MEMBERSHIP only — not that this mail
   // server, or the chosen target, belongs to the caller's org.
-  const mailServer = await repos.server.get(input.mailServerId).catch(() => null);
+  const mailServer = await repos.server.get(input.mailServerId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/webmail/webmail-install.service"); return null; });
   assertResourceInOrg(mailServer, "mail_server", ctx.organizationId, input.mailServerId);
   const target = await webmailDeploymentTarget(ctx, {
     deployTarget: input.target.kind === "cloud" ? "cloud" : "server",
@@ -616,14 +617,16 @@ export async function resolveLinkedWebmailProject(
   storedProjectId: string | null,
 ): Promise<Project | null> {
   if (storedProjectId) {
-    const linked = await repos.project.findById(storedProjectId).catch(() => null);
+    const linked = await repos.project.findById(storedProjectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/webmail/webmail-install.service"); return null; });
     if (linked && linked.organizationId === organizationId) return linked;
   }
-  const legacy = await repos.project.findFirstBySlug(`webmail-${mailServerId}`).catch(() => null);
+  const legacy = await repos.project.findFirstBySlug(`webmail-${mailServerId}`).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/webmail/webmail-install.service"); return null; });
   if (!legacy || legacy.organizationId !== organizationId) return null;
   await repos.mailServer
     .setWebmailProject(mailServerId, legacy.id)
-    .catch(() => {}); // best-effort stamp; the fallback still answers correctly
+    .catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/webmail/webmail-install.service");
+    }); // best-effort stamp; the fallback still answers correctly
   return legacy;
 }
 
@@ -653,7 +656,7 @@ export async function resolveWebmailSummary(
   // unrouted project and this would hand back `mail.<domain>` for a self-hosted
   // webmail that has a hostname of its own — an Open-webmail CTA pointing at the
   // mail box instead of the webmail. Unknown routing yields no hostname at all.
-  const rows: Domain[] | null = await listProjectRouteRows(project.id).catch(() => null);
+  const rows: Domain[] | null = await listProjectRouteRows(project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/webmail/webmail-install.service"); return null; });
   // The hostname the operator ROUTED, not the one we've verified: a custom
   // domain behind a CDN may never verify, yet its vhost is written and it is
   // still the address they open. `resolveProjectAccess` is deliberately
@@ -672,7 +675,7 @@ export async function resolveWebmailSummary(
     (proxied ? mailHostname(mailServer.domain) : rows === null ? "" : await routedServiceHostname(project));
 
   return {
-    installed: (await findActiveDeployment(project).catch(() => null))?.status === "ready",
+    installed: (await findActiveDeployment(project).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/webmail/webmail-install.service"); return null; }))?.status === "ready",
     hostname,
     url: hostname ? `https://${hostname}` : "",
     // Withholding the hostname is the safe half; saying so is the other half. Without
@@ -696,7 +699,7 @@ export async function resolveWebmailSummary(
  * ends up on the card.
  */
 async function routedServiceHostname(project: Pick<Project, "id" | "slug" | "name">): Promise<string> {
-  const rows = await repos.service.listByProject(project.id).catch(() => []);
+  const rows = await repos.service.listByProject(project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/webmail/webmail-install.service"); return []; });
   for (const row of rows) {
     const endpoints = resolveServicePublicEndpoints(row, {
       projectSlug: project.slug ?? project.name,
@@ -750,8 +753,8 @@ export async function onWebmailDeployed(
       await platform.ssl.provisionCert(mailHostname(mailServer.domain));
     });
   } catch (err) {
-    console.warn(
-      `[webmail] could not front mail.<domain> for project ${project.id}: ${safeErrorMessage(err)}`,
+    errorDiagnostics.warn("platform/engine/modules/mail/webmail/webmail-install.service",
+      `[webmail] could not front mail.<domain> for project ${project.id}: ${safeErrorMessage(err)}`, err,
     );
   }
 }
@@ -782,7 +785,7 @@ export async function cleanupWebmailInstall(project: Project): Promise<string | 
   // removal for a project that had its own hostname is a no-op (we never wrote
   // that vhost), while skipping it leaves a proxy vhost on the mail VPS with no
   // project left to ever remove it.
-  const rows: Domain[] = await listProjectRouteRows(project.id).catch(() => []);
+  const rows: Domain[] = await listProjectRouteRows(project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/webmail/webmail-install.service"); return []; });
   if (rows.length > 0 || !project.workspaceId) return null;
 
   const hostname = mailHostname(mailServer.domain);
@@ -882,7 +885,7 @@ async function cleanupLegacyWebmail(project: Project): Promise<string> {
             const state = await readState(exec);
             return state?.webmail?.targetServerId ?? null;
           })
-          .catch(() => null)
+          .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/webmail/webmail-install.service"); return null; })
       : null);
 
   if (stateDirHost) {
@@ -900,8 +903,8 @@ async function cleanupLegacyWebmail(project: Project): Promise<string> {
         for (const path of paths) await exec.rm(path);
       })
       .catch((err) =>
-        console.warn(
-          `[webmail] could not remove ${LEGACY_PERSIST_ROOT} state for ${slug}: ${safeErrorMessage(err)}`,
+        errorDiagnostics.warn("platform/engine/modules/mail/webmail/webmail-install.service",
+          `[webmail] could not remove ${LEGACY_PERSIST_ROOT} state for ${slug}: ${safeErrorMessage(err)}`, err,
         ),
       );
   }
@@ -917,8 +920,8 @@ async function cleanupLegacyWebmail(project: Project): Promise<string> {
         }),
       )
       .catch((err) =>
-        console.warn(
-          `[webmail] could not clear the legacy mail-state block on ${mailServerId}: ${safeErrorMessage(err)}`,
+        errorDiagnostics.warn("platform/engine/modules/mail/webmail/webmail-install.service",
+          `[webmail] could not clear the legacy mail-state block on ${mailServerId}: ${safeErrorMessage(err)}`, err,
         ),
       );
   }

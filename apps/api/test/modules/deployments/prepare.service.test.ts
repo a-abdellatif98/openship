@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  resolveFromReader,
   resolveProjectInfo,
   resolveProjectSourceEnv,
 } from "@repo/platform/engine/modules/deployments/prepare.service";
@@ -14,6 +15,103 @@ describe("resolveProjectInfo", () => {
   afterEach(async () => {
     await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
+
+  it("reads the listed Dockerfile path on case-sensitive sources", async () => {
+    const reads: string[] = [];
+    const info = await resolveFromReader(
+      {
+        listDirectory: async () => [{ name: "Dockerfile", type: "file" }],
+        readJson: async () => undefined,
+        listTree: async () => [],
+        readText: async (path) => {
+          reads.push(path);
+          return path === "Dockerfile" ? "FROM node:22-alpine\nEXPOSE 8080\n" : undefined;
+        },
+      },
+      {
+        name: "web",
+        full_name: "example/web",
+        owner: "example",
+        private: false,
+        default_branch: "main",
+      },
+      "main",
+    );
+    expect(info).toMatchObject({ stack: "docker", port: 8080, startCommand: "" });
+    expect(reads).toContain("Dockerfile");
+    expect(reads).not.toContain("dockerfile");
+  });
+
+  it.each(["./", "apps/web"])(
+    "uses Dockerfile runtime defaults at %s despite Bun/Next scripts",
+    async (rootDirectory) => {
+      const repo = await mkdtemp(join(tmpdir(), "openship-docker-runtime-"));
+      tempDirs.push(repo);
+      const root = join(repo, rootDirectory);
+      await mkdir(root, { recursive: true });
+      if (rootDirectory !== "./") {
+        await writeFile(
+          join(repo, "package.json"),
+          JSON.stringify({
+            private: true,
+            workspaces: ["apps/*"],
+            packageManager: "pnpm@10.0.0",
+          }),
+        );
+        await writeFile(join(repo, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+      }
+      await writeFile(
+        join(root, "package.json"),
+        JSON.stringify({
+          name: "web",
+          dependencies: { next: "^16.0.0" },
+          scripts: {
+            build: "next build",
+            start: "node custom-server.js --port 20127",
+          },
+        }),
+      );
+      await writeFile(join(root, "bun.lock"), "{}");
+      await writeFile(
+        join(root, "next.config.mjs"),
+        "export default { output: 'standalone' };\n",
+      );
+      await writeFile(
+        join(root, "Dockerfile"),
+        'FROM node:22-alpine\nEXPOSE 20128\nENTRYPOINT ["/entrypoint.sh"]\nCMD ["node", "custom-server.js"]\n',
+      );
+
+      const info = await resolveProjectInfo({
+        source: "local",
+        path: repo,
+        rootDirectory,
+      });
+      expect(info).toMatchObject({
+        stack: "docker",
+        projectType: "docker",
+        port: 20128,
+        installCommand: "",
+        buildCommand: "",
+        startCommand: "",
+      });
+
+      // A declared override is intentional, even when it differs from image CMD.
+      await writeFile(
+        join(root, "openship.json"),
+        JSON.stringify({ startCommand: "node worker.js", port: 9000 }),
+      );
+      const overridden = await resolveProjectInfo({
+        source: "local",
+        path: repo,
+        rootDirectory,
+      });
+      expect(overridden).toMatchObject({
+        stack: "docker",
+        startCommand: "node worker.js",
+        port: 9000,
+      });
+    },
+  );
 
   it.each(["public", "web-assets"])(
     "keeps a Node server instead of promoting its %s assets",

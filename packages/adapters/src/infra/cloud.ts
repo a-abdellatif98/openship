@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Oblien, DomainRoute, RoutesInput } from "oblien";
 import { posix } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -443,6 +444,7 @@ export class CloudInfraProvider implements RoutingProvider, SslProvider {
               throw new Error("Could not republish the previous static release");
           }
         } catch (restoreError) {
+          observeCaughtError(restoreError, "adapters/infra/cloud");
           throw new AggregateError(
             [error, restoreError],
             "Static publication failed and its previous export could not be restored",
@@ -455,7 +457,9 @@ export class CloudInfraProvider implements RoutingProvider, SslProvider {
       if (staged)
         await this.scope.executor
           .exec(`rm -rf -- ${sq(staged.next)}${published ? ` ${sq(staged.previous)}` : ""}`)
-          .catch(() => {});
+          .catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "adapters/infra/cloud");
+          });
     }
   }
 

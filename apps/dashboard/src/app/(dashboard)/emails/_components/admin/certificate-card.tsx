@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { MailCertificateHealth, MailCertificateStatus } from "@repo/core";
@@ -135,7 +136,7 @@ export function MailCertificateCard({ serverId }: { serverId: string }) {
       // Renewal can write a new certificate before a later reload fails. Keep the
       // displayed observation current while preserving the operation's error.
       if (action === "renew") {
-        const result = await mailAdminApi.certificate.get(serverId).catch(() => null);
+        const result = await mailAdminApi.certificate.get(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/certificate-card"); return null; });
         if (result) setData(result);
       }
     } finally {

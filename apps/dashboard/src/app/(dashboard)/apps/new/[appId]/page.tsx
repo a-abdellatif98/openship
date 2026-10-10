@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -269,6 +270,7 @@ export default function AppInstallPage() {
         setCatalogRead({ appId, status: "ready" });
       })
       .catch((error) => {
+        observeCaughtError(error, "dashboard/app/(dashboard)/apps/new/[appId]/page");
         if (cancelled) return;
         if (error instanceof ApiError && error.status === 404) {
           setTemplate(undefined);
@@ -331,7 +333,7 @@ export default function AppInstallPage() {
             })),
         );
       })
-      .catch(() => setCandidates([]));
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/new/[appId]/page"); return setCandidates([]); });
   }, [requires.length]);
   const candidatesFor = (category?: string) =>
     candidates.filter((p) => !category || p.category === category);
@@ -490,7 +492,8 @@ export default function AppInstallPage() {
       .then((res) => {
         if (live) setHostFit(res.data);
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/new/[appId]/page");
         // Preview failure never substitutes for the deployment's authoritative check.
         if (live) setHostFit(null);
       })
@@ -584,7 +587,8 @@ export default function AppInstallPage() {
           slug: project.slug ?? (project.name ? slugify(project.name) : null),
         });
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/new/[appId]/page");
         if (!cancelled) setDraftRouting({ projectId: targetDraftId, status: "error" });
       });
     return () => {
@@ -601,7 +605,7 @@ export default function AppInstallPage() {
    * URL shown is the hostname that was stored, not one recomputed from intent.
    */
   const persistedRouteUrl = async (pid: string, ep: AppEndpoint): Promise<string | null> => {
-    const svcRes = await servicesApi.list(pid).catch(() => null);
+    const svcRes = await servicesApi.list(pid).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/new/[appId]/page"); return null; });
     const svc = ((svcRes?.services ?? []) as Service[]).find((s) => s.name === ep.service);
     const stored = svc ? storedRouteFor(svc, ep.port) : null;
     if (!stored) return null;
@@ -716,7 +720,8 @@ export default function AppInstallPage() {
       status = s.deploymentStatus ?? s.status ?? "";
       // Prefer the server's full accumulated log over the streamed fragments.
       if (typeof s.logs === "string" && s.logs.length >= logs.length) setLogs(s.logs);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/new/[appId]/page");
       /* fall back to the SSE outcome below */
     }
     if (activeDeployment.current !== deploymentId) return;
@@ -832,7 +837,8 @@ export default function AppInstallPage() {
           });
           return;
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/new/[appId]/page");
         /* live deploy — attach below */
       }
       if (!cancelled) void connect(deploymentId, false);
@@ -1007,6 +1013,7 @@ export default function AppInstallPage() {
           template?.services?.find((service) => service.name === svc.name)?.ports,
           choices,
           svc.ports as string[] | null,
+          cloudDestination ? "cloud" : "server",
         ),
       });
     }
@@ -1305,7 +1312,7 @@ export default function AppInstallPage() {
       // SSL attempt runs.
       const pendingDnsTargets = appInstallDnsTargets(routes ?? []);
       if (pendingDnsTargets.length > 0) {
-        const projectInfo = await projectsApi.getInfo(pid).catch(() => null);
+        const projectInfo = await projectsApi.getInfo(pid).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/new/[appId]/page"); return null; });
         const domainRows = Array.isArray(projectInfo?.data?.project?.domains)
           ? projectInfo.data.project.domains
           : [];

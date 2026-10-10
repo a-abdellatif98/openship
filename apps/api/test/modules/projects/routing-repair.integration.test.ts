@@ -43,13 +43,10 @@ vi.mock("@repo/platform/engine/lib/dns-resolver", () => ({
   resolveRecords: h.resolveRecords,
 }));
 vi.mock("@repo/platform/engine/lib/authorization", () => ({
-  authorization: { authorize: async (ctx: ExecutionContext) => ctx },
+  authorization: { authorize: async (ctx: ExecutionContext) => ctx, checkPermissionOnResource: async () => true },
 }));
 vi.mock("@repo/platform/engine/lib/self-app-routing", () => ({
   canRouteSelfApp: async () => false,
-}));
-vi.mock("@repo/platform/engine/lib/domain-claims", () => ({
-  routableWithoutOwnership: async () => false,
 }));
 vi.mock("@repo/platform/engine/lib/audit-emitter", () => ({
   audit: { recordAsync: vi.fn() },
@@ -98,6 +95,7 @@ vi.mock("@repo/platform/engine/modules/analytics/analytics-config.service", () =
 }));
 
 import { retryProjectRoutingOperation } from "@repo/platform/engine/modules/projects/project-routing-retry.operations";
+import { createProjectInspectionOperations } from "@repo/platform/engine/modules/projects/project-inspection.operations";
 import { manageDomainSsl } from "@repo/platform/engine/lib/domain-ssl";
 import { runOrphanSweep } from "@repo/platform/engine/modules/projects/orphan-gc-schedule";
 import { recoverProjectRouteCleanup } from "@repo/platform/engine/lib/project-route-recovery";
@@ -732,4 +730,52 @@ it.each([
       .where(eq(schema.orphanedResource.projectId, "predecessor"));
     await db.delete(schema.project).where(eq(schema.project.id, "predecessor"));
   }
+});
+
+it("repairs webmail and reads its mail-owned certificate without creating a second domain owner", async () => {
+  const db = drizzle(client, { schema });
+  const route = { name: "webmail", hostname: "mail.example.net", port: 4080, ip: "10.0.0.8" };
+  routes.push(route);
+  await db.insert(schema.projectGroup).values({ id: "mail-group", organizationId: "org", name: "Webmail", slug: "webmail" });
+  await db.insert(schema.project).values({
+    id: "webmail-project", organizationId: "org", groupId: "mail-group", name: "Webmail", slug: "webmail",
+    serverId: "remote-server", routeStrategy: "container-ip",
+  });
+  await db.insert(schema.deployment).values({
+    id: "webmail-deployment", projectId: "webmail-project", organizationId: "org", branch: "main", status: "ready", containerId: "compose",
+    meta: { serverId: "remote-server", deployTarget: "server", runtimeMode: "docker", edgeUnsynced: true, deployWarning: "Earlier routing failure" },
+  });
+  await db.update(schema.project).set({ activeDeploymentId: "webmail-deployment" }).where(eq(schema.project.id, "webmail-project"));
+  await db.insert(schema.service).values({
+    id: "mail-service", projectId: "webmail-project", name: "webmail", kind: "compose", enabled: true, exposed: true,
+    exposedPort: "4080", ports: ["4080"], domainType: "custom", customDomain: route.hostname,
+  });
+  await db.insert(schema.serviceDeployment).values({
+    id: "live-webmail", deploymentId: "webmail-deployment", serviceId: "mail-service", containerId: "container-webmail", ip: route.ip, status: "running",
+  });
+  await h.repos.mailServer.upsert({ serverId: "remote-server", domain: "example.net", webmailProjectId: "webmail-project" });
+  const cert = makeTestCert([route.hostname], { issuerCN: "R11", issuerO: "Let's Encrypt" });
+  h.files.set(`/etc/letsencrypt/live/${route.hostname}/fullchain.pem`, cert.certPem);
+  h.files.set(`/etc/letsencrypt/live/${route.hostname}/privkey.pem`, cert.keyPem);
+  const owner = await h.repos.domain.create({
+    hostname: route.hostname, ownerType: "mail", projectId: null, status: "active", verified: true,
+    sslStatus: "active", sslExpiresAt: new Date("2099-01-01T00:00:00.000Z"), verificationToken: "owner-only-token",
+  });
+  const before = await h.repos.domain.findById(owner.id);
+  expect(await retryProjectRoutingOperation(context, "webmail-project")).toEqual({ ok: true });
+  const info = await createProjectInspectionOperations(vi.fn()).getInfo!(context, "webmail-project");
+  expect(info.project.routingUnsynced).toBe(false);
+  expect(info.project.routingRetry?.status).toBe("completed");
+  expect(info.project.routingClaims).toEqual([{
+    hostname: route.hostname, ownerType: "mail", verified: true, status: "active", sslStatus: "active",
+    sslExpiresAt: "2099-01-01T00:00:00.000Z", manualSsl: false,
+  }]);
+  expect(info.project.domains).toEqual([]);
+  expect(JSON.stringify(info.project.routingClaims)).not.toContain(owner.id);
+  expect(JSON.stringify(info)).not.toContain("owner-only-token");
+  expect(await h.repos.domain.findById(owner.id)).toEqual(before);
+  const vhost = [...h.files.entries()].find(([path, data]) => path.endsWith(".conf") && data.includes(`server_name ${route.hostname};`))?.[1];
+  expect(vhost).toContain("proxy_pass http://10.0.0.8:4080;");
+  expect(vhost).toContain(`ssl_certificate /etc/letsencrypt/live/${route.hostname}/fullchain.pem;`);
+  expect(issues).not.toHaveBeenCalled();
 });

@@ -13,6 +13,7 @@
  * `git-ssh-material.ts` (the IO backend differs per site; the layout does not).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { AmbientGitVia } from "../types";
 import { shellQuote } from "@repo/core";
 
@@ -224,7 +225,8 @@ export function assembleGitClone(auth: GitCloneAuth): GitCloneInvocation {
     let url: URL;
     try {
       url = new URL(auth.repoUrl);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/git-clone");
       throw new Error("Git credential forwarding requires an absolute HTTPS repository URL");
     }
     if (url.protocol !== "https:") {

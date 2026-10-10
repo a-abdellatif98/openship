@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import { type Dirent, existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -62,7 +63,8 @@ function statSignature(dir: string): string[] {
     let entries: Dirent[];
     try {
       entries = readdirSync(abs, { withFileTypes: true });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/managed-images");
       return; // unreadable dir → contributes nothing rather than throwing the scan
     }
     for (const entry of entries) {
@@ -75,7 +77,8 @@ function statSignature(dir: string): string[] {
         try {
           const st = statSync(child);
           lines.push(`${relative(dir, child)}|${st.size}|${st.mtimeMs}`);
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "platform/engine/lib/managed-images");
           // Raced away between readdir and stat — skip it.
         }
       }

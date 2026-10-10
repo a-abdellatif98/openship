@@ -19,6 +19,7 @@
  * GitHubAppSource instead. The factory supplements either with an enabled PAT.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { listUserOwnedRepos } from "@repo/platform/engine/modules/github/github.service";
 import {
   getGitHubConnectionState,
@@ -117,7 +118,7 @@ export class LocalGitHubSource implements GitHubSource {
     if (
       ghAvailable && this.gh &&
       (getGitHubAuthMode() === "app" ||
-        (await hasActiveGitHubSource(this.ctx.organizationId).catch(() => false)))
+        (await hasActiveGitHubSource(this.ctx.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/sources/local-source"); return false; })))
     ) {
       const app = await this.app();
       const [cliRepos, appRepos] = await Promise.all([
@@ -143,7 +144,7 @@ export class LocalGitHubSource implements GitHubSource {
     if (
       this.gh && ghStatus.available &&
       (getGitHubAuthMode() === "app" ||
-        (await hasActiveGitHubSource(this.ctx.organizationId).catch(() => false)))
+        (await hasActiveGitHubSource(this.ctx.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/sources/local-source"); return false; })))
     ) {
       const app = await this.app();
       if (app) {

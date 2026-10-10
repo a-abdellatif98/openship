@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useState } from "react";
@@ -84,8 +85,12 @@ export function DesktopChrome() {
     root.classList.add("is-desktop");
     if (mac) root.classList.add("is-desktop-mac");
 
-    void d.window?.isMaximized().then(setMaximized).catch(() => {});
-    void d.window?.navState().then(setNav).catch(() => {});
+    void d.window?.isMaximized().then(setMaximized).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/components/desktop-chrome");
+    });
+    void d.window?.navState().then(setNav).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/components/desktop-chrome");
+    });
     const offMax = d.window?.onMaximizedChange(setMaximized);
     const offNav = d.window?.onNavStateChange(setNav);
 

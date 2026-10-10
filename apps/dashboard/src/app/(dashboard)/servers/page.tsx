@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -27,6 +28,7 @@ import { ServerDeletionModal } from "@/components/servers/ServerDeletionModal";
 import { ManagedServerStatus } from "@/components/servers/managed/ManagedServerStatus";
 import { newServerBillingHref } from "@/lib/billing-links";
 import { useCloudResourceKey } from "@/context/CloudResourceContext";
+import { ServerListSkeleton } from "./_components/server-list-skeleton";
 import * as CountryFlags from "country-flag-icons/react/3x2";
 
 const FLAGS = CountryFlags as Record<
@@ -198,7 +200,8 @@ export default function ServersPage() {
       const created = await systemApi.createServerEntry({ sshHost: "127.0.0.1", sshPort: 22 });
       await fetchServers();
       if (created?.id) router.push(`/servers/${created.id}`);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/servers/page");
       toast("error", t.servers.list.addThisMachineError);
     }
   }, [fetchServers, router, toast, t]);
@@ -219,7 +222,8 @@ export default function ServersPage() {
           setReach((prev) => ({ ...prev, [s.id]: r.reachable ? "online" : "offline" }));
           if (!r.reachable && r.hint) setReachHint((prev) => ({ ...prev, [s.id]: r.hint! }));
         })
-        .catch(() => {
+        .catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/servers/page");
           if (!cancelled) setReach((prev) => ({ ...prev, [s.id]: "offline" }));
         });
     });
@@ -237,7 +241,8 @@ export default function ServersPage() {
         try {
           const rows = await systemApi.listTunnels(s.id);
           return [s.id, rows.filter((tn) => tn.running).length] as const;
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/servers/page");
           return [s.id, 0] as const;
         }
       }),
@@ -316,7 +321,8 @@ export default function ServersPage() {
             interpolate(skipped === 1 ? ic.skippedOne : ic.skippedMany, { n: String(skipped) }),
           );
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/servers/page");
         toast("error", ic.applyFailed);
       }
     },
@@ -484,28 +490,7 @@ export default function ServersPage() {
         ))}
 
       {activeTab === "servers" &&
-        (loading ? (
-          <div role="status" className="grid grid-cols-1 @min-[60rem]/server-list:grid-cols-[minmax(0,1fr)_340px] gap-6">
-            <span className="sr-only">{t.widgets.shared.serverSelector.loadingServers}</span>
-            <div aria-hidden="true" className="min-w-0">
-              <div className="overflow-hidden rounded-2xl border border-border/50 bg-card divide-y divide-border/50">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-3.5 px-5 py-3 animate-pulse">
-                    <div className="size-9 shrink-0 rounded-xl bg-muted" />
-                    <div className="min-w-0 flex-1 space-y-1.5 sm:w-44 sm:flex-none lg:w-56">
-                      <div className="h-3.5 w-32 max-w-full rounded bg-muted" />
-                      <div className="h-3 w-24 max-w-full rounded bg-muted" />
-                    </div>
-                    <div className="hidden min-w-0 flex-1 items-center gap-3 sm:flex">
-                      <div className="h-5 w-20 rounded-md bg-muted" />
-                    </div>
-                    <div className="hidden h-3.5 w-16 shrink-0 rounded bg-muted sm:block" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : error && servers.length === 0 ? null : servers.length === 0 ? (
+        (!loading && error && servers.length === 0 ? null : !loading && servers.length === 0 ? (
           // Empty state stands alone (no Quick Info card) and centers.
           <EmptyState
             managed={!selfHosted}
@@ -516,7 +501,7 @@ export default function ServersPage() {
           <div className="grid grid-cols-1 @min-[60rem]/server-list:grid-cols-[minmax(0,1fr)_340px] gap-6">
             {/* ── LEFT COLUMN ── */}
             <div className="min-w-0">
-              {showFilters && (
+              {!loading && showFilters && (
                 <InfraFilters
                   segment={segment}
                   onSegmentChange={setSegment}
@@ -525,11 +510,13 @@ export default function ServersPage() {
                   counts={infra.counts}
                 />
               )}
-              <div className="rounded-2xl border border-border/50 bg-card divide-y divide-border/50">
-                {visibleServers.length === 0 && (
+              <div className="rounded-2xl bg-card divide-y divide-border/50">
+                {loading ? (
+                  <ServerListSkeleton label={t.widgets.shared.serverSelector.loadingServers} />
+                ) : visibleServers.length === 0 && (
                   <p className="px-5 py-8 text-center text-sm text-muted-foreground">{ic.noMatches}</p>
                 )}
-                {visibleServers.map((server) => {
+                {!loading && visibleServers.map((server) => {
                   const state = reach[server.id] ?? "checking";
                   const sm = STATUS[state];
                   const authLabel =
@@ -670,7 +657,7 @@ export default function ServersPage() {
 
             {/* ── RIGHT COLUMN (Sticky) ── */}
             <div className="space-y-4 @min-[60rem]/server-list:sticky @min-[60rem]/server-list:top-6 @min-[60rem]/server-list:self-start">
-            <div className="bg-card rounded-2xl border border-border/50">
+            <div className="bg-card rounded-2xl" aria-busy={loading}>
               <div className="flex items-center gap-3 px-5 py-4 border-b border-border/50">
                 <div className="w-9 h-9 bg-muted rounded-xl flex items-center justify-center">
                   <UiIcon name="activity" className="size-[18px] text-muted-foreground" />
@@ -684,21 +671,28 @@ export default function ServersPage() {
                 {/* Health ratio — online / total with a progress bar. */}
                 <div>
                   <div className="flex items-baseline justify-between">
-                    <div className="flex items-baseline gap-1.5">
+                    {loading ? (
+                      <div aria-hidden="true" className="flex h-8 items-center gap-2 motion-safe:animate-pulse">
+                        <span className="h-6 w-9 rounded bg-foreground/10" />
+                        <span className="h-3.5 w-20 rounded bg-foreground/5" />
+                      </div>
+                    ) : <div className="flex items-baseline gap-1.5">
                       <span className="text-2xl font-semibold text-foreground tabular-nums">{counts.online}</span>
                       <span className="text-sm text-muted-foreground">
                         / {servers.length} {t.servers.list.online}
                       </span>
-                    </div>
-                    <span className="text-xs font-medium text-muted-foreground tabular-nums">{onlinePct}%</span>
+                    </div>}
+                    {loading ? (
+                      <span aria-hidden="true" className="h-3 w-8 self-center rounded bg-foreground/10 motion-safe:animate-pulse" />
+                    ) : <span className="text-xs font-medium text-muted-foreground tabular-nums">{onlinePct}%</span>}
                   </div>
-                  <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div
+                  <div className={`mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted ${loading ? "motion-safe:animate-pulse" : ""}`}>
+                    {!loading && <div
                       className="h-full rounded-full bg-success-solid transition-[width] duration-500"
                       style={{ width: `${onlinePct}%` }}
-                    />
+                    />}
                   </div>
-                  {counts.offline > 0 && (
+                  {!loading && counts.offline > 0 && (
                     <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-danger">
                       <span className="size-1.5 rounded-full bg-danger-solid" />
                       {counts.offline} {t.servers.list.offline}
@@ -718,7 +712,9 @@ export default function ServersPage() {
                         <UiIcon name={row.icon} className="size-4 text-muted-foreground/60" />
                         {row.label}
                       </span>
-                      <span className="text-sm font-medium text-foreground tabular-nums">{row.value}</span>
+                      {loading ? (
+                        <span aria-hidden="true" className="h-4 w-5 rounded bg-foreground/10 motion-safe:animate-pulse" />
+                      ) : <span className="text-sm font-medium text-foreground tabular-nums">{row.value}</span>}
                     </div>
                   ))}
                 </div>
@@ -728,7 +724,7 @@ export default function ServersPage() {
             {/* Managed containers across the fleet. Self-hosted/desktop only, and
                 only once at least one component is tracked — a box we've never
                 scanned has nothing to report. */}
-            {infraEnabled && !infra.empty && (
+            {!loading && infraEnabled && !infra.empty && (
               <InfraFleetCard
                 counts={infra.counts}
                 scanning={infra.scanning}

@@ -55,12 +55,20 @@ export function installServicePorts(
   templatePorts: readonly string[] | null | undefined,
   routes: readonly InstallAppRoute[] | undefined,
   storedPorts: readonly string[] | null | undefined = templatePorts,
+  target: "server" | "cloud" = "server",
 ): string[] {
   const choices = (routes ?? []).filter((route) => route.service === serviceName);
   let next = [...(storedPorts ?? templatePorts ?? [])];
   if (choices.length === 0) return next;
 
   for (const choice of choices) {
+    // Cloud ingress is domain-routed. Its "No domain" choice means internal,
+    // not a host binding that the runtime will silently discard. Remove only
+    // the endpoint being configured; unrelated service ports remain untouched.
+    if (target === "cloud") {
+      next = next.filter((spec) => firstServicePort([spec]) !== choice.port);
+      continue;
+    }
     const authored = (templatePorts ?? []).filter(
       (spec) => firstServicePort([spec]) === choice.port,
     );

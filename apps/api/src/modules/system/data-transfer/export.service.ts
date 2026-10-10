@@ -4,6 +4,7 @@
  * the database snapshot. Downloads include readable values for both scopes.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
@@ -180,6 +181,7 @@ async function projectDump(
   try {
     return await dumpProjectTransfer(selection, excludedTables, metadataOnly);
   } catch (error) {
+    observeCaughtError(error, "api/modules/system/data-transfer/export.service");
     throw new InvalidExportSelectionError(
       error instanceof Error ? error.message : "The project selection could not be exported.",
     );
@@ -288,7 +290,8 @@ export async function prepareInstanceExport(
           value,
         });
         server.sshKeyPath = null;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "api/modules/system/data-transfer/export.service");
         throw new InvalidExportSelectionError(
           `The SSH key file for ${String(server.name ?? server.sshHost)} could not be read. Add its private key in server settings or export without credentials.`,
         );

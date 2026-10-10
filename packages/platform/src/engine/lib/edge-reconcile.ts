@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   dockerAvailable,
   ensureContainerEdge,
@@ -75,7 +76,7 @@ export async function reconcileServerEdge(
   // own api container (no docker CLI in the image — it drives the daemon through
   // dockerode, and compose owns that edge anyway), and a genuinely Docker-less
   // server, where the install path already logs its fall back to the host edge.
-  if (!(await dockerAvailable(executor).catch(() => false))) {
+  if (!(await dockerAvailable(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/edge-reconcile"); return false; }))) {
     return { converted: false, updated: false, edgeDown: false };
   }
 
@@ -96,15 +97,16 @@ export async function reconcileServerEdge(
       edgeDown: Boolean(result.edgeDown),
     };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/edge-reconcile");
     const error = safeErrorMessage(err);
     // `ensureContainerEdge` restores whatever it stopped — but a restore can itself
     // fail, so "a throw means something is still serving" was an assumption, not a
     // fact. Measure it: one socket-table read, and `checked:false` (unusable
     // executor) is NO SIGNAL — never proof the box is dark.
-    const probe = await waitForPortListening(executor, 80, { timeoutMs: 0 }).catch(() => ({
+    const probe = await waitForPortListening(executor, 80, { timeoutMs: 0 }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/edge-reconcile"); return ({
       listening: false,
       checked: false,
-    }));
+    }); });
     const serving = probe.checked ? probe.listening : true;
     opts.onLog({
       timestamp: new Date().toISOString(),

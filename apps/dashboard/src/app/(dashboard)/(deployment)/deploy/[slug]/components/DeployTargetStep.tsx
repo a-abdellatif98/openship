@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useEffect, useState } from "react";
@@ -398,7 +399,8 @@ const DeployTargetStep: React.FC<DeployTargetStepProps> = ({ serverSelection, ru
         defaultServerId: pickedTarget ? (config.serverId ?? null) : null,
       });
       showToast(ts.savedToast, "success", ts.savedToastTitle);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/(deployment)/deploy/[slug]/components/DeployTargetStep");
       showToast(ts.saveFailedToast, "error", ts.savedToastTitle);
     } finally {
       setSavingDefault(false);

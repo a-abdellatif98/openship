@@ -22,6 +22,7 @@
  * failure logs and defers to the next deploy rather than failing the request.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { Deployment } from "@repo/db";
 import type {
   EdgeProxyApi,
@@ -149,7 +150,7 @@ export async function reconcileProjectRoutes(
   },
 ): Promise<void> {
   const warn = (message: string) => {
-    console.warn(message);
+    errorDiagnostics.warn("platform/engine/lib/route-apply.service", message);
     opts.onWarning?.(message);
   };
   const registers = opts.registers ?? [];
@@ -215,9 +216,9 @@ export async function reconcileProjectRoutes(
           await local
             .removeRoute(r.hostname)
             .catch((err) =>
-              warn(
+              { observeCaughtError(err, "platform/engine/lib/route-apply.service"); return warn(
                 `[route-apply] fallback removeRoute ${r.hostname} failed (non-fatal): ${safeErrorMessage(err)}`,
-              ),
+              ); },
             );
         }
       }
@@ -329,9 +330,9 @@ export async function reconcileProjectRoutes(
         await routing
           .removeRoute(r.hostname)
           .catch((err) =>
-            warn(
+            { observeCaughtError(err, "platform/engine/lib/route-apply.service"); return warn(
               `[route-apply] removeRoute ${r.hostname} failed (non-fatal): ${safeErrorMessage(err)}`,
-            ),
+            ); },
           );
       }
 
@@ -375,6 +376,7 @@ export async function reconcileProjectRoutes(
           opts.onLog?.(`Applied route ${r.hostname} → ${r.staticRoot ?? r.targetUrl}.`);
           successfulPublishes.push(...(loopbackPublishesByRegister.get(r) ?? []));
         } catch (err) {
+          observeCaughtError(err, "platform/engine/lib/route-apply.service");
           warn(
             `[route-apply] registerRoute ${r.hostname} failed (non-fatal): ${safeErrorMessage(err)}`,
           );
@@ -393,6 +395,7 @@ export async function reconcileProjectRoutes(
             edgeProxy: claimContext.edgeProxy,
           });
         } catch (error) {
+          observeCaughtError(error, "platform/engine/lib/route-apply.service");
           // The route mutation is already best-effort and the safe fallback is
           // to KEEP every claim. Surface the deferred cleanup without turning a
           // successfully committed DB edit into an HTTP failure.

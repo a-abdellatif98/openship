@@ -13,6 +13,7 @@
  * PUT is naturally atomic. Either way, restores never see partial bytes.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   CompleteMultipartUploadCommandOutput,
   DeleteObjectCommand,
@@ -167,6 +168,7 @@ class S3DestinationImpl implements BackupDestination {
       await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: probeKey }));
       return { ok: true };
     } catch (err) {
+      observeCaughtError(err, "adapters/backup/destinations/s3");
       const message = safeErrorMessage(err);
       return { ok: false, reason: message };
     }
@@ -221,7 +223,9 @@ class S3DestinationImpl implements BackupDestination {
             `automatically; a streamed database dump cannot, so this artifact needs to be ` +
             `split or sent to a destination without a part limit.`,
         );
-        void upload.abort().catch(() => {});
+        void upload.abort().catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/backup/destinations/s3");
+        });
       }
     });
 
@@ -342,6 +346,7 @@ class S3DestinationImpl implements BackupDestination {
           }
         }
       } catch (err) {
+        observeCaughtError(err, "adapters/backup/destinations/s3");
         const message = safeErrorMessage(err);
         for (const k of chunk) failed.push({ key: k, error: message });
       }

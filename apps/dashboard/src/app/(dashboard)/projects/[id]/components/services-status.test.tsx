@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/components/i18n-provider";
@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   push: vi.fn(),
   toast: vi.fn(),
+  terminalMount: vi.fn(),
+  terminalUnmount: vi.fn(),
+  terminalConnected: undefined as (() => void) | undefined,
   context: {
     id: "project-a",
     slug: ["services"],
@@ -40,7 +43,14 @@ vi.mock("@/hooks/useLocalhostForward", () => ({
 }));
 vi.mock("@/hooks/useCloudDeployPricing", () => ({ useCloudDeployPricing: () => () => false }));
 vi.mock("@/components/terminal/ServiceTerminal", () => ({
-  ServiceTerminal: () => <div>Interactive shell</div>,
+  ServiceTerminal: ({ serviceId, onConnected }: { serviceId: string; onConnected?: () => void }) => {
+    mocks.terminalConnected = onConnected;
+    useEffect(() => {
+      mocks.terminalMount(serviceId);
+      return () => { mocks.terminalUnmount(serviceId); };
+    }, [serviceId]);
+    return <div>Interactive shell</div>;
+  },
 }));
 vi.mock("./services/AddServiceModal", () => ({ AddServiceModal: () => null }));
 vi.mock("./services/LinkedAppsCard", () => ({ LinkedAppsCard: () => null }));
@@ -84,6 +94,9 @@ const service: Service = {
 type ContainerResponse = { success: boolean; containers: ServiceContainer[] };
 const detail = baseDictionary.projectDetail.services.detail;
 const labels = baseDictionary.projects.services;
+const connection = baseDictionary.projectDetail.services.connection;
+const unavailable = baseDictionary.projects.serviceStatus.unknown;
+const retryStatus = baseDictionary.issues.connectivity.retryStatus;
 const checking = "Checking…";
 let host: HTMLDivElement;
 let root: Root;
@@ -121,6 +134,8 @@ function response(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.containers.mockReset();
+  mocks.terminalConnected = undefined;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.context.id = "project-a";
   mocks.context.slug = ["services"];
@@ -217,14 +232,15 @@ describe("service runtime status", () => {
       mocks.containers.mockReturnValueOnce(failed.promise);
       await render(view);
       await act(async () => failed.reject(new Error("Status check timed out")));
-      expect(host.textContent).toContain("Unknown");
+      expect(host.textContent).toContain(unavailable);
       expect(host.textContent).toContain("Status check timed out");
       expect(host.textContent).not.toContain("Stopped");
       expect(host.textContent).not.toContain(checking);
 
       const retry = deferred();
       mocks.containers.mockReturnValueOnce(retry.promise);
-      await click(labels.retry);
+      expect(host.querySelector("details")?.open).toBe(false);
+      await click(retryStatus);
       expect(host.textContent).toContain(checking);
       await act(async () => retry.resolve(response("running")));
       expect(host.textContent).toContain("Running");
@@ -235,7 +251,7 @@ describe("service runtime status", () => {
   it("does not claim stopped or offer Start when the API returns success false", async () => {
     mocks.containers.mockResolvedValueOnce({ success: false, containers: [] });
     await render("detail", "settings");
-    expect(host.textContent).toContain("Unknown");
+    expect(host.textContent).toContain(unavailable);
     expect(host.textContent).toContain(labels.failedLoad);
     expect(host.textContent).not.toContain("Stopped");
     expect(button(detail.start)).toBeUndefined();
@@ -248,7 +264,7 @@ describe("service runtime status", () => {
     ];
     mocks.containers.mockResolvedValueOnce({ success: true, containers: [] });
     await render();
-    expect(host.textContent).toContain("Unknown");
+    expect(host.textContent).toContain(unavailable);
     expect(host.textContent).toContain("Disabled");
     expect(host.textContent).not.toContain("Stopped");
     expect(host.textContent).not.toContain(checking);
@@ -265,6 +281,90 @@ describe("service runtime status", () => {
     await act(async () => older.resolve(response("stopped")));
     expect(host.textContent).toContain("Running");
     expect(host.textContent).not.toContain("Stopped");
+  });
+
+  it.each(["checking", "unknown"])("allows a terminal attempt while status is %s", async (status) => {
+    const pending = deferred();
+    mocks.containers.mockReturnValueOnce(pending.promise);
+    await render("detail", "terminal");
+    if (status === "unknown") await act(async () => pending.resolve(response("unknown")));
+    expect(host.textContent).toContain(status === "unknown" ? connection.statusHint : connection.checkingHint);
+    expect(host.textContent).not.toContain(detail.startShellHint);
+    await click(connection.openTerminal);
+    expect(mocks.terminalMount).toHaveBeenCalledExactlyOnceWith(service.id);
+    expect(host.textContent).toContain("Interactive shell");
+    expect(button(detail.start)).toBeUndefined();
+  });
+
+  it("keeps an active terminal mounted through unknown and failed status reads", async () => {
+    mocks.containers.mockResolvedValueOnce(response("running"));
+    await render("detail", "terminal");
+    const shell = [...host.querySelectorAll("div")].find((node) => node.textContent === "Interactive shell");
+
+    const pending = deferred();
+    mocks.containers.mockReturnValueOnce(pending.promise);
+    await click(labels.refresh);
+    expect(shell?.isConnected).toBe(true);
+    await act(async () => pending.resolve(response("unknown")));
+    expect(host.textContent).toContain(unavailable);
+    expect(shell?.isConnected).toBe(true);
+
+    mocks.containers.mockRejectedValueOnce(new Error("Read timed out"));
+    await click(labels.refresh);
+    expect(shell?.isConnected).toBe(true);
+    expect(mocks.terminalMount).toHaveBeenCalledOnce();
+    expect(mocks.terminalUnmount).not.toHaveBeenCalled();
+
+    mocks.containers.mockResolvedValueOnce(response("stopped"));
+    await click(labels.refresh);
+    expect(shell?.isConnected).toBe(false);
+    expect(mocks.terminalUnmount).toHaveBeenCalledOnce();
+    expect(host.textContent).toContain(connection.stoppedTitle);
+    expect(button(connection.openTerminal)).toBeUndefined();
+
+    // A later unavailable check must not reopen the stopped session automatically.
+    mocks.containers.mockResolvedValueOnce(response("unknown"));
+    await click(labels.refresh);
+    expect(mocks.terminalMount).toHaveBeenCalledOnce();
+    expect(button(connection.openTerminal)).toBeDefined();
+  });
+
+  it("retains container identity after a failed read without claiming it is running", async () => {
+    mocks.containers.mockResolvedValueOnce(response("running", "known-container-id"));
+    await render("detail");
+    expect(host.textContent).toContain("known-container-id");
+    mocks.containers.mockRejectedValueOnce(new Error("Connection interrupted"));
+    await click(labels.refresh);
+    expect(host.textContent).toContain("known-container-id");
+    expect(host.textContent).toContain(unavailable);
+    expect(host.textContent).not.toContain("Running");
+  });
+
+  it("does not carry a terminal attempt to another project", async () => {
+    mocks.containers.mockResolvedValueOnce(response("running"));
+    await render("detail", "terminal");
+    mocks.context.id = "project-b";
+    mocks.containers.mockResolvedValueOnce(response("unknown"));
+    await render("detail", "terminal");
+    expect(mocks.terminalUnmount).toHaveBeenCalledOnce();
+    expect(mocks.terminalMount).toHaveBeenCalledOnce();
+    expect(host.textContent).not.toContain("Interactive shell");
+  });
+
+  it("refreshes canonical service status after a manual terminal connection succeeds", async () => {
+    mocks.containers.mockResolvedValueOnce(response("unknown"));
+    await render("detail", "terminal");
+    await click(connection.openTerminal);
+    const next = deferred();
+    mocks.containers.mockReturnValueOnce(next.promise);
+    await act(async () => mocks.terminalConnected?.());
+    expect(mocks.containers).toHaveBeenCalledTimes(2);
+    expect(host.textContent).toContain(checking);
+    expect(host.textContent).not.toContain("Running");
+    await act(async () => next.resolve(response("running")));
+    expect(host.textContent).toContain("Running");
+    expect(mocks.terminalMount).toHaveBeenCalledOnce();
+    expect(mocks.terminalUnmount).not.toHaveBeenCalled();
   });
 
   it("ignores a previous project's response after switching projects", async () => {

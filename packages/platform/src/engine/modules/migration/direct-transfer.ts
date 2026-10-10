@@ -27,6 +27,7 @@
  * peer host key is pinned (StrictHostKeyChecking=yes + a scanned known_hosts).
  */
 
+import { observedAllSettled, reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { installRsync, privilegedExecutor, envOps, opScript, type CommandExecutor, type LogEntry } from "@repo/adapters";
 import { answered, shellQuote } from "@repo/core";
 
@@ -95,7 +96,7 @@ const KEYSCAN_TIMEOUT_MS = 12_000;
 async function hasCommand(exec: CommandExecutor, cmd: string): Promise<boolean> {
   const out = await exec
     .exec(`command -v ${sq(cmd)} >/dev/null 2>&1 && echo ok || true`, { timeout: 8000 })
-    .catch(() => "");
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/direct-transfer"); return ""; });
   return out.trim() === "ok";
 }
 
@@ -141,14 +142,14 @@ export async function stopDirectTransfer(executor: CommandExecutor, runId: strin
 }
 
 export async function cleanupDirectTrust(source: CommandExecutor, target: CommandExecutor, runId: string): Promise<void> {
-  const results = await Promise.allSettled([source, target].map(async executor => {
+  const results = await observedAllSettled([source, target].map(async executor => {
     await stopDirectTransfer(executor, runId);
     for (const tag of ["push", "pull"] as const) {
       const marker = trustMarker(runId, tag);
       try { await executor.exec(removeAuthorizedKey(marker)); }
       finally { await executor.exec(`rm -rf -- ${sq(`/tmp/${marker}`)}`); }
     }
-  }));
+  }), "platform/engine/modules/migration/direct-transfer");
   const failed = results.find(result => result.status === "rejected");
   if (failed?.status === "rejected") throw failed.reason;
 }
@@ -261,7 +262,7 @@ async function probeDirectLink(
       ),
       { timeout: PROBE_TIMEOUT_MS },
     )
-    .catch(() => "");
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/direct-transfer"); return ""; });
   return out.includes("OPENSHIP_LINK_OK");
 }
 
@@ -473,7 +474,7 @@ export async function establishDirectLink(ctx: LinkContext): Promise<DirectLink 
         // The image always lives on the source; inspect by id (always resolves).
         const sizeOut = await sourceExec
           .exec(`docker image inspect ${sq(image.id)} --format '{{.Size}}' 2>/dev/null || echo 0`)
-          .catch(() => "0");
+          .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/direct-transfer"); return "0"; });
         const total = Number(sizeOut.trim()) || undefined;
         log(`image ${image.tag}: streaming ${direction}${total ? ` (~${Math.round(total / 1048576)} MB)` : ""}`);
         onProgress?.(0, total);
@@ -577,6 +578,7 @@ export async function establishDirectLink(ctx: LinkContext): Promise<DirectLink 
     log("push link unreachable — trying pull");
     await push.cleanup();
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/migration/direct-transfer");
     log(`push setup failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
@@ -589,6 +591,7 @@ export async function establishDirectLink(ctx: LinkContext): Promise<DirectLink 
     log("pull link unreachable");
     await pull.cleanup();
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/migration/direct-transfer");
     log(`pull setup failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 

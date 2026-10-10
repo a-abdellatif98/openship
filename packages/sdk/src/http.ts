@@ -1,3 +1,5 @@
+import { reportError } from "@repo/core/diagnostics";
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { SDK_CAPABILITIES, SDK_SCOPE_HEADER } from "@repo/contracts";
 import { abortable } from "./cancellation";
 import { ApiError, responseError } from "./errors";
@@ -87,7 +89,7 @@ export class HttpClient {
         redirect: "error",
         signal: AbortSignal.timeout(this.options.timeoutMs || 30_000),
       });
-      const health = await response.json().catch(() => null) as {
+      const health = await response.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "sdk/http"); return null; }) as {
         sdk?: { protocol?: number; fixedOrganizationScope?: boolean };
       } | null;
       if (!response.ok || health?.sdk?.protocol !== SDK_CAPABILITIES.protocol || health.sdk.fixedOrganizationScope !== true)
@@ -105,31 +107,36 @@ export class HttpClient {
   }
 
   async raw(path: string, options: HttpRequestOptions = {}): Promise<Response> {
-    const url = this.url(path);
-    const { timeoutMs = this.options.timeoutMs, ...init } = options;
-    const signal = requestSignal(init.signal, timeoutMs);
-    signal?.throwIfAborted();
-    const headers = new Headers(init.headers);
-    // FormData must retain fetch's generated multipart boundary.
-    if (!headers.has("Content-Type") && !(init.body instanceof FormData))
-      headers.set("Content-Type", "application/json");
-    if (!headers.has("User-Agent")) headers.set("User-Agent", this.options.userAgent ?? "openship-sdk/client");
-    await this.requireScopeSupport(signal);
-    const token = this.options.token;
-    const credential = typeof token === "function" ? await abortable(Promise.resolve().then(token), signal) : token;
-    if (credential) headers.set("Authorization", "Bearer " + credential);
-    const internalToken = this.options.internalToken;
-    if (internalToken !== undefined) {
-      const internal = typeof internalToken === "function" ? await abortable(Promise.resolve().then(internalToken), signal) : internalToken;
-      if (typeof internal !== "string" || !internal.trim()) throw new TypeError("internalToken must be nonempty");
-      headers.set("X-Internal-Token", internal);
+    try {
+      const url = this.url(path);
+      const { timeoutMs = this.options.timeoutMs, ...init } = options;
+      const signal = requestSignal(init.signal, timeoutMs);
+      signal?.throwIfAborted();
+      const headers = new Headers(init.headers);
+      // FormData must retain fetch's generated multipart boundary.
+      if (!headers.has("Content-Type") && !(init.body instanceof FormData))
+        headers.set("Content-Type", "application/json");
+      if (!headers.has("User-Agent")) headers.set("User-Agent", this.options.userAgent ?? "openship-sdk/client");
+      await this.requireScopeSupport(signal);
+      const token = this.options.token;
+      const credential = typeof token === "function" ? await abortable(Promise.resolve().then(token), signal) : token;
+      if (credential) headers.set("Authorization", "Bearer " + credential);
+      const internalToken = this.options.internalToken;
+      if (internalToken !== undefined) {
+        const internal = typeof internalToken === "function" ? await abortable(Promise.resolve().then(internalToken), signal) : internalToken;
+        if (typeof internal !== "string" || !internal.trim()) throw new TypeError("internalToken must be nonempty");
+        headers.set("X-Internal-Token", internal);
+      }
+      if (this.organizationId) {
+        headers.set("X-Organization-Id", this.organizationId);
+        headers.set(SDK_SCOPE_HEADER, "fixed");
+      }
+      signal?.throwIfAborted();
+      return await this.fetcher(url.href, { ...init, headers, signal, redirect: "error" });
+    } catch (error) {
+      reportError(error, { source: "sdk", kind: "operation", component: "sdk-http", operation: "request", handled: true });
+      throw error;
     }
-    if (this.organizationId) {
-      headers.set("X-Organization-Id", this.organizationId);
-      headers.set(SDK_SCOPE_HEADER, "fixed");
-    }
-    signal?.throwIfAborted();
-    return this.fetcher(url.href, { ...init, headers, signal, redirect: "error" });
   }
 
   async request<T = unknown>(path: string, options?: HttpRequestOptions): Promise<T> {

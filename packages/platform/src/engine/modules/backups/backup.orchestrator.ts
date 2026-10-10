@@ -17,6 +17,8 @@
  * surface stays identical.
  */
 
+import { enrichErrorContext } from "@repo/core/diagnostics/node";
+import { reportError, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import {
   repos,
@@ -314,11 +316,11 @@ export class BackupOrchestrator {
         const runner = await getJobRunner();
         await runner.enqueueRun(runId);
       } catch (err) {
-        console.warn(
-          `[backup-orchestrator] runner enqueue failed for ${runId}; falling back to inline: ${safeErrorMessage(err)}`,
+        errorDiagnostics.warn("platform/engine/modules/backups/backup.orchestrator",
+          `[backup-orchestrator] runner enqueue failed for ${runId}; falling back to inline: ${safeErrorMessage(err)}`, err,
         );
         void deferBackgroundWork(() => this.execute(runId)).catch((execErr) => {
-          console.error(`[backup-orchestrator] run ${runId} crashed: ${safeErrorMessage(execErr)}`);
+          errorDiagnostics.error("platform/engine/modules/backups/backup.orchestrator", `[backup-orchestrator] run ${runId} crashed: ${safeErrorMessage(execErr)}`, execErr);
         });
       }
     }
@@ -344,7 +346,7 @@ export class BackupOrchestrator {
     if (completed) {
       try { await prunePolicy(completed); }
       catch (error) {
-        console.warn(`[backup-orchestrator] run ${runId} succeeded; retention cleanup deferred: ${safeErrorMessage(error)}`);
+        errorDiagnostics.warn("platform/engine/modules/backups/backup.orchestrator", `[backup-orchestrator] run ${runId} succeeded; retention cleanup deferred: ${safeErrorMessage(error)}`, error);
       }
     }
   }
@@ -352,13 +354,14 @@ export class BackupOrchestrator {
   private async executeRun(runId: string, policySnapshot: BackupPolicy | null): Promise<BackupPolicy | undefined> {
     const run = await repos.backupRun.findById(runId);
     if (!run) {
-      console.warn(`[backup-orchestrator] run ${runId} disappeared`);
+      errorDiagnostics.warn("platform/engine/modules/backups/backup.orchestrator", `[backup-orchestrator] run ${runId} disappeared`);
       return;
     }
     if (run.status !== "queued") {
-      console.warn(`[backup-orchestrator] run ${runId} already in status=${run.status}`);
+      errorDiagnostics.warn("platform/engine/modules/backups/backup.orchestrator", `[backup-orchestrator] run ${runId} already in status=${run.status}`);
       return;
     }
+    enrichErrorContext({ runId, organizationId: run.organizationId, projectId: run.projectId ?? undefined });
 
     // More than one delivery is normal here: the in-process fast path races its
     // DB poller, BullMQ retries, and an enqueue that reached Redis but timed out
@@ -373,7 +376,7 @@ export class BackupOrchestrator {
       throw new Error(`Backup run ${runId} is temporarily blocked by project deletion`);
     }
     if (claim !== "claimed") {
-      console.warn(`[backup-orchestrator] run ${runId} execution refused: ${claim}`);
+      errorDiagnostics.warn("platform/engine/modules/backups/backup.orchestrator", `[backup-orchestrator] run ${runId} execution refused: ${claim}`);
       return;
     }
     this.publishTransition(runId, "preparing");
@@ -410,7 +413,8 @@ export class BackupOrchestrator {
       if (!postHookDue || !policy?.postHook || !serviceHandle || !executor) return;
       postHookDue = false;
       try { await this.runHook(serviceHandle, executor, policy.postHook, "post", hookLog, policy.hookTimeoutSeconds); }
-      catch (error) { hookLog.push(`[post-hook] continued past failure: ${safeErrorMessage(error)}`); }
+      catch (error) {
+        observeCaughtError(error, "platform/engine/modules/backups/backup.orchestrator"); hookLog.push(`[post-hook] continued past failure: ${safeErrorMessage(error)}`); }
     };
 
     try {
@@ -768,6 +772,8 @@ export class BackupOrchestrator {
       return policy;
     } catch (err) {
       // Settle any throttled progress write before the failed transition
+      reportError(err, { kind: "background", component: "backup-orchestrator", runId,
+        organizationId: run.organizationId, projectId: run.projectId ?? undefined, handled: true });
       // stamps `bytesTransferred: 0` — an in-flight estimate must not be the
       // last byte count this run records (terminal-guarded in the repo too).
       await progressInFlight;
@@ -779,9 +785,9 @@ export class BackupOrchestrator {
       const summary = boundedStorableText(raw, TRUNCATE_ERROR_SUMMARY);
       const finalizedElsewhere = err instanceof BackupRunFinalizedElsewhereError;
       if (finalizedElsewhere) {
-        console.warn(`[backup-orchestrator] run ${runId}: ${message}`);
+        errorDiagnostics.warn("platform/engine/modules/backups/backup.orchestrator", `[backup-orchestrator] run ${runId}: ${message}`, err);
       } else {
-        console.error(`[backup-orchestrator] run ${runId} failed: ${message}`);
+        errorDiagnostics.error("platform/engine/modules/backups/backup.orchestrator", `[backup-orchestrator] run ${runId} failed: ${message}`, err);
       }
 
       // A duplicate worker can lose to a genuinely succeeded run. Its keys are
@@ -790,7 +796,7 @@ export class BackupOrchestrator {
       // unusable and should still be reclaimed. If the winner cannot be read,
       // preserve data rather than risk deleting a successful backup.
       const winningRun = finalizedElsewhere
-        ? await repos.backupRun.findById(runId).catch(() => undefined)
+        ? await repos.backupRun.findById(runId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/backup.orchestrator"); return undefined; })
         : undefined;
       const mayReclaimObjects = finalizedElsewhere
         ? winningRun !== undefined && winningRun.status !== "succeeded"
@@ -810,18 +816,18 @@ export class BackupOrchestrator {
           .deleteMany(uploadedKeys)
           .then(({ failed }) => {
             if (failed.length === 0) return;
-            console.warn(
+            errorDiagnostics.warn("platform/engine/modules/backups/backup.orchestrator",
               `[backup-orchestrator] run ${runId}: ${failed.length}/${uploadedKeys.length} ` +
                 `object(s) could not be reclaimed after the failure and are now orphaned ` +
                 `at the destination: ` +
-                failed.map((f) => `${f.key}: ${f.error}`).join("; "),
+                failed.map((f) => `${f.key}: ${f.error}`).join("; "), err,
             );
           })
           .catch((cleanupErr) =>
-            console.warn(
+            errorDiagnostics.warn("platform/engine/modules/backups/backup.orchestrator",
               `[backup-orchestrator] run ${runId}: ${uploadedKeys.length} object(s) could not ` +
                 `be reclaimed after the failure and are now orphaned at the destination: ` +
-                `${safeErrorMessage(cleanupErr)}`,
+                `${safeErrorMessage(cleanupErr)}`, cleanupErr,
             ),
           );
       }
@@ -845,7 +851,9 @@ export class BackupOrchestrator {
       if (run.destinationId && !destinationProven) {
         await repos.backupDestination
           .setLastVerified(run.destinationId, false, summary)
-          .catch(() => {});
+          .catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/backup.orchestrator");
+          });
       }
 
       // The artifact list goes with the bytes.
@@ -877,7 +885,7 @@ export class BackupOrchestrator {
       // Fan-out to subscribers. Look up destination by policy or run.
       const destId = run.destinationId;
       const destForNotify = destId
-        ? await repos.backupDestination.findById(destId).catch(() => null)
+        ? await repos.backupDestination.findById(destId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/backup.orchestrator"); return null; })
         : null;
       const organizationId = run.organizationId ?? destForNotify?.organizationId;
       if (organizationId) {
@@ -948,7 +956,8 @@ export class BackupOrchestrator {
           errorMessage: typeof patch?.errorMessage === "string" ? patch.errorMessage : undefined,
         });
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/backup.orchestrator");
       // bus failures never block the FSM
     }
   }
@@ -970,8 +979,8 @@ export class BackupOrchestrator {
     try {
       applied = await repos.backupRun.recordUploadProgress(runId, bytesTransferred);
     } catch (err) {
-      console.warn(
-        `[backup-orchestrator] run ${runId}: progress write failed: ${safeErrorMessage(err)}`,
+      errorDiagnostics.warn("platform/engine/modules/backups/backup.orchestrator",
+        `[backup-orchestrator] run ${runId}: progress write failed: ${safeErrorMessage(err)}`, err,
       );
       return;
     }
@@ -980,7 +989,8 @@ export class BackupOrchestrator {
     if (!applied) return;
     try {
       backupRunBus.publish(runId, { type: "progress", bytesTransferred, currentArtifact });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/backup.orchestrator");
       // bus failures never block the FSM
     }
   }
@@ -1014,7 +1024,7 @@ export class BackupOrchestrator {
     // EOF that is never coming. Destroying the hasher instead turns a broken
     // producer into a rejected upload, which is a failed run — the only honest
     // outcome for an artifact whose bytes stopped early.
-    artifact.stream.on("error", (err: Error) => hasher.destroy(err));
+    artifact.stream.on("error", (err: Error) => { observeCaughtError(err, "platform/engine/modules/backups/backup.orchestrator"); return hasher.destroy(err); });
     artifact.stream.pipe(hasher);
 
     // S3 stores each metadata key as an `x-amz-meta-*` HTTP header, and
@@ -1096,7 +1106,7 @@ export class BackupOrchestrator {
     const drained = new Promise<void>((resolve) => {
       stdout.once("end", () => resolve());
       stdout.once("close", () => resolve());
-      stdout.once("error", () => resolve());
+      stdout.once("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "platform/engine/modules/backups/backup.orchestrator"); return resolve(); });
     });
     const exit = await awaitExit;
     let drainTimer: ReturnType<typeof setTimeout> | undefined;

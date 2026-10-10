@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useCallback } from "react";
@@ -230,7 +231,7 @@ const Sidebar: React.FC<{ destinationReady: boolean }> = ({ destinationReady }) 
     let dnsTargets = deploymentDnsTargets(config);
     if (dnsTargets.length > 0) {
       if (config.projectId) {
-        const projectInfo = await projectsApi.getInfo(config.projectId).catch(() => null);
+        const projectInfo = await projectsApi.getInfo(config.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/(deployment)/deploy/[slug]/components/Sidebar"); return null; });
         const domainRows = Array.isArray(projectInfo?.data?.project?.domains)
           ? projectInfo.data.project.domains
           : [];

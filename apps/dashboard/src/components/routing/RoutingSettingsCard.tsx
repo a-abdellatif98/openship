@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useCallback, useEffect, useId, useMemo, useState } from "react";
@@ -150,7 +151,8 @@ export function RoutingSettingsCard({
       const res = await domainsApi.previewRecords(hostname);
       setDnsRecords(res.data.records);
       setDnsMode(res.data.mode);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/routing/RoutingSettingsCard");
       setDnsRecords([]);
     } finally {
       setLoadingRecords(false);

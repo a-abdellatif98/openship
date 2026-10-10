@@ -14,6 +14,7 @@
  * The id is resolved server-side from (organizationId, owner).
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import crypto from "node:crypto";
 import { cloudRuntimeTarget, env } from "../../config/env";
 import { repos } from "@repo/db";
@@ -88,7 +89,8 @@ export async function startGithubLinkFromBridgeToken(token: string | undefined):
       forwardCookies: [repositoryOAuthStateCookie(result.state, result.browserNonce)],
       forwardedNames: [repositoryOAuthCookieName(result.state)],
     };
-  } catch (error) { return { kind: "failed", error: safeErrorMessage(error) }; }
+  } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/cloud/cloud-github.service"); return { kind: "failed", error: safeErrorMessage(error) }; }
 }
 
 // ─── Install URL: org-bound state ────────────────────────────────────────────
@@ -104,7 +106,7 @@ export async function buildOrgScopedInstallUrl(
   organizationId: string,
 ): Promise<{ url: string; state: string }> {
   const state = `${REPOSITORY_OAUTH_STATE_PREFIX}${crypto.randomBytes(24).toString("base64url")}`;
-  await repos.githubInstallState.purgeExpired().catch(() => 0);
+  await repos.githubInstallState.purgeExpired().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud/cloud-github.service"); return 0; });
   await repos.githubInstallState.create({
     state,
     userId: initiatingUserId,
@@ -184,6 +186,7 @@ export async function getGithubInstallSelection(
         })),
     };
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/cloud/cloud-github.service");
     if (error instanceof AppError && error.statusCode < 500) {
       return { kind: "forbidden", message: error.message };
     }
@@ -227,7 +230,7 @@ export async function attributeGithubInstall(input: {
   // here without an Openship session. The durable, one-shot state recovers the
   // exact initiating user + workspace and works across SaaS replicas/restarts.
   // Peek first; the atomic claim below consumes only after GitHub verification.
-  const stateRow = await repos.githubInstallState.find(state).catch(() => null);
+  const stateRow = await repos.githubInstallState.find(state).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud/cloud-github.service"); return null; });
   if (!stateRow || !stateRow.organizationId || stateRow.flow !== "install" || stateRow.sourceId) {
     console.log("[github install-callback] state not found or expired");
     return { kind: "state-expired" };
@@ -240,8 +243,11 @@ export async function attributeGithubInstall(input: {
   try {
     await assertRepositoryConnectionActor(userId, organizationId, stateRow.payload.sessionId);
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/cloud/cloud-github.service");
     const message = error instanceof AppError ? error.message : "Could not verify workspace access. Try again.";
-    await repos.githubInstallState.recordFailure(state, userId, organizationId, message).catch(() => {});
+    await repos.githubInstallState.recordFailure(state, userId, organizationId, message).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud/cloud-github.service");
+    });
     return error instanceof AppError && error.statusCode < 500
       ? { kind: "forbidden", message }
       : { kind: "failed", installationId, error: message };
@@ -297,8 +303,8 @@ export async function attributeGithubInstall(input: {
     ]).catch((error) => {
       // The durable claim already committed. Cache eviction is an optimization,
       // so do not misreport success as failure or strand a consumed nonce.
-      console.warn(
-        `[github install-callback] cache invalidation failed: ${safeErrorMessage(error)}`,
+      errorDiagnostics.warn("platform/engine/modules/cloud/cloud-github.service",
+        `[github install-callback] cache invalidation failed: ${safeErrorMessage(error)}`, error,
       );
     });
 
@@ -322,9 +328,9 @@ export async function attributeGithubInstall(input: {
         },
       })
       .catch((err) =>
-        console.warn(
+        errorDiagnostics.warn("platform/engine/modules/cloud/cloud-github.service",
           "[github install-callback] audit emit failed:",
-          safeErrorMessage(err),
+          safeErrorMessage(err), err,
         ),
       );
 
@@ -337,8 +343,11 @@ export async function attributeGithubInstall(input: {
       organizationId,
     };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/cloud/cloud-github.service");
     const error = safeErrorMessage(err);
-    await repos.githubInstallState.recordFailure(state, userId, organizationId, error).catch(() => {});
+    await repos.githubInstallState.recordFailure(state, userId, organizationId, error).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud/cloud-github.service");
+    });
     return { kind: "failed", installationId, error };
   }
 }
@@ -417,7 +426,7 @@ export async function mintOrgInstallationToken(
       // GHSA-hp2g-hw7g-f3vm, one layer down in the proxy.
       { repositories: repos_ },
     )
-    .catch(() => null);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud/cloud-github.service"); return null; });
   if (!token) {
     return { kind: "not-found", owner };
   }

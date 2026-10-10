@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -71,7 +72,8 @@ function CloudConnectCallbackInner() {
         // One-time use — remove regardless of finalize outcome so a
         // failed flow can't have its verifier replayed by a stale tab.
         window.localStorage.removeItem(CONNECT_PKCE_STORAGE_PREFIX + state);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/cloud-connect-callback/page");
         /* localStorage disabled — verifier stays null, fall back to non-PKCE */
       }
     }
@@ -93,7 +95,8 @@ function CloudConnectCallbackInner() {
           if (window.opener) {
             window.opener.postMessage({ type: "cloud-connect-success" }, "*");
           }
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/app/cloud-connect-callback/page");
           /* opener gone / cross-origin throws — ignore */
         }
         // Cloud login may clear window.opener via Cross-Origin-Opener-Policy.

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from "react";
 import { parseDraft, type DraftAction, type ScaleDraft } from "./topology";
 
@@ -29,7 +30,8 @@ export function useTopologyStorage(
           setNotice("The saved layout is incompatible. It has not been replaced.");
         }
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/scale/useTopologyStorage");
       setNotice("Local storage is unavailable. Changes stay in this session.");
     }
     setReady(true);
@@ -48,7 +50,8 @@ export function useTopologyStorage(
         setNotice("");
         setBlocked(false);
         return true;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/scale/useTopologyStorage");
         setNotice("Changes could not be saved locally. Retry or export the topology.");
         return false;
       }

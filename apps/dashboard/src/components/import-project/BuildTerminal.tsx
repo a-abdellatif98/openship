@@ -1,5 +1,6 @@
 "use client";
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLogStream } from "@/hooks/useSSEConnection";
 import { useDeployment } from "@/context/DeploymentContext";
@@ -39,7 +40,7 @@ const BuildTerminal: React.FC<BuildTerminalProps> = ({
         // Container logs are already written to terminal by autoWriteToTerminal
       },
       onError: (message) => {
-        console.error('[BuildTerminal] Container logs error:', message);
+        errorDiagnostics.error("dashboard/components/import-project/BuildTerminal", '[BuildTerminal] Container logs error:', message);
         setIsStreamingContainer(false);
         if (terminalInstanceRef.current) {
           terminalInstanceRef.current.write('\x1b[1;31m[Container Error: ' + message + ']\x1b[0m\r\n');
@@ -62,7 +63,7 @@ const BuildTerminal: React.FC<BuildTerminalProps> = ({
       setIsStreamingContainer(false);
     },
     onError: (error) => {
-      console.error('[BuildTerminal] Container logs stream error:', error);
+      errorDiagnostics.error("dashboard/components/import-project/BuildTerminal", '[BuildTerminal] Container logs stream error:', error);
       setIsStreamingContainer(false);
       if (terminalInstanceRef.current) {
         terminalInstanceRef.current.write('\x1b[1;31m[Container Stream Error - Connection Lost]\x1b[0m\r\n');
@@ -117,7 +118,7 @@ const BuildTerminal: React.FC<BuildTerminalProps> = ({
       // Connect using the clean hook - no more manual connection management!
       await logStream.connect(state.projectId);
     } catch (error) {
-      console.error('[BuildTerminal] Error starting container streaming:', error);
+      errorDiagnostics.error("dashboard/components/import-project/BuildTerminal", '[BuildTerminal] Error starting container streaming:', error);
       hasStartedStreamingRef.current = false; // Reset on error so it can retry
       setIsStreamingContainer(false);
       if (terminalInstanceRef.current) {

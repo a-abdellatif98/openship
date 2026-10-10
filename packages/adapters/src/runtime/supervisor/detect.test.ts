@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalExecutor } from "../../system/local-executor";
 import { ENVIRONMENT_PROBE_SCRIPT } from "../../system/environment";
@@ -49,10 +50,10 @@ describe("bare process supervisor privileges", () => {
     { uid: "1000", user: "deploy", sudo: "n" as const },
     { uid: "1000", user: "", sudo: "y" as const },
   ])("uses nohup when a system service cannot preserve the login safely: %j", async (spec) => {
-    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warning = vi.spyOn(errorDiagnostics, "warn").mockImplementation(() => {});
     const host = new Host(spec);
     expect((await detectSupervisor(host, "/tmp/workloads")).name).toBe("nohup");
-    expect(warning).toHaveBeenCalledWith(expect.stringContaining("NOT restart after a reboot"));
+    expect(warning).toHaveBeenCalledWith(expect.any(String), expect.stringContaining("NOT restart after a reboot"));
     expect(host.exec).toHaveBeenCalledTimes(1);
   });
 

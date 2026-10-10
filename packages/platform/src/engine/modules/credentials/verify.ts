@@ -17,6 +17,7 @@
  * routinely echo the request, and a body pasted into a support thread is a leaked secret.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { safeErrorMessage, DOCKER_HUB_REGISTRY, type CredentialProvider } from "@repo/core";
 import { env } from "../../config/env";
 import { safeFetch, type SafeFetchResponse } from "../../lib/safe-fetch";
@@ -124,6 +125,7 @@ const verifyDockerRegistry: Verifier = async ({ selector, publicFields, secrets 
   try {
     probe = await fetchWithTimeout(`${base}/v2/`);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/credentials/verify");
     return registryConnectionFailure(registry, err);
   }
 
@@ -143,7 +145,8 @@ const verifyDockerRegistry: Verifier = async ({ selector, publicFields, secrets 
     let url: URL;
     try {
       url = trustedRegistryRealm(base, realm);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/credentials/verify");
       return { ok: false, reason: `${registry} requested credentials at an untrusted authentication endpoint. Configure authentication on the registry origin.` };
     }
     if (service) url.searchParams.set("service", service);
@@ -160,6 +163,7 @@ const verifyDockerRegistry: Verifier = async ({ selector, publicFields, secrets 
       }
       return { ok: false, reason: `${registry} answered ${token.status} when issuing a token.` };
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/credentials/verify");
       return registryConnectionFailure(`${registry}'s token endpoint`, err);
     }
   }
@@ -172,6 +176,7 @@ const verifyDockerRegistry: Verifier = async ({ selector, publicFields, secrets 
       if (authed.status === 200) return { ok: true };
       return { ok: false, reason: `${registry} rejected these credentials.` };
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/credentials/verify");
       return registryConnectionFailure(registry, err);
     }
   }
@@ -201,7 +206,8 @@ const verifyCloudflare: Verifier = async ({ secrets }) => {
       return { ok: false, reason: "Cloudflare rejected this token." };
     }
     return { ok: false, reason: `Cloudflare answered ${res.status}.` };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/credentials/verify");
     return { ok: false, reason: "Cloudflare could not be reached." };
   }
 };
@@ -231,6 +237,7 @@ export async function verifyCredentialValues(
   try {
     return await verifier(args);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/credentials/verify");
     // A verifier bug must not be reported as "your credential is bad".
     return { ok: false, reason: `Verification failed unexpectedly: ${safeErrorMessage(err)}` };
   }

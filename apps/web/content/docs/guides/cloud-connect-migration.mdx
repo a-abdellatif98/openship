@@ -93,46 +93,20 @@ openship project transfer <project-id> to-self-hosted
 You can find a project's id with `openship project list`. Under the hood these call
 `POST /api/projects/:id/transfer/to-cloud` and `.../to-self-hosted`.
 
-## Open your instance to a team (migration)
+## Keep your instance online for a team
 
-Everything above keeps your instance **single-user** — only you sign in. When you're ready for teammates,
-you migrate the whole instance into **multi-user mode**. This is a bigger, one-time move, so here's just the
-shape of it — the full walkthrough lives in [Teams & members](/docs/guides/teams-members).
+Choose **Settings → Instance → Move to a server**. Select your own server or a connected
+managed Cloud server, then choose API-only access through Desktop or API + dashboard.
+Your workspaces and credentials move together while existing apps stay on their servers.
+The Team tab links to this same flow; there is no separate migration chooser.
 
-Go to **Settings → Team**. While the instance is still single-user, the owner sees a **Team workspace** card
-with a **Migrate** button. Pressing it opens the **Move to multi-user mode** chooser with three paths:
+Moving a control plane is separate from transferring a project to Openship Cloud. Your
+Cloud-owned projects continue to be managed by Cloud, and the transferred Cloud connection
+keeps them accessible from the relocated instance.
 
-- **Migrate to your server** — deploy Openship onto a VPS you own over SSH, and move your data there. No
-  outside dependency.
-- **Migrate to Openship Cloud** — push your data up to Cloud and let us host everything. Your local instance
-  becomes a launcher that points at Cloud. (Requires the Cloud connection above.)
-- **Keep local, expose via tunnel** — your data stays on this machine; Openship opens a public tunnel so
-  teammates can reach you while your machine is online. (Also requires the Cloud connection.)
-
-<Callout title="You can switch back" type="info">
-Migration isn't a trap door. Whichever path you pick, your local data stays on disk, and you can return to
-single-user mode later. Moving to Cloud also won't send your secrets — encrypted fields are stripped before
-the upload.
-</Callout>
-
-### The same migration from the terminal
-
-If you'd rather script it, the `system migration` commands map to the same three paths, plus a reversal:
-
-```bash
-# To your own server (run a read-only readiness check first)
-openship system migration preflight --server-id <id> --slug myteam
-openship system migration start     --server-id <id> --slug myteam
-
-# To Openship Cloud
-openship system migration start-cloud
-
-# Keep local, expose via a tunnel
-openship system migration start-tunnel --slug myteam
-
-# Reverse any of the above, back to single-user
-openship system migration switch-back
-```
+See [Move your Openship instance](/docs/guides/migrate-control-plane) for prerequisites,
+recovery, and moving the latest data back to Desktop. Team members can connect their own
+Desktop without becoming instance administrators.
 
 ## Troubleshooting
 

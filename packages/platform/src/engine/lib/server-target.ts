@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos, type Project } from "@repo/db";
 import { AppError, isLoopbackHost as isCoreLoopbackHost } from "@repo/core";
@@ -121,7 +122,8 @@ async function detectPublicIp(): Promise<string | null> {
       if (!res.ok) continue;
       const ip = (await res.text()).trim();
       if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip)) return ip;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/server-target");
       /* try the next provider */
     } finally {
       clearTimeout(timer);

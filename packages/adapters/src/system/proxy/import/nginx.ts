@@ -6,6 +6,7 @@
  * can't interpret is returned as a warning, never silently dropped.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   PROXY_DIRECTIVES,
   isLoopbackHost,
@@ -203,7 +204,8 @@ function strictLoopbackUpstreamPorts(config: string): Set<number> {
       let url: URL;
       try {
         url = new URL(target);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/system/proxy/import/nginx");
         throw new Error(`Cannot inventory Openship edge routes: invalid proxy_pass "${raw}"`);
       }
       if (!isLoopbackHost(url.hostname)) continue;

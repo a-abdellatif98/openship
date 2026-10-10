@@ -431,6 +431,19 @@ contain the server's messages. A terminal `complete` event carries `status: "com
 `status: "failed"`; a disconnected stream alone does not establish success. Cancelling the stream
 stops log delivery while an accepted repair continues under the project's runtime lock.
 
+The first `session` event includes a `sessionId`. Pass it to
+`ship.projects.retryRoutingStream(id, { sessionId })`, or use
+`GET /api/projects/:id/routing/retry/stream?sessionId=...`, to replay retained logs and follow the
+same repair. Reconnecting requires `project:read` and never starts another repair. The project info
+response includes the latest session as `project.routingRetry` so the dashboard can restore the log
+after a refresh. Completed logs are retained in the running engine for up to 30 minutes, subject to
+the retention limit; they do not survive an API restart.
+
+Starting requires `project:write`. Concurrent start requests join the project's active repair.
+For an uncertain start response, reuse `options.idempotencyKey` (the `idempotencyKey` query parameter
+over HTTP) so a repeated request also rejoins a completed, retained session. Use a new key only
+when intentionally starting another repair.
+
 ## Observe an externally deployed app
 
 `POST /api/projects/external` links containers that another tool deploys, matched by name or labels
@@ -598,6 +611,7 @@ IDs.
 | --- | --- | --- |
 | Update resources (POST alias of the PATCH). | HTTP only | `POST /api/projects/:id/resources`<br />`project:write` |
 | Read edge readiness for the project. | HTTP only | `GET /api/projects/:id/routing/edge-status`<br />`project:read` |
+| Replay and follow an existing routing repair using its sessionId; never starts a repair. | `projects.retryRoutingStream(id, { sessionId })` | `GET /api/projects/:id/routing/retry/stream`<br />`project:read` |
 | Answer an edge setup prompt for the project. | HTTP only | `POST /api/projects/:id/routing/ensure-edge/respond`<br />`project:write` |
 | Stream edge setup for the project. | HTTP only | `POST /api/projects/:id/routing/ensure-edge/stream`<br />`project:write` |
 

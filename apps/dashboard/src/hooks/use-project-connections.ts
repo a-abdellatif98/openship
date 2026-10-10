@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useState } from "react";
 import { CONNECTIONS_CHANGED, connectionsApi, type ProjectConnection, type ConnectionConsumer } from "@/lib/api/connections";
 
@@ -16,7 +17,8 @@ export function useProjectConnections(projectId: string, direction: "connections
       const current = ++revision;
       load().then(response => {
         if (active && current === revision) setResult({ projectId, rows: response.data ?? [] });
-      }).catch(() => { if (active && current === revision) setResult({ projectId, rows: [] }); });
+      }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/hooks/use-project-connections"); if (active && current === revision) setResult({ projectId, rows: [] }); });
     };
     refresh();
     window.addEventListener(CONNECTIONS_CHANGED, refresh);

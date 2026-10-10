@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -80,7 +81,7 @@ export function ServerGitHubConnect({
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(
         async () => {
-          const r = await serverGithubApi.connectPoll(serverId).catch(() => null);
+          const r = await serverGithubApi.connectPoll(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/github/ServerGitHubConnect"); return null; });
           const st = r?.data;
           if (st?.status === "complete") {
             if (pollRef.current) clearInterval(pollRef.current);
@@ -164,7 +165,9 @@ export function ServerGitHubConnect({
 
   const copyKey = async () => {
     if (!sshPublic) return;
-    await navigator.clipboard.writeText(sshPublic).catch(() => {});
+    await navigator.clipboard.writeText(sshPublic).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/components/github/ServerGitHubConnect");
+    });
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

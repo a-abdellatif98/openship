@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -73,7 +74,8 @@ export function WorkspaceManageModal({
         enabled: p.enabled !== false,
       }));
       setProjects(list);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/WorkspaceManageModal");
       setProjects([]);
     } finally {
       setLoadingProjects(false);
@@ -113,7 +115,8 @@ export function WorkspaceManageModal({
     for (const p of running) {
       try {
         await projectsApi.toggle(p.id, false);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/WorkspaceManageModal");
         failed += 1;
       }
     }

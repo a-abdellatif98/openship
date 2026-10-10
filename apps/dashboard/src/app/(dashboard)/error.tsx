@@ -1,5 +1,6 @@
 "use client";
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect } from "react";
@@ -28,7 +29,7 @@ export default function DashboardError({
   const c = t.chrome;
 
   useEffect(() => {
-    console.error("[dashboard] segment error:", error);
+    errorDiagnostics.error("dashboard/app/(dashboard)/error", "[dashboard] segment error:", error);
   }, [error]);
 
   return (

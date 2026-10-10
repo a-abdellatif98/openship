@@ -13,6 +13,7 @@
  * by the caller, so a live-apply failure logs and defers to the next deploy.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos } from "@repo/db";
 import { resolveWorkload, safeErrorMessage } from "@repo/core";
@@ -69,7 +70,7 @@ export async function applyProjectRouting(
   } = {},
 ): Promise<void> {
   const warn = (message: string) => {
-    console.warn(message);
+    errorDiagnostics.warn("platform/engine/modules/domains/routing-apply.service", message);
     options.onWarning?.(message);
   };
   const project = await repos.project.findById(projectId);
@@ -172,6 +173,7 @@ export async function applyProjectRouting(
         await ensureRouteDomainRecord({ projectId, route: plan.route, domainByHostname });
         serviceRoutePlans.push(plan);
       } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/domains/routing-apply.service");
         blockedHostnames.add(plan.route.hostname.toLowerCase());
         warn(`${plan.route.hostname}: ${safeErrorMessage(error)}`);
       }
@@ -409,6 +411,7 @@ export async function applyProjectRouting(
       });
     }
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/domains/routing-apply.service");
     const warning = `[routing-apply] ${project.slug}: live routing re-apply failed (non-fatal, applies next deploy): ${safeErrorMessage(err)}`;
     warn(warning);
   } finally {
@@ -474,7 +477,8 @@ export async function applyCloudRouting(opts: {
             targetUrl: `http://127.0.0.1:${target.port}`,
           });
         }
-      } catch (error) { errors.set(route.hostname, safeErrorMessage(error)); }
+      } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/domains/routing-apply.service"); errors.set(route.hostname, safeErrorMessage(error)); }
     }
   }
   const rowByService = new Map(liveRows.map((row) => [row.serviceId, row]));
@@ -636,6 +640,7 @@ export async function applyCloudRouting(opts: {
       // never publish a root-only intermediate table during a live edit.
       await routing.publishRoute(table.hostname, root.port, table.custom, input);
     } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/domains/routing-apply.service");
       errors.set(key, safeErrorMessage(error));
     }
   }

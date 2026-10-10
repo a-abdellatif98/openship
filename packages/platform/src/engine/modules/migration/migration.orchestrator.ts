@@ -21,6 +21,7 @@
  * container-less pre-deploy, and we require no configured backup destination.
  */
 
+import { observedAllSettled, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import crypto from "node:crypto";
 import { repos } from "@repo/db";
@@ -133,9 +134,9 @@ export async function retireSourceManagedRoutes(input: {
         await input.routing.removeRoute(hostname);
       } catch (err) {
         routesRemoved = false;
-        console.warn(
+        errorDiagnostics.warn("platform/engine/modules/migration/migration.orchestrator",
           `[migration] source edge: removeRoute ${hostname} failed; host-port claims retained:`,
-          safeErrorMessage(err),
+          safeErrorMessage(err), err,
         );
       }
     }
@@ -155,9 +156,9 @@ export async function retireSourceManagedRoutes(input: {
     } catch (err) {
       // Source destruction already completed and the target is serving. Claim
       // cleanup is best-effort; the safe failure mode is durable retention.
-      console.warn(
+      errorDiagnostics.warn("platform/engine/modules/migration/migration.orchestrator",
         `[migration] source host-port claim convergence deferred (claims retained):`,
-        safeErrorMessage(err),
+        safeErrorMessage(err), err,
       );
     }
   });
@@ -451,7 +452,9 @@ class MigrationOrchestratorImpl {
     const MAX = 256 * 1024;
     let text = buf.join("\n");
     if (text.length > MAX) text = text.slice(text.length - MAX);
-    await repos.dockerMigrationRun.updateLogs(id, text).catch(() => {});
+    await repos.dockerMigrationRun.updateLogs(id, text).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator");
+    });
   }
 
   /** Throw if the run was cancelled — checked at phase boundaries so a cancel
@@ -476,7 +479,9 @@ class MigrationOrchestratorImpl {
         checking = true;
         void repos.dockerMigrationRun.findById(id).then(run => {
           if (run?.recovery?.cancelRequested) { reg.cancelled = true; reg.abort?.abort(new Error("Cancelled by user")); }
-        }).catch(() => {}).finally(() => { checking = false; });
+        }).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator");
+        }).finally(() => { checking = false; });
       }, 1000);
       poll.unref?.();
       try { return await work(); }
@@ -491,7 +496,7 @@ class MigrationOrchestratorImpl {
             try { await this.cleanupDraft(ctx, ended); }
             catch (error) {
               const message = `Draft cleanup will retry: ${safeErrorMessage(error)}`;
-              console.warn(`[migration] ${id}: ${message}`);
+              errorDiagnostics.warn("platform/engine/modules/migration/migration.orchestrator", `[migration] ${id}: ${message}`, error);
               await repos.dockerMigrationRun.transition(id, "rolled_back", {
                 errorMessage: [ended.errorMessage, message].filter(Boolean).join("\n").slice(0, 4096),
               });
@@ -575,7 +580,7 @@ class MigrationOrchestratorImpl {
       }
       setImmediate(() => {
         void this.runWorker(run.id, () => this.run(ctx, run.id, input), ctx).catch((err) =>
-          console.error(`[migration] ${run.id} crashed:`, safeErrorMessage(err)),
+          errorDiagnostics.error("platform/engine/modules/migration/migration.orchestrator", `[migration] ${run.id} crashed:`, safeErrorMessage(err), err),
         );
       });
       return { migrationId: run.id, confirmationToken };
@@ -769,7 +774,7 @@ class MigrationOrchestratorImpl {
     const repoServices = await (async () => {
       const gs = input.gitSource;
       if (!gs?.owner || !gs?.repo) return undefined;
-      const parsed = await parseRepoCompose(ctx, gs.owner, gs.repo, gs.branch).catch(() => []);
+      const parsed = await parseRepoCompose(ctx, gs.owner, gs.repo, gs.branch).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator"); return []; });
       return parsed.length ? new Map(parsed.map((s) => [s.name, s])) : undefined;
     })();
 
@@ -908,13 +913,13 @@ class MigrationOrchestratorImpl {
       // carry an image, so the deploy reuses it regardless — a GitHub hiccup must
       // never block the (destructive) migration.
       if (input.gitSource) {
-        const linked = await linkProjectRepo(ctx, projectId, input.gitSource).catch((err) => ({
+        const linked = await linkProjectRepo(ctx, projectId, input.gitSource).catch((err) => { observeCaughtError(err, "platform/engine/modules/migration/migration.orchestrator"); return ({
           ok: false as const,
           code: "invalid" as const,
           message: safeErrorMessage(err),
-        }));
+        }); });
         if (!linked.ok) {
-          console.warn(`[migration] ${id}: repo link skipped (${linked.code})`);
+          errorDiagnostics.warn("platform/engine/modules/migration/migration.orchestrator", `[migration] ${id}: repo link skipped (${linked.code})`);
         }
       }
 
@@ -988,7 +993,7 @@ class MigrationOrchestratorImpl {
           attach: attachChosen,
           serviceRows: attachRows,
           renames: adopt.renames,
-        }).catch((err) => log(`network join skipped: ${safeErrorMessage(err)}`));
+        }).catch((err) => { observeCaughtError(err, "platform/engine/modules/migration/migration.orchestrator"); return log(`network join skipped: ${safeErrorMessage(err)}`); });
       }
 
       // Run the native deploy when there are containers to move (cross-server /
@@ -1200,7 +1205,7 @@ class MigrationOrchestratorImpl {
             // foreign-proxy scan never sees.
             input.projectMove ? projectId : undefined,
           ).catch((err) =>
-            console.warn(`[migration] ${id}: cert carry skipped: ${safeErrorMessage(err)}`),
+            errorDiagnostics.warn("platform/engine/modules/migration/migration.orchestrator", `[migration] ${id}: cert carry skipped: ${safeErrorMessage(err)}`, err),
           );
         }
       } else {
@@ -1232,7 +1237,7 @@ class MigrationOrchestratorImpl {
       // limit / upstream timeouts instead of silently reverting to nginx's
       // 1 MB / 60 s defaults.
       await this.adoptSourceProxySettings(projectId, chosen, log).catch((err) =>
-        log(`proxy tunables not adopted: ${safeErrorMessage(err)}`),
+        { observeCaughtError(err, "platform/engine/modules/migration/migration.orchestrator"); return log(`proxy tunables not adopted: ${safeErrorMessage(err)}`); },
       );
 
       // Workload is live. Route/TLS trouble must not tear it down; retain an
@@ -1240,8 +1245,8 @@ class MigrationOrchestratorImpl {
       const routingWarnings = !needsEdge ? [] : targetServer.workspaceId
         ? await retryProjectRouting(projectId, organizationId, { onLog: log })
           .then(result => result.ok ? [] : [result.warning ?? "Review managed routing before cutover"])
-          .catch(error => [safeErrorMessage(error)])
-        : await applyProjectEdgeRoutes(ctx, projectId, { onLog: log }).catch(error => [safeErrorMessage(error)]);
+          .catch(error => { observeCaughtError(error, "platform/engine/modules/migration/migration.orchestrator"); return [safeErrorMessage(error)]; })
+        : await applyProjectEdgeRoutes(ctx, projectId, { onLog: log }).catch(error => { observeCaughtError(error, "platform/engine/modules/migration/migration.orchestrator"); return [safeErrorMessage(error)]; });
       if (routingWarnings.length > 0) {
         const message = `Workload migrated; routing needs attention: ${routingWarnings.join("; ")}`;
         log(message);
@@ -1291,6 +1296,7 @@ class MigrationOrchestratorImpl {
             );
           }
         } catch (err) {
+          observeCaughtError(err, "platform/engine/modules/migration/migration.orchestrator");
           log(`free subdomain routing: not updated — ${safeErrorMessage(err)}`);
         }
       }
@@ -1348,6 +1354,7 @@ class MigrationOrchestratorImpl {
         );
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/migration/migration.orchestrator");
       // A cancelled run rolls back like any pre-cutover failure, but with a
       // clean, user-facing reason instead of the raw (killed-rsync) error.
       const reason = this.cancelByRun.get(id)?.cancelled
@@ -1439,7 +1446,7 @@ class MigrationOrchestratorImpl {
         volumeNames: plan.items.filter(item => item.kind === "volume").map(item => item.source),
         bindPaths: plan.items.filter(item => item.kind === "bind").map(item => item.source),
         customPaths: plan.items.filter(item => item.kind === "path").map(item => item.source), images,
-      }).catch(() => null) : null;
+      }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator"); return null; }) : null;
       const totalBytes = sized && !sized.partial && sized.totalBytes > 0 ? sized.totalBytes : null;
       const bytes = new Map<string, number>();
       const track = (task: string, kind: ProgressUpdate["kind"]) => (value: number) => {
@@ -1477,6 +1484,7 @@ class MigrationOrchestratorImpl {
             compression: transfer.compression, signal, log, onProgress: track(item.key, "volume") });
           log(`copied ${item.source} → ${item.dest}`);
         } catch (error) {
+          observeCaughtError(error, "platform/engine/modules/migration/migration.orchestrator");
           pendingItems.push({ key: item.key, kind: item.kind, source: item.source, dest: item.dest,
             serviceName: item.serviceName, reason: error instanceof PathMissingError ? "missing" : "error",
             message: safeErrorMessage(error) });
@@ -1560,9 +1568,12 @@ class MigrationOrchestratorImpl {
         log(`live state after migration:`);
         for (const line of describeLiveState(targets, containers, matches)) log(`  ${line}`);
       } finally {
-        await rt.dispose().catch(() => {});
+        await rt.dispose().catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator");
+        });
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/migration/migration.orchestrator");
       log(`live-state read-back skipped: ${safeErrorMessage(err)}`);
     }
   }
@@ -1602,7 +1613,7 @@ class MigrationOrchestratorImpl {
     const adopted = sanitizeProxySettings(merged);
     if (!adopted) return;
 
-    const project = await repos.project.findById(projectId).catch(() => null);
+    const project = await repos.project.findById(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator"); return null; });
     if (!project) return;
     const routingConfig = (project.routingConfig ?? {}) as Record<string, unknown>;
     const existing = (routingConfig.proxy ?? {}) as Record<string, unknown>;
@@ -1655,7 +1666,7 @@ class MigrationOrchestratorImpl {
     // when it doesn't. Filtering here on our own `sslStatus` would add a second, staler opinion
     // about validity — and a domain we wrongly skipped would silently re-issue instead.
     if (projectId) {
-      for (const row of await repos.domain.listByProject(projectId).catch(() => [])) {
+      for (const row of await repos.domain.listByProject(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator"); return []; })) {
         if (row.hostname) domains.add(row.hostname.toLowerCase());
       }
     }
@@ -1674,7 +1685,7 @@ class MigrationOrchestratorImpl {
     const endpoints = await openMigrationTransferEndpoints(sourceServerId, targetServerId, organizationId);
     const { source, target } = endpoints;
     try {
-    const proxy = await edgeProxy(source.executor).catch(() => null);
+    const proxy = await edgeProxy(source.executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator"); return null; });
     if (!proxy) return;
 
     for (const domain of domains) {
@@ -1700,7 +1711,7 @@ class MigrationOrchestratorImpl {
             `(from ${candidate.cert.source}, expires ${candidate.cert.expiresAt})`,
         );
       } catch (err) {
-        console.warn(`[migration] cert carry failed for ${domain}: ${safeErrorMessage(err)}`);
+        errorDiagnostics.warn("platform/engine/modules/migration/migration.orchestrator", `[migration] cert carry failed for ${domain}: ${safeErrorMessage(err)}`, err);
       }
     }
     } finally { await endpoints.release(); }
@@ -1749,7 +1760,8 @@ class MigrationOrchestratorImpl {
           })
           .join(", ");
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator");
       /* best-effort — never let diagnostics enrichment throw */
     }
     const base = dep.errorMessage?.trim();
@@ -1818,9 +1830,9 @@ class MigrationOrchestratorImpl {
       );
     } catch (err) {
       if (source?.workspaceId) throw err;
-      console.warn(
+      errorDiagnostics.warn("platform/engine/modules/migration/migration.orchestrator",
         `[migration] retiring source routes for project ${projectId} failed:`,
-        safeErrorMessage(err),
+        safeErrorMessage(err), err,
       );
     }
   }
@@ -1855,15 +1867,20 @@ class MigrationOrchestratorImpl {
       for (const [name, cid] of Object.entries(scannedContainerIds)) {
         // A stop failure is not itself fatal — `destroy` force-removes a running container —
         // so only the destroy verdict decides whether this one is still there.
-        await rtA.stop(cid).catch(() => {});
+        await rtA.stop(cid).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator");
+        });
         try {
           await rtA.destroy(cid);
         } catch (err) {
+          observeCaughtError(err, "platform/engine/modules/migration/migration.orchestrator");
           failed.push({ name, containerId: cid, reason: safeErrorMessage(err) });
         }
       }
     } finally {
-      await rtA.dispose().catch(() => {});
+      await rtA.dispose().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator");
+      });
     }
     return { failed };
   }
@@ -1921,7 +1938,8 @@ class MigrationOrchestratorImpl {
         try {
           await withMigrationExecution(sid, organizationId, executor =>
             stopDirectTransfer(executor, runTag));
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator");
           /* best-effort — the boundary flag-check still rolls the run back */
         }
       }),
@@ -2034,7 +2052,9 @@ class MigrationOrchestratorImpl {
           0,
           4096,
         ),
-      }).catch(() => {});
+      }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator");
+      });
       throw err;
     }
     }));
@@ -2089,7 +2109,7 @@ class MigrationOrchestratorImpl {
         try {
           await this.runWorker(id, () => withMigrationActivity(organizationId, claimed.sourceServerId!, claimed.targetServerId!, id, () => this.runResume(ctx, claimed, organizationId, opts)));
         } catch (err) {
-          console.error(`[migration] resume ${id} crashed:`, safeErrorMessage(err));
+          errorDiagnostics.error("platform/engine/modules/migration/migration.orchestrator", `[migration] resume ${id} crashed:`, safeErrorMessage(err), err);
         }
       })();
     });
@@ -2251,6 +2271,7 @@ class MigrationOrchestratorImpl {
               stillPending.delete(item.key);
               log(`resolved ${item.key}`);
             } catch (error) {
+              observeCaughtError(error, "platform/engine/modules/migration/migration.orchestrator");
               await this.throwIfCancelled(id);
               stillPending.set(item.key, { ...item, source: plan.source,
                 reason: error instanceof PathMissingError ? "missing" : "error", message: safeErrorMessage(error) });
@@ -2290,6 +2311,7 @@ class MigrationOrchestratorImpl {
         log("resume complete — review the target and confirm cutover");
       }
     } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/migration/migration.orchestrator");
       await this.transition(id, "partial", { pendingItems: [...stillPending.values()],
         errorMessage: `Resume needs attention: ${safeErrorMessage(error)}`.slice(0, 4096) });
       log(`resume failed: ${safeErrorMessage(error)}`);
@@ -2351,7 +2373,7 @@ class MigrationOrchestratorImpl {
     if (!Object.keys(scannedContainerIds).length) return;
     const source = await createServerDockerRuntime(sourceServerId, organizationId);
     try {
-      const results = await Promise.allSettled(Object.values(scannedContainerIds).map(cid => setMigrationContainerState(source, cid, true)));
+      const results = await observedAllSettled(Object.values(scannedContainerIds).map(cid => setMigrationContainerState(source, cid, true)), "platform/engine/modules/migration/migration.orchestrator");
       const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
       if (failures.length) throw new Error(`Could not restart ${failures.length} source container(s): ${safeErrorMessage(failures[0]!.reason)}`);
     } finally { await source.dispose(); }
@@ -2359,7 +2381,7 @@ class MigrationOrchestratorImpl {
 
   private async restoreTargetContainers(id: string, runtime: Awaited<ReturnType<typeof createServerDockerRuntime>>, ids: string[]) {
     if (!ids.length) return;
-    const results = await Promise.allSettled(ids.map(cid => setMigrationContainerState(runtime, cid, true)));
+    const results = await observedAllSettled(ids.map(cid => setMigrationContainerState(runtime, cid, true)), "platform/engine/modules/migration/migration.orchestrator");
     const failures = ids.filter((_, index) => results[index]?.status === "rejected");
     await repos.dockerMigrationRun.updateRecovery(id, { targetRunningContainerIds: failures });
     if (failures.length) throw new Error(`${failures.length} target service(s) could not restart; retry the migration resume.`);
@@ -2413,7 +2435,7 @@ class MigrationOrchestratorImpl {
     // Undo what the run did to the TARGET and to the project's own record. Shared with boot
     // recovery, which used to skip both — see `undoTargetSideEffects`.
     await this.undoTargetSideEffects(
-      await repos.dockerMigrationRun.findById(id).catch(() => null),
+      await repos.dockerMigrationRun.findById(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration.orchestrator"); return null; }),
       servers,
       ctx.organizationId,
       (m) => this.appendLog(id, m),
@@ -2472,6 +2494,7 @@ class MigrationOrchestratorImpl {
         const removed = await this.removeTargetData(run);
         log(`removed ${removed} volume(s) created by this migration`);
       } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/migration/migration.orchestrator");
         log(`Target data cleanup needs attention: ${safeErrorMessage(error)}. Use Remove target data to retry.`);
       }
     }
@@ -2509,7 +2532,7 @@ class MigrationOrchestratorImpl {
         }
         } catch (error) {
           const message = safeErrorMessage(error);
-          console.warn(`[migration] recovery ${run.id}: ${message}`);
+          errorDiagnostics.warn("platform/engine/modules/migration/migration.orchestrator", `[migration] recovery ${run.id}: ${message}`, error);
           const current = await repos.dockerMigrationRun.findById(run.id);
           if (current) await repos.dockerMigrationRun.transition(run.id, current.status as Parameters<typeof repos.dockerMigrationRun.transition>[1],
             { errorMessage: `Recovery needs attention: ${message}`.slice(0, 4096) });

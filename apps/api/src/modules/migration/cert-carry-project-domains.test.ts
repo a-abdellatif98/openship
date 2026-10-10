@@ -47,7 +47,7 @@ describe("cert carry reads the project's own domains", () => {
   });
 
   it("survives a project whose domains can't be read", () => {
-    expect(carry).toContain("listByProject(projectId).catch(() => [])");
+    expect(carry).toMatch(/listByProject\(projectId\)\.catch\([^]*?observeCaughtError\([^]*?return \[\];/);
   });
 });
 

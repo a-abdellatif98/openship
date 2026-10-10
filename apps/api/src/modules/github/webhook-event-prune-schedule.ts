@@ -6,6 +6,7 @@
  * Runs daily at 03:47 UTC — off-peak, staggered from the audit/pending-grant sweeps.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { getJobRunner } from "@repo/platform/engine/lib/job-runner/index";
 
@@ -26,7 +27,7 @@ export async function scheduleWebhookEventPrune(): Promise<void> {
           console.log(`[webhook-event-prune] deleted ${deleted} row(s) older than ${RETENTION_DAYS}d`);
         }
       } catch (err) {
-        console.error("[webhook-event-prune] sweep failed", err);
+        errorDiagnostics.error("api/modules/github/webhook-event-prune-schedule", "[webhook-event-prune] sweep failed", err);
       }
     },
   });

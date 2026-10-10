@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { ExecutionContext } from "../../../context";
 import type { Static } from "@sinclair/typebox";
 import { UserSettingsSchemas, ValidationError } from "@repo/contracts";
@@ -108,7 +109,7 @@ export async function updateRouteStrategy(ctx: ExecutionContext, body: Static<ty
  * never returned in settings responses.
  */
 async function getCloneCredentialsState(userId: string) {
-  const settings = await repos.settings.findByUser(userId).catch(() => null);
+  const settings = await repos.settings.findByUser(userId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/settings/preferences.service"); return null; });
   return {
     cloneToken: {
       hasToken: !!settings?.cloneTokenEncrypted,
@@ -272,7 +273,8 @@ export async function updateCloneCredentials(ctx: ExecutionContext, body: Static
     let report: Awaited<ReturnType<typeof inspectPatScope>>;
     try {
       report = await inspectPatScope(rawToken);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/settings/preferences.service");
       throw new ValidationError("Could not verify this GitHub token. Check that it is valid and GitHub is reachable, then try again.");
     }
     const verdict = classifyPatScope(report);

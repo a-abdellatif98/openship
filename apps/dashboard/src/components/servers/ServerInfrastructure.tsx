@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect, useState, type ReactNode } from "react";
@@ -20,7 +21,8 @@ export function ServerInfrastructure({ serverId }: { serverId: string }) {
       (next) => {
         if (active) setValue(next);
       },
-      () => {
+      (diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/servers/ServerInfrastructure");
         if (active) setValue(null);
       },
     );

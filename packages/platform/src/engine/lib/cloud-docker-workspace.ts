@@ -1,3 +1,4 @@
+import { observedAllSettled, reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import {
   CLOUD_DOCKER_IMAGE,
@@ -136,6 +137,7 @@ export async function resizeDockerWorkspace(input: {
         await updateCloudWorkspaceResources(ws, input.resources);
       }
     } catch (error) {
+      observeCaughtError(error, "platform/engine/lib/cloud-docker-workspace");
       failure = { error };
     }
     // Finish restoration even after cancellation or a lost provider response.
@@ -167,7 +169,7 @@ export async function resizeDockerWorkspace(input: {
         }
         await waitForCloudDockerWorkspace(input.client, input.workspaceId, input.namespace);
         ws.invalidateRuntime();
-        const recovery = await Promise.allSettled([
+        const recovery = await observedAllSettled([
           ...(running.containers.length
             ? [
                 (async () => {
@@ -204,7 +206,7 @@ export async function resizeDockerWorkspace(input: {
             if (!started.success) throw new Error(`Could not restore application process ${id}`);
             await waitForManagedProcess(read, "running");
           }),
-        ]);
+        ], "platform/engine/lib/cloud-docker-workspace");
         const errors = recovery.filter(
           (item): item is PromiseRejectedResult => item.status === "rejected",
         );
@@ -215,6 +217,7 @@ export async function resizeDockerWorkspace(input: {
           );
       }
     } catch (error) {
+      observeCaughtError(error, "platform/engine/lib/cloud-docker-workspace");
       throw new AggregateError(
         failure ? [failure.error, error] : [error],
         "Could not restore running services after resizing the Cloud workspace. Check the workspace before retrying.",

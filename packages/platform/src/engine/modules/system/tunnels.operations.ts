@@ -6,6 +6,7 @@
  * checks its organization and the tunnel's parent before using retained sockets.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { ExecutionContext } from "../../../context";
 import type { ResourceServices } from "../../../resource-operations";
 import {
@@ -189,7 +190,9 @@ async function startTunnelHandler(ctx: ExecutionContext, id: string, input: { tu
         localPort: status.localPort,
         autoStart: row.autoStart,
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/tunnels.operations");
+      });
   }
 
   const fresh = await repos.serverTunnel.get(row.id);

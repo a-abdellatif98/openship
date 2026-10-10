@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { randomUUID } from "node:crypto";
 import type { Runtime } from "oblien";
 import { AppError, type ManagedCommandRef } from "@repo/core";
@@ -27,7 +28,8 @@ export async function recoverCloudDockerRequest(runtime: Runtime, command: Manag
       if (result.id !== id) throw new Error("Docker recovery identity changed");
       if (result.complete === true) return;
       state = result.state;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/docker-request");
       throw new AppError(
         "Could not confirm the earlier Docker request finished. Retry this operation when the managed server is reachable.",
         503, "CLOUD_COMMAND_EXIT_UNCONFIRMED",

@@ -755,7 +755,8 @@
       "provisioning": "等待证书",
       "expired": "已过期",
       "error": "错误",
-      "inactive": "未活跃"
+      "inactive": "未活跃",
+      "unknown": "未知"
     },
     "typeCustom": "自定义域名",
     "typeFree": "免费子域名",
@@ -928,7 +929,8 @@
         "manual_certificate": "此域名使用手动上传的证书。请上传有效的替代证书后重新检查。Openship 不会自动续期此证书。",
         "managed_certificate": "TLS 由外部代理或 Openship Cloud 管理。请检查相应提供方的配置。",
         "route_missing": "已配置的路由尚未应用。请重试路由操作以应用配置。目前没有安排路由自动重试。",
-        "manual_dns": "此证书使用手动 TXT 验证。请打开 HTTPS 设置以确认新的 TXT 记录，或选择已连接的 DNS 提供商以自动续期。"
+        "manual_dns": "此证书使用手动 TXT 验证。请打开 HTTPS 设置以确认新的 TXT 记录，或选择已连接的 DNS 提供商以自动续期。",
+        "managed_owner": "此主机名及其证书由所属服务管理。请检查该服务的域名设置。"
       }
     },
     "records": {

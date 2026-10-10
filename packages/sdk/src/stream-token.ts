@@ -28,7 +28,7 @@ export async function* streamWithToken(
     throw new ApiError("Could not connect to the request-log stream", 502, null);
   }
   if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
-    await response.body?.cancel().catch(() => undefined);
+    await response.body?.cancel().catch(() => { /* diagnostics-ignore: Ignore body cancellation after a failure; the caller receives a sanitized error without the signed URL. */ return undefined; });
     // Never include the signed URL or an upstream error body that may echo it.
     throw new ApiError("Request-log stream is unavailable", response.ok ? 502 : response.status, null);
   }

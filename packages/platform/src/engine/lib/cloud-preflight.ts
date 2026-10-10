@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { createPlatform, type CloudInfraProvider } from "@repo/adapters";
 import { ensureNamespace, getOblienClient, issueNamespaceToken } from "./openship-cloud";
 import { env } from "../config/env";
@@ -28,7 +29,8 @@ async function ownsManagedSlug(organizationId: string, rawSlug: string, workspac
     const { data } = await getOblienClient().domain.routes({ namespace });
     const hostname = `${slug}.${getRoutingBaseDomain()}`;
     return data.some((route) => route.namespace === namespace && route.hostname.toLowerCase() === hostname);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud-preflight");
     return false;
   }
 }
@@ -72,8 +74,10 @@ export interface CloudPreflightData {
  *                               proxy). Hitting Oblien directly with
  *                               the master client makes this check
  *                               actually authoritative.
- *   - `customDomain`          → namespace-scoped client (DNS records
- *                               are tied to the user's namespace).
+ *   - `customDomain`          → MASTER client. Oblien's standalone
+ *                               DNS verification endpoint requires admin
+ *                               scope, just like slug availability. Tenant
+ *                               entitlement still gates the check below.
  *
  * Errors are NO LONGER silently treated as "available". If the check
  * truly fails (network blip, Oblien outage), we surface
@@ -87,7 +91,7 @@ export async function runCloudPreflight(
 ): Promise<CloudPreflightData> {
   const baseDomain = getRoutingBaseDomain();
 
-  // ── Namespace-scoped checks: quota + custom domain DNS ──
+  // ── Namespace-scoped entitlement / runtime checks ──
   let cloud: CloudInfraProvider | null = null;
   let runtimeError: string | null = null;
   try {
@@ -99,6 +103,7 @@ export async function runCloudPreflight(
     });
     cloud = cloudPlatform.routing as CloudInfraProvider;
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/cloud-preflight");
     runtimeError = safeErrorMessage(err);
   }
 
@@ -125,7 +130,7 @@ export async function runCloudPreflight(
             };
     } catch (err) {
       const message = safeErrorMessage(err);
-      console.error("[CLOUD] Preflight slug check failed", { slug: opts.slug, error: message });
+      errorDiagnostics.error("platform/engine/lib/cloud-preflight", "[CLOUD] Preflight slug check failed", { slug: opts.slug, error: message }, err);
       // Fail closed — the user should pick a different slug rather than
       // discover the conflict mid-build.
       result.slug = {
@@ -135,10 +140,10 @@ export async function runCloudPreflight(
     }
   }
 
-  // ── Custom domain DNS — namespace-scoped (skipped if runtime down) ──
+  // ── Custom domain DNS — server-side admin scope, after tenant checks ──
   if (opts.customDomain && cloud) {
     try {
-      const verified = await cloud.verifyDomain(opts.customDomain);
+      const verified = await getOblienClient().domain.verify({ domain: opts.customDomain });
       if (verified.verified) {
         result.customDomain = {
           verified: true,
@@ -153,11 +158,11 @@ export async function runCloudPreflight(
         const cnameMissing = verified.cname === false;
         const ownershipMissing = verified.ownership === false;
         const missing: string[] = [];
-        if (cnameMissing && verified.requiredRecords.cname) {
-          missing.push(`CNAME ${verified.requiredRecords.cname.host} → ${verified.requiredRecords.cname.target}`);
+        if (cnameMissing && verified.required_records.cname) {
+          missing.push(`CNAME ${verified.required_records.cname.host} → ${verified.required_records.cname.target}`);
         }
-        if (ownershipMissing && verified.requiredRecords.txt) {
-          missing.push(`TXT ${verified.requiredRecords.txt.host} = ${verified.requiredRecords.txt.value}`);
+        if (ownershipMissing && verified.required_records.txt) {
+          missing.push(`TXT ${verified.required_records.txt.host} = ${verified.required_records.txt.value}`);
         }
         const baseMessage = verified.errors.length > 0
           ? verified.errors.join("; ")
@@ -170,15 +175,15 @@ export async function runCloudPreflight(
           cname: verified.cname ?? undefined,
           ownership: verified.ownership ?? undefined,
           message,
-          requiredRecords: verified.requiredRecords,
+          requiredRecords: verified.required_records,
         };
       }
     } catch (err) {
       const message = safeErrorMessage(err);
-      console.error("[CLOUD] Preflight custom domain check failed", { domain: opts.customDomain, error: message });
+      errorDiagnostics.error("platform/engine/lib/cloud-preflight", "[CLOUD] Preflight custom domain check failed", { domain: opts.customDomain, error: message }, err);
       result.customDomain = {
         verified: false,
-        message: `Couldn't verify ${opts.customDomain}. Try again or fix DNS first.`,
+        message: `Couldn't verify ${opts.customDomain} right now. Please retry.`,
       };
     }
   } else if (opts.customDomain && !cloud) {

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { spawn } from "node:child_process";
 import { statSync } from "node:fs";
 import { delimiter, isAbsolute, join, win32 } from "node:path";
@@ -16,7 +17,8 @@ export function resolveCloudflaredExecutable(options: CloudflaredOptions = {}): 
   const platform = options.platform ?? process.platform;
   const path = platform === "win32" ? win32 : { delimiter, isAbsolute, join };
   const isFile = options.isFile ?? ((file: string) => {
-    try { return statSync(file).isFile(); } catch { return false; }
+    try { return statSync(file).isFile(); } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/system/cloudflare-ssh"); return false; }
   });
   const configured = env.OPENSHIP_CLOUDFLARED_PATH?.trim();
   if (configured) {
@@ -67,16 +69,16 @@ export function openCloudflareSshStream(host: string): Duplex {
   const input = new PassThrough();
   const output = new PassThrough();
   // EPIPE can precede process close too; report the drained subprocess result.
-  child.stdin.on("error", () => {});
+  child.stdin.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/system/cloudflare-ssh"); });
   input.pipe(child.stdin);
   child.stdout.pipe(output, { end: false });
   const stream = Duplex.from({ writable: input, readable: output });
   // ssh2 attaches its listener immediately after this function returns. Keep an
   // error floor for teardown and for a subprocess that fails before that handoff.
-  stream.on("error", () => {});
+  stream.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/system/cloudflare-ssh"); });
   let stderr = "";
   child.stderr.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-4096); });
-  child.once("error", (err) => stream.destroy(new Error(`Cloudflare Access could not start: ${err.message}`)));
+  child.once("error", (err) => { observeCaughtError(err, "adapters/system/cloudflare-ssh"); return stream.destroy(new Error(`Cloudflare Access could not start: ${err.message}`)); });
   child.once("close", (code) => {
     if (stream.destroyed) return;
     if (code === 0) output.end();

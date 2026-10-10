@@ -12,6 +12,7 @@
  * must not be recreated.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import { safeErrorMessage } from "@repo/core";
 import { probeEdge, ourEdgeContainerRunning, type PromptUserFn } from "@repo/adapters";
@@ -67,7 +68,7 @@ export async function edgeStatus(c: Context) {
   // The local host-server has no sshHost (probeReachable would falsely report it
   // offline); it's always reachable through createHostExecutor.
   if (!isLocal) {
-    const reachable = await sshManager.probeReachable(serverId).catch(() => false);
+    const reachable = await sshManager.probeReachable(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/domains/ensure-edge.controller"); return false; });
     if (!reachable) {
       return c.json({ ready: false, reachable: false });
     }
@@ -97,6 +98,7 @@ export async function edgeStatus(c: Context) {
       })),
     });
   } catch (err) {
+    observeCaughtError(err, "api/modules/domains/ensure-edge.controller");
     // A probe failure shouldn't 500 the tab — report unknown so the button
     // falls back to "Set up edge".
     return c.json({ ready: false, reachable: true, error: safeErrorMessage(err) });
@@ -131,7 +133,8 @@ export async function ensureEdgeStream(c: Context) {
       try {
         void sse.writeSSE({ event, data });
         return true;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "api/modules/domains/ensure-edge.controller");
         return false;
       }
     };
@@ -160,6 +163,7 @@ export async function ensureEdgeStream(c: Context) {
       );
       finishEdgeConsentSession(session.id, "completed");
     } catch (err) {
+      observeCaughtError(err, "api/modules/domains/ensure-edge.controller");
       appendEdgeLog(session.id, safeErrorMessage(err), "error");
       finishEdgeConsentSession(session.id, "failed");
     } finally {

@@ -20,6 +20,7 @@
  * same fetch as the minute series.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import React, { useMemo, useState } from "react";
 import { TrafficChart, TopPaths } from "./general";
 import { MonitoringView } from "@/components/monitoring/MonitoringView";
@@ -294,7 +295,8 @@ export const MonitoringTab = () => {
           enabled,
         });
         setPathsOverride(enabled);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/MonitoringTab");
         // Leave the card as it was — pretending it flipped would misreport what the edge
         // is actually doing to every request.
       } finally {

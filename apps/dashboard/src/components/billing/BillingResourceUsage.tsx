@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 import { useEffect, useState } from "react";
 import { BillingLink as Link } from "@/components/billing/BillingWorkspaceContext";
@@ -34,7 +35,8 @@ export function BillingResourceUsage({ state }: { state: BillingState }) {
           setFailed(value.compute.status !== "available" || value.edge.status !== "available");
         }
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/billing/BillingResourceUsage");
         if (active) setFailed(true);
       })
       .finally(() => {

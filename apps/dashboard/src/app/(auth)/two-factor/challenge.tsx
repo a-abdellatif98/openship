@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -47,7 +48,8 @@ export function TwoFactorChallenge() {
       window.location.assign(
         accountSecurityRedirect(result.data) || getPostAuthRedirect(params) || "/",
       );
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(auth)/two-factor/challenge");
       setError(t.auth.errors.serverUnreachable);
       setWorking(false);
     }

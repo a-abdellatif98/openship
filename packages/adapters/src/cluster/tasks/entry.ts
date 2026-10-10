@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { runDatabaseTask, taskError } from "./main";
 
 const abort = new AbortController();
@@ -11,6 +12,6 @@ Promise.resolve()
     ),
   )
   .catch((error) => {
-    console.error(taskError(error));
+    errorDiagnostics.error("adapters/cluster/tasks/entry", taskError(error), error);
     process.exitCode = 1;
   });

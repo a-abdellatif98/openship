@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { chmod, mkdtemp, rm as fsRm, writeFile as fsWriteFile } from "node:fs/promises";
@@ -95,7 +96,9 @@ export async function extractRemoteArchive(
 ): Promise<void> {
   const received = Number((await exec(`wc -c < ${sq(remoteArchive)}`)).trim());
   if (received !== expectedBytes) {
-    await exec(`rm -f ${sq(remoteArchive)}`).catch(() => {});
+    await exec(`rm -f ${sq(remoteArchive)}`).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/system/remote-transfer");
+    });
     throw new Error(`upload truncated: sent ${expectedBytes} bytes, server received ${received}`);
   }
   await exec(
@@ -224,7 +227,9 @@ async function withTemporaryPrivateKey<T>(
     await chmod(keyPath, 0o600);
     return await fn(keyPath);
   } finally {
-    await fsRm(tempDir, { recursive: true, force: true }).catch(() => {});
+    await fsRm(tempDir, { recursive: true, force: true }).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/system/remote-transfer");
+    });
   }
 }
 
@@ -257,7 +262,7 @@ async function runRsync(
       emitBufferedLines(chunk, stderrState, (line) => onLog?.(logEntry(line)));
     });
 
-    proc.on("error", (err) => {
+    proc.on("error", (err) => { observeCaughtError(err, "adapters/system/remote-transfer");
       reject(new Error(`rsync failed to start: ${err.message}`));
     });
 

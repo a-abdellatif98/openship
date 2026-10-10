@@ -1,3 +1,4 @@
+import { errorReporter } from "@repo/core/diagnostics";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import http from "node:http";
 import { once } from "node:events";
@@ -57,6 +58,7 @@ describe("safeFetch total deadline (GH-880)", () => {
     release([{ address: "127.0.0.1", family: 4 }]);
     await vi.advanceTimersByTimeAsync(0);
     expect(requests).toEqual([]);
+    await errorReporter.flush();
     expect(vi.getTimerCount()).toBe(0);
     vi.useRealTimers();
     lookup.mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
@@ -79,6 +81,7 @@ describe("safeFetch total deadline (GH-880)", () => {
     await pending;
     reject(new Error("late resolver failure"));
     await vi.advanceTimersByTimeAsync(0);
+    await errorReporter.flush();
     expect(vi.getTimerCount()).toBe(0);
   });
 

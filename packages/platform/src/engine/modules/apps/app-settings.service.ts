@@ -9,6 +9,7 @@
  * (or a full redeploy for `requiresRedeploy` fields).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   getAppManagement,
   getAppSettings,
@@ -251,7 +252,7 @@ export interface AppConnectionView {
  * and it gets persisted into a second project's env by "Use in a project".
  */
 async function resolvePortOnlyHost(project: Project): Promise<string | null> {
-  const serverHost = await resolveProjectServerHost(project).catch(() => null);
+  const serverHost = await resolveProjectServerHost(project).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/apps/app-settings.service"); return null; });
   return serverHost && !isLoopbackHost(serverHost) ? serverHost : null;
 }
 
@@ -367,7 +368,7 @@ export async function getAppConnectionView(
     if (publicUrls) return publicUrls;
     const domains: ProjectDomainRow[] = await repos.domain
       .listByProject(projectId)
-      .catch(() => []);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/apps/app-settings.service"); return []; });
     publicUrls = buildPublicUrlLookup(
       services.map((svc) => ({
         name: svc.name,
@@ -570,7 +571,8 @@ async function readConnectionServiceEnv(project: Project, services: Service[]) {
   const scoped = new Map<string, Record<string, string>>();
   for (const row of rows) {
     let value: string;
-    try { value = decrypt(row.value); } catch { continue; }
+    try { value = decrypt(row.value); } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/apps/app-settings.service"); continue; }
     if (!row.serviceId) projectEnv[row.key] = value;
     else {
       const map = scoped.get(row.serviceId) ?? {};

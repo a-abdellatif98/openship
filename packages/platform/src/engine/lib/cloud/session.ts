@@ -8,6 +8,7 @@
  * as connected. So the connection check proxies the SaaS identity endpoint
  * (`/api/cloud/account`) LIVE and trusts its verdict.
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { AppError } from "@repo/core";
 import { cloudRuntimeTarget } from "../../config/env";
@@ -56,7 +57,8 @@ export async function invalidateCloudCaches(userId: string): Promise<void> {
       "../../modules/github/github.auth"
     );
     await invalidateUserGitHubCache(userId);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/session");
     /* best-effort — github cache will self-heal on its own TTL */
   }
 }
@@ -140,7 +142,7 @@ async function validateCloudSessionLive(
 
     const user = await readVerifiedCloudAccount(res, path =>
       cloudFetch(userId, path, { method: "GET", signal: AbortSignal.timeout(15_000) }, session),
-    ).catch(() => null);
+    ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/session"); return null; });
     if (!user || user.id !== session.userId || user.organizationId !== session.organizationId)
       return { connected: false };
     return { user, connected: true };

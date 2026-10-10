@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -186,7 +187,7 @@ export function NotificationsTab() {
           notificationsApi.listCategories(),
           notificationsApi.listChannels(),
           notificationsApi.listSubscriptions(),
-          notificationsApi.listDefaults().catch(() => ({ defaults: [] })),
+          notificationsApi.listDefaults().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/NotificationsTab"); return ({ defaults: [] }); }),
         ]);
         setCategories(cats.categories);
         setCategoryGroups(cats.groups);
@@ -223,7 +224,8 @@ export function NotificationsTab() {
         if (cancelled) return;
         const me = result.data?.members?.find((m) => m.userId === user?.id);
         setRole(me?.role ?? null);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/NotificationsTab");
         if (!cancelled) setRole(null);
       }
     })();
@@ -447,7 +449,8 @@ function NewChannelForm({
       .then((r) => {
         if (!cancelled) setEmailDeliverable(!!r.deliverable);
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/NotificationsTab");
         if (!cancelled) setEmailDeliverable(null);
       });
     return () => {

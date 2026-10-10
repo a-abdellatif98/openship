@@ -1,3 +1,4 @@
+import { observedAllSettled, reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { PassThrough } from "node:stream";
@@ -60,8 +61,8 @@ export class CloudWorkspaceExecutor implements CommandExecutor {
     const runtime = await this.rt();
     const stdout = new PassThrough({ highWaterMark: 1024 * 1024 });
     const stderr = new PassThrough({ highWaterMark: 1024 * 1024 });
-    stdout.on("error", () => {});
-    stderr.on("error", () => {});
+    stdout.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/runtime/cloud/workspace-executor"); });
+    stderr.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/runtime/cloud/workspace-executor"); });
     let taskId: string | undefined;
     let killed = false;
     let stopping: Promise<void> | undefined;
@@ -180,7 +181,9 @@ export class CloudWorkspaceExecutor implements CommandExecutor {
     this.tasks.set(kill, onClose);
     if (signal?.aborted) kill();
     // Consumers attach their close listener after this async method returns.
-    void onClose.catch(() => {});
+    void onClose.catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/workspace-executor");
+    });
     return { stdout, stderr, onClose, kill };
   }
 
@@ -229,7 +232,9 @@ export class CloudWorkspaceExecutor implements CommandExecutor {
       if (!written.success) throw new Error("Could not write workspace file");
       await this.rename(temp, path);
     } catch (error) {
-      await runtime.files.delete({ path: temp }).catch(() => {});
+      await runtime.files.delete({ path: temp }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/workspace-executor");
+      });
       throw error;
     }
   }
@@ -266,6 +271,6 @@ export class CloudWorkspaceExecutor implements CommandExecutor {
     this.shells.clear();
     const tasks = [...this.tasks.entries()];
     for (const [kill] of tasks) kill();
-    await Promise.allSettled([...tasks.map(([, completion]) => completion), ...shells.map(shell => shell.close())]);
+    await observedAllSettled([...tasks.map(([, completion]) => completion), ...shells.map(shell => shell.close())], "adapters/runtime/cloud/workspace-executor");
   }
 }

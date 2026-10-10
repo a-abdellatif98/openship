@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import Link from "next/link";
@@ -169,7 +170,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
       try {
         const [listRes, activeRes] = await Promise.all([
           sidebarOrgClient.list(),
-          sidebarOrgClient.getFullOrganization().catch(() => ({ data: null })),
+          sidebarOrgClient.getFullOrganization().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/sidebar"); return ({ data: null }); }),
         ]);
         if (cancelled) return;
         const list = listRes.data ?? [];
@@ -188,7 +189,8 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
                 const full = await sidebarOrgClient.getFullOrganization({ organizationId: o.id });
                 const me = full.data?.members?.find((m) => m.userId === user?.id);
                 return [o.id, me?.role ?? null] as const;
-              } catch {
+              } catch (diagnosticFailure) {
+                observeCaughtError(diagnosticFailure, "dashboard/components/sidebar");
                 return [o.id, null] as const;
               }
             }),
@@ -197,10 +199,12 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
           const map = Object.fromEntries(entries.filter(([, r]) => r)) as Record<string, string>;
           setOrgRoles(map);
           if (aid) setActiveOrgRole(map[aid] ?? null);
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/components/sidebar");
           /* role chips optional */
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/sidebar");
         /* org switcher hidden when fetch fails */
       }
     })();
@@ -226,7 +230,8 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
         if (cancelled || !res?.success || !Array.isArray(res.projects)) return;
         setNavCounts(countProjectCollections(res.projects));
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/sidebar");
         /* counts are optional chrome — silent on failure */
       });
     return () => {
@@ -249,7 +254,8 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
       setActiveOrganizationId(orgId);
       // Reload so every list endpoint re-fetches under the new scope.
       window.location.reload();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/sidebar");
       setSwitchingOrgId(null);
     }
   }
@@ -264,7 +270,8 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: { mobileOpen?: bo
       }
       await signOut();
       router.push("/login");
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/sidebar");
       setLoggingOut(false);
     }
   }

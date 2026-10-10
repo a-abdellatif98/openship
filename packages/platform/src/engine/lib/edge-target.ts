@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { SYSTEM } from "@repo/core";
 import { repos } from "@repo/db";
 import { env } from "../config/env";
@@ -214,13 +215,13 @@ let probedIp: { at: number; ip: string | null } | null = null;
 async function resolveInstanceEdgeIp(organizationId: string): Promise<string | null> {
   const usableIp = (v: string | null) => (v && isIpLiteral(v) && isUsableTarget(v) ? v : null);
 
-  const stored = usableIp(await resolveLocalServerHost(organizationId).catch(() => null));
+  const stored = usableIp(await resolveLocalServerHost(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/edge-target"); return null; }));
   if (stored) return stored;
 
   if (probedIp && Date.now() - probedIp.at < IP_PROBE_TTL_MS) return probedIp.ip;
   // Skips the network on desktop / CLOUD_MODE, where a "public IP" would be a
   // laptop's NAT address — those boxes fall through to the hostname candidates.
-  const ip = usableIp(await resolveInstancePublicIp().catch(() => null));
+  const ip = usableIp(await resolveInstancePublicIp().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/edge-target"); return null; }));
   probedIp = { at: Date.now(), ip };
   return ip;
 }
@@ -254,7 +255,7 @@ export async function resolveEdgeTargetHost(
 ): Promise<EdgeTargetResult> {
   const { serverId, preferHost } = opts;
   if (serverId) {
-    const server = await repos.server.getInOrganization(serverId, organizationId).catch(() => null);
+    const server = await repos.server.getInOrganization(serverId, organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/edge-target"); return null; });
     if (server && !server.isLocal) {
       const host = hostFrom(server.sshHost);
       if (!host) return { host: null, reason: "the target server has no host address" };
@@ -295,7 +296,7 @@ export async function resolveEdgeTargetHost(
   // it on. Preferring the probe would swap a working, operator-stated route for a
   // guess, so it only runs when nothing was declared at all (where the alternative
   // is no route). It also keeps this path free of a network call.
-  const reach = await getInstanceReachability().catch(() => null);
+  const reach = await getInstanceReachability().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/edge-target"); return null; });
   const reachCandidates: readonly Candidate[] = [reach?.url, env.HOST_DOMAIN];
   const name = envUsable[0] ?? usableTargets(reachCandidates)[0];
   if (name) return { host: name, warning: hostnameTargetWarning(name, HOSTNAME_FIX_INSTANCE) };

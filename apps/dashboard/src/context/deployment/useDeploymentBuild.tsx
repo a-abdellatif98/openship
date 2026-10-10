@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { IconName } from "@repo/ui/icons";
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { Terminal } from "@xterm/xterm";
@@ -579,7 +580,7 @@ export function useDeploymentBuild(
     },
     onConnect: () => {},
     onDisconnect: () => {},
-    onError: (error) => console.error("[Deployment] Build connection error:", error),
+    onError: (error) => errorDiagnostics.error("dashboard/context/deployment/useDeploymentBuild", "[Deployment] Build connection error:", error),
   });
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -1005,7 +1006,7 @@ export function useDeploymentBuild(
         return null;
       }
     } catch (err) {
-      console.error("Deployment error:", err);
+      errorDiagnostics.error("dashboard/context/deployment/useDeploymentBuild", "Deployment error:", err);
       const message = getApiErrorMessage(err, "Failed to start deployment");
       const errorCode = extractErrorCode(err);
 
@@ -1152,7 +1153,8 @@ export function useDeploymentBuild(
           buildStream.disconnect();
           if (!data.cancellationPending) clearInterval(interval);
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/context/deployment/useDeploymentBuild");
         // Transient poll error — keep trying on the next tick.
       } finally {
         buildStatusPollInFlightRef.current = false;
@@ -1405,7 +1407,8 @@ export function useDeploymentBuild(
                 for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
                 writeToTerminal(bytes);
                 return;
-              } catch {
+              } catch (diagnosticFailure) {
+                observeCaughtError(diagnosticFailure, "dashboard/context/deployment/useDeploymentBuild");
                 /* corrupt base64 — fall back to the decoded text line */
               }
             }
@@ -1439,7 +1442,7 @@ export function useDeploymentBuild(
         if (generation !== buildViewGenerationRef.current) {
           return { success: false, superseded: true };
         }
-        console.error("Error loading build session:", err);
+        errorDiagnostics.error("dashboard/context/deployment/useDeploymentBuild", "Error loading build session:", err);
         // Only a server-confirmed 404 is "this deployment does not exist". A
         // throw while hydrating a successful response — or a 5xx/network
         // failure — is a load error the page can retry, not proof the resource
@@ -1478,7 +1481,7 @@ export function useDeploymentBuild(
       }
     } catch (error) {
       if (generation !== buildViewGenerationRef.current) return;
-      console.error("[DeploymentContext] Error stopping deployment:", error);
+      errorDiagnostics.error("dashboard/context/deployment/useDeploymentBuild", "[DeploymentContext] Error stopping deployment:", error);
       showToast(getApiErrorMessage(error, "Failed to stop deployment"), "error", "Error");
     } finally {
       if (generation === buildViewGenerationRef.current) {
@@ -1545,7 +1548,7 @@ export function useDeploymentBuild(
         return newDeploymentId;
       } catch (error) {
         if (generation !== buildViewGenerationRef.current) return null;
-        console.error("[DeploymentContext] Failed to redeploy:", error);
+        errorDiagnostics.error("dashboard/context/deployment/useDeploymentBuild", "[DeploymentContext] Failed to redeploy:", error);
         const msg = getApiErrorMessage(error, "Failed to start redeployment");
         // A missing GitHub credential surfaces the SAME modal as the deploy
         // wizard (never a bare toast) — one shared handler, one source of truth.
@@ -1610,7 +1613,7 @@ export function useDeploymentBuild(
             : prev,
         );
       } catch (err) {
-        console.error("[Deployment] Failed to respond to prompt:", err);
+        errorDiagnostics.error("dashboard/context/deployment/useDeploymentBuild", "[Deployment] Failed to respond to prompt:", err);
         showToast("Failed to respond to prompt", "error", "Error");
         throw err;
       }

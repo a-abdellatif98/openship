@@ -10,6 +10,7 @@
  * defense-in-depth - if somehow mounted in cloud, they refuse to run.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { getPlatformKernel } from "@repo/platform/engine/lib/platform";
 import { getSetup as readSetup, validateAuthModeChange } from "@repo/platform/engine/modules/system/settings.operations";
 import { operationContext, operationData } from "../../lib/operation-context";
@@ -57,6 +58,7 @@ export async function setup(c: Context) {
     sshTransport = normalizeSshTransport(body.sshTransport);
     if (body.sshHost) assertSshSettings(body);
   } catch (error) {
+    observeCaughtError(error, "api/modules/system/setup.controller");
     return c.json({ error: safeErrorMessage(error) }, 400);
   }
 
@@ -315,7 +317,7 @@ export async function bootstrapAdmin(c: Context) {
   // was listed under Apps. Best-effort: a failure here must not fail the bootstrap,
   // since the boot hook will still catch it on the next restart.
   await ensureLocalServer().catch((err) =>
-    console.warn("[setup] local server registration deferred to next boot:", safeErrorMessage(err)),
+    errorDiagnostics.warn("api/modules/system/setup.controller", "[setup] local server registration deferred to next boot:", safeErrorMessage(err), err),
   );
 
   audit.recordAsync(auditContextFrom(c, `org_${localUser.id}`, localUser.id), {
@@ -410,7 +412,7 @@ export async function resetAdminPassword(c: Context) {
   // bootstrap-admin 409s and the CLI falls back to this endpoint. Hanging
   // registration off bootstrap alone is what left those boxes with no server.
   await ensureLocalServer().catch((err) =>
-    console.warn("[setup] local server registration deferred to next boot:", safeErrorMessage(err)),
+    errorDiagnostics.warn("api/modules/system/setup.controller", "[setup] local server registration deferred to next boot:", safeErrorMessage(err), err),
   );
 
   // The admin's personal org (org_<id>) is created by provisionUser, so record
@@ -461,7 +463,7 @@ export async function upgradeToAuth(c: Context) {
   // non-loopback peer can never bootstrap the first admin.
   const gate = await zeroAuthAllowed(c);
   if (!gate.ok) {
-    console.warn(`[upgradeToAuth] refused: ${gate.reason}`);
+    errorDiagnostics.warn("api/modules/system/setup.controller", `[upgradeToAuth] refused: ${gate.reason}`);
     return c.json(
       { error: "Auth upgrade is only available from a loopback zero-auth (desktop) instance." },
       400,
@@ -559,7 +561,7 @@ export async function upgradeToAuth(c: Context) {
         invalidatePlatformTransport();
       }
     } catch (err) {
-      console.warn("[upgradeToAuth] platform mailbox warm-up failed:", err);
+      errorDiagnostics.warn("api/modules/system/setup.controller", "[upgradeToAuth] platform mailbox warm-up failed:", err);
     }
   }
 

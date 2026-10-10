@@ -21,6 +21,8 @@
  *   - dependencies   on success, fire jobs whose dependsOn is now all-green.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics, reportError } from "@repo/core/diagnostics";
+import { enrichErrorContext } from "@repo/core/diagnostics/node";
 import { repos, type Job, type JobRun } from "@repo/db";
 import { deferBackgroundWork } from "../../lib/background-work";
 import { assertNativeJobs } from "../../native/execution-policy";
@@ -163,6 +165,7 @@ async function executeAttempt(
             const r = await runOnServer(organizationId, sid, command, (e) => publish(`[${sid}] ${e.message}`, e.level), cfg.timeoutMs);
             return { sid, code: r.code, output: r.output };
           } catch (err) {
+            observeCaughtError(err, "platform/engine/modules/jobs/job-command");
             const msg = safeErrorMessage(err);
             publish(`[${sid}] ${msg}`, "error");
             return { sid, code: null, output: msg };
@@ -183,6 +186,7 @@ async function executeAttempt(
           error: code === null ? "Command failed without an exit status" : `Command exited with code ${code}`,
         };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/jobs/job-command");
     const message = safeErrorMessage(err);
     publish(message, "error");
     return { status: "failed", output: message, error: message };
@@ -200,9 +204,10 @@ async function runLoop(row: Job, run: JobRun): Promise<void> {
   const maxAttempts = Math.max(1, cfg.retry?.maxAttempts ?? 1);
   const backoffMs = Math.max(0, (cfg.retry?.backoffSeconds ?? 0) * 1000);
   const startedMs = Date.now();
-  const organizationId = await commandTargets(cfg).then(targets => targets.organizationId).catch(() => null);
+  const organizationId = await commandTargets(cfg).then(targets => targets.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/jobs/job-command"); return null; });
 
   await emitJobRun(row, run.id, "running", organizationId);
+  enrichErrorContext({ jobId: row.key, runId: run.id, organizationId: organizationId ?? undefined });
 
   let finalStatus: JobRunState = "failed";
   let exitCode: number | undefined;
@@ -231,6 +236,10 @@ async function runLoop(row: Job, run: JobRun): Promise<void> {
   }
 
   const durationMs = Date.now() - startedMs;
+  if (finalStatus === "failed") reportError(lastError ?? "Job command failed", {
+    kind: "background", component: "job-command", jobId: row.key, runId: run.id,
+    organizationId: organizationId ?? undefined, durationMs, attempt: attemptsUsed, handled: true,
+  });
   await finishRunRow(run.id, row.key, {
     status: finalStatus,
     durationMs,
@@ -244,8 +253,8 @@ async function runLoop(row: Job, run: JobRun): Promise<void> {
   try {
     jobRunBus.publish(run.id, { type: "complete", status: finalStatus, error: lastError });
   } catch (err) {
-    console.error(
-      `[job] ${row.key} run ${run.id}: terminal SSE publish failed: ${safeErrorMessage(err)}`,
+    errorDiagnostics.error("platform/engine/modules/jobs/job-command",
+      `[job] ${row.key} run ${run.id}: terminal SSE publish failed: ${safeErrorMessage(err)}`, err,
     );
   }
 
@@ -293,12 +302,12 @@ async function finishRunRow(runId: string, jobKey: string, data: FinishData): Pr
       await repos.jobRun.finish(runId, attempt);
       return;
     } catch (err) {
-      console.error(
-        `[job] ${jobKey} run ${runId}: finish write rejected: ${safeErrorMessage(err)}`,
+      errorDiagnostics.error("platform/engine/modules/jobs/job-command",
+        `[job] ${jobKey} run ${runId}: finish write rejected: ${safeErrorMessage(err)}`, err,
       );
     }
   }
-  console.error(
+  errorDiagnostics.error("platform/engine/modules/jobs/job-command",
     `[job] ${jobKey} run ${runId}: could not record the terminal status — the row is left "running" for the boot sweep to reconcile`,
   );
 }
@@ -327,7 +336,7 @@ export async function startCommandRun(
   const single = primaryServerId(cfg);
   const run = await repos.jobRun.start({ jobId: row.key, kind: "custom", trigger, serverId: single, serverIds: resolveServerIds(cfg) });
   void deferBackgroundWork(() => runLoop(row, run)).catch((err) =>
-      console.error(`[job] ${row.key} run failed:`, safeErrorMessage(err)),
+      errorDiagnostics.error("platform/engine/modules/jobs/job-command", `[job] ${row.key} run failed:`, safeErrorMessage(err), err),
   );
   return run.id;
 }
@@ -429,7 +438,7 @@ async function emitJobRun(
       payload,
     });
   } catch (err) {
-    console.warn(`[job] notify failed for ${row.key}: ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/modules/jobs/job-command", `[job] notify failed for ${row.key}: ${safeErrorMessage(err)}`, err);
   }
 }
 
@@ -458,6 +467,6 @@ async function fireDependents(jobKey: string, organizationId: string): Promise<v
       if (greens.every(Boolean)) await startCommandRun(dep, "dependency");
     }
   } catch (err) {
-    console.warn(`[job] dependency dispatch failed for ${jobKey}: ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/modules/jobs/job-command", `[job] dependency dispatch failed for ${jobKey}: ${safeErrorMessage(err)}`, err);
   }
 }

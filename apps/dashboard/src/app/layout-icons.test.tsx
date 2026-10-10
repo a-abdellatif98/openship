@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { runInNewContext } from "node:vm";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLOUD_ICON_BASE_URL, Icon, iconAssetUrl, outlineModern } from "@repo/ui/icons";
@@ -27,6 +28,7 @@ vi.mock("@/context/ModalContext", () => ({ ModalProvider: mocks.provider }));
 vi.mock("@/components/cloud-analytics", () => ({ CloudAnalytics: () => null }));
 vi.mock("@/components/network-error-handler", () => ({ NetworkErrorHandler: () => null }));
 vi.mock("@/components/desktop-chrome", () => ({ DesktopChrome: () => null }));
+vi.mock("@/components/instance/DesktopInstanceLinks", () => ({ DesktopInstanceLinks: () => null }));
 
 import RootLayout from "./layout";
 
@@ -86,4 +88,38 @@ describe("dashboard icon hosting", () => {
     vi.stubEnv("OPENSHIP_LOCAL_API_URL", "http://localhost:4999");
     expect(await iconSource()).toBe(iconAssetUrl(outlineModern["arrow-right"]));
   });
+});
+
+describe("dashboard diagnostic privacy", () => {
+  it.each([
+    { info: { selfHosted: false, deployMode: "docker" }, localApi: "", expected: true },
+    {
+      info: { selfHosted: true, deployMode: "docker", authMode: "cloud" },
+      localApi: "",
+      expected: false,
+    },
+    { info: { selfHosted: true, deployMode: "bare" }, localApi: "", expected: false },
+    { info: { selfHosted: false, deployMode: "desktop" }, localApi: "", expected: false },
+    {
+      info: { selfHosted: false, deployMode: "docker" },
+      localApi: "http://localhost:4999",
+      expected: false,
+    },
+    { info: null, localApi: "", expected: false },
+  ])(
+    "only enables collection for a positively identified Cloud dashboard: %j",
+    async ({ info, localApi, expected }) => {
+      mocks.deployment.mockResolvedValue(info);
+      mocks.runtimeTarget.selfHosted = false; // A Cloud account/target alone is insufficient.
+      vi.stubEnv("OPENSHIP_LOCAL_API_URL", localApi);
+      const html = renderToStaticMarkup(await RootLayout({ children: null }));
+      const script = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
+        .map((match) => match[1]!)
+        .find((script) => script.includes("__OPENSHIP_ERROR_REPORTING__"));
+      expect(script).toBeTruthy();
+      const window: { __OPENSHIP_ERROR_REPORTING__?: boolean } = {};
+      runInNewContext(script!, { window });
+      expect(window.__OPENSHIP_ERROR_REPORTING__).toBe(expected);
+    },
+  );
 });

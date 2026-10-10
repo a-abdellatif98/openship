@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { readSseTerminalEvent } from "@repo/core";
 import type {
   ExportSelection,
@@ -194,7 +195,7 @@ async function postTransferStream<T>(path: string, body: unknown): Promise<T> {
     signal: AbortSignal.timeout(TRANSFER_STREAM_TIMEOUT),
   });
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
+    const text = await response.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/lib/api/data-transfer"); return ""; });
     let parsed: unknown = text;
     try {
       parsed = JSON.parse(text);

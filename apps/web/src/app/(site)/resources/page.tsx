@@ -1,3 +1,4 @@
+import { reportCaughtError } from "@repo/core/diagnostics";
 import Link from "next/link";
 import { resourcesSource, type ResourceFrontmatter } from "@/lib/source";
 import type { Metadata } from "next";
@@ -29,7 +30,8 @@ function formatDate(raw: string): string {
       day: "numeric",
       year: "numeric",
     });
-  } catch {
+  } catch (error) {
+    reportCaughtError(error, "web/app/(site)/resources/page");
     return raw;
   }
 }

@@ -352,7 +352,7 @@
     "failed": "Falhou",
     "starting": "A iniciar",
     "restarting": "Reiniciando",
-    "unknown": "Desconhecido"
+    "unknown": "Estado indisponível"
   },
   "routingRetry": {
     "title": "O encaminhamento do domínio precisa de atenção",

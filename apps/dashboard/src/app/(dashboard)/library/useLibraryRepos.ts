@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useState, useEffect, useRef } from "react";
 import { GITHUB_SOURCES_CHANGED_EVENT, githubApi } from "@/lib/api";
 import type { GitHubRepo } from "@/context/GitHubContext";
@@ -121,7 +122,8 @@ export function useLibraryRepos(owner: string, enabled: boolean): LibraryReposSt
             totalPages: res.totalPages ?? 1,
           });
         })
-        .catch(() => {
+        .catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/library/useLibraryRepos");
           if (id !== reqId.current) return;
           setRepos([]);
           setMeta(EMPTY_META);

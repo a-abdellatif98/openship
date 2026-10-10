@@ -8,6 +8,7 @@
  *   3. the configured App JWT can read that same installation.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
 import { env, localGitHubAppConfiguration } from "@repo/platform/engine/config/env";
@@ -44,7 +45,7 @@ export async function claimLocalGitHubInstallation(
 
   // Peek before upstream calls so an invalid caller cannot burn the legitimate
   // user's state. The atomic consume below closes the concurrent replay window.
-  const binding = await repos.githubInstallState.find(state).catch(() => null);
+  const binding = await repos.githubInstallState.find(state).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.installation-claim"); return null; });
   if (
     !binding ||
     binding.userId !== ctx.userId ||
@@ -119,7 +120,7 @@ export async function claimLocalGitHubInstallation(
       // The durable claim already committed. Cache eviction is an optimization;
       // never report the installation as failed (and strand its consumed nonce)
       // merely because Redis was briefly unavailable.
-      console.warn(`[GitHub] installation cache invalidation failed: ${safeErrorMessage(error)}`);
+      errorDiagnostics.warn("platform/engine/modules/github/github.installation-claim", `[GitHub] installation cache invalidation failed: ${safeErrorMessage(error)}`, error);
     });
 
     await repos.auditEvent
@@ -139,13 +140,16 @@ export async function claimLocalGitHubInstallation(
           sourceId: customSource?.id ?? null,
         },
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.installation-claim");
+      });
 
     return {
       kind: "ok",
       installation: { id: installationId, login: account.login, type: account.type },
     };
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/github/github.installation-claim");
     return { kind: "failed", message: safeErrorMessage(error) };
   }
 }

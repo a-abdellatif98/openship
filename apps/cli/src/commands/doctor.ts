@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { exitCommand, rethrowCommandExit } from "../lib/command-exit";
 /**
  * `openship doctor` — diagnose and repair a local Openship instance.
@@ -121,7 +122,8 @@ function bunVersion(): string | null {
   if (embedded) return embedded;
   try {
     return execFileSync("bun", ["--version"], { encoding: "utf8", timeout: 3000 }).trim();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "cli/commands/doctor");
     return null;
   }
 }
@@ -140,6 +142,7 @@ async function remotePreflight(): Promise<void> {
     reachable = res.ok;
     checks.push({ name: "api", status: res.ok ? "pass" : "fail", detail: res.ok ? `reachable (${apiUrl})` : `HTTP ${res.status} from ${apiUrl}` });
   } catch (e) {
+    observeCaughtError(e, "cli/commands/doctor");
       rethrowCommandExit(e);
     checks.push({ name: "api", status: "fail", detail: `unreachable: ${(e as Error).message}` });
   }
@@ -278,7 +281,7 @@ async function interactiveDoctor(): Promise<void> {
     }
     if (action === "host-control") {
       const { verifyHostChannel } = await import("../lib/host-channel-preflight");
-      const report = await verifyHostChannel().catch(() => null);
+      const report = await verifyHostChannel().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "cli/commands/doctor"); return null; });
       if (report?.status === "fixed") log.success("Host control is reachable now.");
       else if (report?.status === "ok") log.success("Host control was already reachable.");
       // Anything else already printed its own diagnosis and the rule to paste.
@@ -292,7 +295,9 @@ async function interactiveDoctor(): Promise<void> {
     if (action === "open") {
       const url = readInstanceUrl();
       const target = url && !/^https?:\/\/localhost/i.test(url) ? url : `http://localhost:${dashboardPort()}`;
-      await open(target).catch(() => {});
+      await open(target).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "cli/commands/doctor");
+      });
       log.message(chalk.dim(`Opening ${target}`));
       continue;
     }

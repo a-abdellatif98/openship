@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { api, getApiBaseUrl } from "./client";
 import { endpoints } from "./endpoints";
 import type { ScanProjectResponse } from "./projects";
@@ -63,7 +64,7 @@ export const folderApi = {
       credentials: withCredentials ? "include" : "omit",
     });
     if (!res.ok) {
-      const detail = await res.text().catch(() => "");
+      const detail = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/lib/api/folder"); return ""; });
       throw new Error(`Upload failed (${res.status})${detail ? `: ${detail.slice(0, 200)}` : ""}`);
     }
   },

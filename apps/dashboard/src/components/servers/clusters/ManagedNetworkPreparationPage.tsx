@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -150,7 +151,7 @@ export function ManagedNetworkPreparationPage({ id }: { id: string }) {
       router.push(`/servers/networks/preparations/${next.id}`);
       navigating = true;
     } catch (err) {
-      const saved = await privateNetworksApi.managedPreparation(requestId).catch(() => null);
+      const saved = await privateNetworksApi.managedPreparation(requestId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/servers/clusters/ManagedNetworkPreparationPage"); return null; });
       if (saved?.id === requestId) {
         router.push(`/servers/networks/preparations/${saved.id}`);
         navigating = true;

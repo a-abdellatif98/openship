@@ -9,6 +9,7 @@
  *   4. Services discover each other by name (hostname = service name)
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos, type Deployment, type Domain, type Project, type Service } from "@repo/db";
 import { assertCloudDeploymentLimits } from "../../../lib/plan-guard";
@@ -482,13 +483,13 @@ export async function resolvePortOnlyEnvHost(
   organizationId: string,
   opts: { serverId?: string; cloudRuntime?: boolean } = {},
 ): Promise<{ host: string | null; reason?: string }> {
-  const stored = await resolveServerHost(organizationId, opts.serverId).catch(() => null);
+  const stored = await resolveServerHost(organizationId, opts.serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service"); return null; });
   if (stored && !isLoopbackHost(stored)) return { host: stored };
   if (opts.cloudRuntime) {
     return { host: null, reason: "the cloud runtime publishes no host port to dial" };
   }
   const edge = await resolveEdgeTargetHost(organizationId, { serverId: opts.serverId }).catch(
-    () => null,
+    (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service"); return null; },
   );
   if (edge?.host) return { host: edge.host };
   return {
@@ -848,6 +849,7 @@ async function prepareServiceRoutes(opts: {
       // certificate on the deploy that created it.
       ensured.push(withEnsuredDomainRecord(route, domainRecord));
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
       // Owned by another project / unclaimable → skip it entirely (NOT routed,
       // or we'd hijack their hostname). Domains are optional — never fatal.
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -990,6 +992,7 @@ async function deployComposeServicesUnlocked(
         await ensureGeneratedAppSecrets(project.id, template);
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
       logger.log(
         `Could not check this app's generated secrets: ${safeErrorMessage(err)}\n`,
         "warn",
@@ -1163,6 +1166,7 @@ async function deployComposeServicesUnlocked(
         await opts.system.ensureFeature("ssl", systemLog);
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
       const message = err instanceof Error ? err.message : "Unknown error";
       logger.log(
         `Edge/routing setup failed — deploy continues; services run and routing is retried later: ${message}\n`,
@@ -1239,6 +1243,7 @@ async function deployComposeServicesUnlocked(
         `live container inventory timed out after ${CARRIED_STATE_PREFLIGHT_TIMEOUT_MS / 1000}s`,
       );
     } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/deployments/compose/deploy.service");
       throw new Error(
         `Deployment preflight could not verify the active services on the target, so no service activation was started: ${safeErrorMessage(error)}`,
       );
@@ -1345,6 +1350,7 @@ async function deployComposeServicesUnlocked(
       fullyInspectedCarriedContainerIds.add(live.containerId);
       return live;
     } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/deployments/compose/deploy.service");
       throw new Error(
         `Deployment preflight could not inspect the active container ${containerId.slice(0, 12)}, so no service activation was started: ${safeErrorMessage(error)}`,
       );
@@ -1434,14 +1440,14 @@ async function deployComposeServicesUnlocked(
   // check (active.createdAt): a changed image/config (svc.updatedAt) or env
   // (env_var updatedAt) after the anchor → recreate; otherwise keep it running.
   const carryAnchorDep = project.activeDeploymentId
-    ? await findActiveDeployment(project).catch(() => null)
+    ? await findActiveDeployment(project).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service"); return null; })
     : null;
   const carryAnchor = carryAnchorDep?.createdAt ?? null;
   const carryProjectResources = resolveRuntimeResources(
     (carryAnchorDep?.meta as { resources?: ResourceConfig | null } | null)?.resources,
   );
   const carryEnvMeta = carryAnchor
-    ? await repos.project.listEnvVarChangeMeta(project.id, dep.environment).catch(() => [])
+    ? await repos.project.listEnvVarChangeMeta(project.id, dep.environment).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service"); return []; })
     : [];
   const carryProjectEnvChanged = carryEnvMeta.some(
     (m) => m.serviceId === null && carryAnchor !== null && m.updatedAt > carryAnchor,
@@ -1882,6 +1888,7 @@ async function deployComposeServicesUnlocked(
     try {
       assertValidGeneratedConfigFiles(files);
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
       throw new Error(
         `Service "${service.name}" has invalid generated config files: ${safeErrorMessage(err)}`,
       );
@@ -1912,6 +1919,7 @@ async function deployComposeServicesUnlocked(
         resolvedFiles.map((file) => ({ path: file.containerPath, content: file.content })),
       );
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
       throw new Error(
         `Service "${service.name}" has invalid resolved generated config files: ${safeErrorMessage(err)}`,
       );
@@ -2042,11 +2050,12 @@ async function deployComposeServicesUnlocked(
             },
           );
         } catch (err) {
+          observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
           throw new Error(
             `Service "${service.name}": could not preflight generated config ${file.containerPath}: ${safeErrorMessage(err)}`,
           );
         } finally {
-          await writer.rm(probePath).catch(() => undefined);
+          await writer.rm(probePath).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service"); return undefined; });
         }
       }
     });
@@ -2142,12 +2151,12 @@ async function deployComposeServicesUnlocked(
     } catch (allocationError) {
       if (hostPortTarget && allocations.length > 0) {
         await releaseNewPinnedHostPortClaims(hostPortTarget, allocations).catch((releaseError) =>
-          logger.log(
+          { observeCaughtError(releaseError, "platform/engine/modules/deployments/compose/deploy.service"); return logger.log(
             `Warning: failed to release unrouted host-port reservations for "${service.name}": ` +
               `${safeErrorMessage(releaseError)}\n`,
             "warn",
             { serviceName: service.name },
-          ),
+          ); },
         );
       }
       throw allocationError;
@@ -2186,16 +2195,17 @@ async function deployComposeServicesUnlocked(
         );
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
       if (hostPortTarget) {
         const allocations = [...preparedHostPortsByServiceId.values()].flatMap(
           (prepared) => prepared.allocations,
         );
         await releaseNewPinnedHostPortClaims(hostPortTarget, allocations).catch((releaseError) =>
-          logger.log(
+          { observeCaughtError(releaseError, "platform/engine/modules/deployments/compose/deploy.service"); return logger.log(
             `Warning: failed to release coordinated host-port reservations after preflight: ` +
               `${safeErrorMessage(releaseError)}\n`,
             "warn",
-          ),
+          ); },
         );
       }
       throw new Error(
@@ -2218,11 +2228,11 @@ async function deployComposeServicesUnlocked(
       if (!prepared || prepared.allocations.length === 0) continue;
       await releaseNewPinnedHostPortClaims(hostPortTarget, prepared.allocations).catch(
         (releaseError) =>
-          logger.log(
+          { observeCaughtError(releaseError, "platform/engine/modules/deployments/compose/deploy.service"); return logger.log(
             `Warning: failed to release unused coordinated host-port reservations: ` +
               `${safeErrorMessage(releaseError)}\n`,
             "warn",
-          ),
+          ); },
       );
     }
   };
@@ -2336,7 +2346,9 @@ async function deployComposeServicesUnlocked(
                 hostPort: carriedHostPort,
                 hostPorts: carriedHostPorts,
               })
-              .catch(() => {});
+              .catch((diagnosticFailure) => {
+                observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service");
+              });
           }
           // Decoupled single-service add on a mesh runtime (cloud): this peer is
           // carried (not redeployed), so it's absent from the group's in-memory
@@ -2490,6 +2502,7 @@ async function deployComposeServicesUnlocked(
             reason: OUT_OF_SCOPE_SKIP_REASON,
           })
           .catch((err) => {
+            observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
             // Bookkeeping for a service we are deliberately not touching must never be the
             // thing that fails the deploy — that is the whole shape of the bug this closes.
             logger.log(
@@ -2695,6 +2708,7 @@ async function deployComposeServicesUnlocked(
             outputDirectory: "",
           });
         } catch (err) {
+          observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
           // The promote's validation is a real gate: the release root does not exist,
           // or exists and is empty. Both mean every request to this sub-app would
           // 404, so this service FAILS rather than deploying green — the same shape
@@ -2772,6 +2786,7 @@ async function deployComposeServicesUnlocked(
                 ...(routeContext.proxy ? { proxy: routeContext.proxy } : {}),
               });
             } catch (err) {
+              observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
               composeRouteWarnings.push(
                 `${route.hostname}: ${err instanceof Error ? err.message : "route registration failed"}`,
               );
@@ -2804,6 +2819,7 @@ async function deployComposeServicesUnlocked(
                 serviceName: svc.name,
               });
               await routeContext.trackedSsl.provisionCert(route.hostname).catch((err) => {
+                observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
                 logger.log(
                   `SSL provisioning failed for ${route.hostname} (route is up on HTTP, retry from ` +
                     `the Domains tab): ${safeErrorMessage(err)}\n`,
@@ -3231,6 +3247,7 @@ async function deployComposeServicesUnlocked(
               await runtime.destroy(deployedContainerId);
               deployedContainerCleaned = true;
             } catch (destroyErr) {
+              observeCaughtError(destroyErr, "platform/engine/modules/deployments/compose/deploy.service");
               const destroyMessage =
                 destroyErr instanceof Error ? destroyErr.message : "Unknown error";
               logger.log(
@@ -3315,6 +3332,7 @@ async function deployComposeServicesUnlocked(
             svc.id,
             resolveReadinessGate(
               (svc.advanced as ComposeAdvanced | null)?.readiness ?? project.readiness,
+              { managedCloud: cloudHosted },
             ),
           );
         }
@@ -3373,6 +3391,7 @@ async function deployComposeServicesUnlocked(
                 },
               );
             } catch (edgeErr) {
+              observeCaughtError(edgeErr, "platform/engine/modules/deployments/compose/deploy.service");
               const edgeMessage = edgeErr instanceof Error ? edgeErr.message : "Unknown error";
               logger.log(
                 `Warning: could not sync managed edge proxy for ${managedRoute.hostname}: ${edgeMessage}. ` +
@@ -3402,7 +3421,9 @@ async function deployComposeServicesUnlocked(
             deployedContainerId &&
             !deployedContainerCleaned
           ) {
-            await runtime.destroy(deployedContainerId).catch(() => {});
+            await runtime.destroy(deployedContainerId).catch((diagnosticFailure) => {
+              observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service");
+            });
             deployedContainerCleaned = true;
           }
           if (hostPortTarget && serviceHostPortAllocations.length > 0) {
@@ -3413,12 +3434,12 @@ async function deployComposeServicesUnlocked(
                 hostPortTarget,
                 serviceHostPortAllocations,
               ).catch((releaseError) =>
-                logger.log(
+                { observeCaughtError(releaseError, "platform/engine/modules/deployments/compose/deploy.service"); return logger.log(
                   `Warning: failed to release unused host-port reservations for cancelled service "${svc.name}": ` +
                     `${safeErrorMessage(releaseError)}\n`,
                   "warn",
                   { serviceName: svc.name },
-                ),
+                ); },
               );
             } else {
               // Cancellation can be observed after route registration. Even if
@@ -3490,6 +3511,7 @@ async function deployComposeServicesUnlocked(
               await runtime.destroy(deployedContainerId);
               deployedContainerCleaned = true;
             } catch (destroyErr) {
+              observeCaughtError(destroyErr, "platform/engine/modules/deployments/compose/deploy.service");
               hostPortClaimReapSafe = false;
               const destroyMessage =
                 destroyErr instanceof Error ? destroyErr.message : "Unknown error";
@@ -3511,12 +3533,12 @@ async function deployComposeServicesUnlocked(
                 hostPortTarget,
                 serviceHostPortAllocations,
               ).catch((releaseError) =>
-                logger.log(
+                { observeCaughtError(releaseError, "platform/engine/modules/deployments/compose/deploy.service"); return logger.log(
                   `Warning: failed to release unrouted host-port reservations for "${svc.name}": ` +
                     `${safeErrorMessage(releaseError)}\n`,
                   "warn",
                   { serviceName: svc.name },
-                ),
+                ); },
               );
             } else {
               // Once activation returned, retain the reservation even when the
@@ -3616,12 +3638,10 @@ async function deployComposeServicesUnlocked(
   // service inline as it was created would fail the deploy for a stack that
   // converges seconds later. Watching them together, after the stack is whole,
   // separates "bouncing hard" from "waited, then settled".
-  // Gated on the opt-in readiness gate, PER SERVICE: a service's own
-  // `advanced.readiness` wins, else the project's. resolveReadinessGate is the one
-  // place that policy lives, so this and the single-app path can't drift. Default
-  // is OFF — the stack reports what docker reported, while each service's own
-  // Docker HEALTHCHECK (`advanced.healthcheck`) keeps running regardless, since
-  // the daemon owns that one and it never gates a deploy.
+  // Cloud startup verification is automatic for every started container.
+  // Optional service readiness overrides project readiness, but cannot turn a
+  // confirmed Cloud crash into a successful service. Check the complete stack
+  // together so services have a chance to settle after their peers start.
   const watched = stabilityTargets.filter(
     (t) => t.serviceId && readinessByServiceId.get(t.serviceId)?.stabilization.enabled,
   );
@@ -3661,7 +3681,11 @@ async function deployComposeServicesUnlocked(
     const windowMs = Math.max(
       ...watched.map((t) => readinessByServiceId.get(t.serviceId!)!.stabilization.windowMs),
     );
-    const findings = await verifyDeployedContainers(runtime, watched, logger, { windowMs });
+    const findings = await verifyDeployedContainers(runtime, watched, logger, {
+      windowMs,
+      creditElapsed: !cloudHosted,
+      onUnverified: (detail) => stabilityWarnings.push(detail),
+    });
     for (const finding of findings) {
       if (finding.verdict.ok && finding.verdict.warning) {
         stabilityWarnings.push(`${finding.target.serviceName}: ${finding.verdict.warning}`);
@@ -3674,7 +3698,7 @@ async function deployComposeServicesUnlocked(
       (f) =>
         !f.verdict.ok &&
         f.target.serviceId &&
-        readinessByServiceId.get(f.target.serviceId)?.onFailure === "fail",
+        readinessByServiceId.get(f.target.serviceId)?.stabilization.onFailure === "fail",
     );
     for (const finding of findings.filter((f) => !f.verdict.ok && !vetoing.includes(f))) {
       // "warn": say what didn't hold, but leave the service's deploy result alone
@@ -3819,7 +3843,7 @@ async function deployComposeServicesUnlocked(
         if (step.once && step.persistAs) {
           const existing = await repos.project
             .getEnvMap(project.id, dep.environment, service.id)
-            .catch(() => ({}) as Record<string, string>);
+            .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service"); return ({}) as Record<string, string>; });
           if (existing[step.persistAs.key]) continue;
         }
 
@@ -3837,7 +3861,8 @@ async function deployComposeServicesUnlocked(
               await exec.exec(test, { timeout: 15_000 });
               ready = true;
               break;
-            } catch {
+            } catch (diagnosticFailure) {
+              observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service");
               await new Promise((r) => setTimeout(r, interval));
             }
           }
@@ -3883,6 +3908,7 @@ async function deployComposeServicesUnlocked(
           logger.log(`Prepared ${step.capture} → ${step.persistAs.key}\n`, "info");
         }
       } catch (err) {
+        observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
         const detail = err instanceof Error ? err.message : String(err);
         if (step.mustSucceed) {
           // Critical init failed → fail the deploy. Return BEFORE the container
@@ -3937,7 +3963,7 @@ async function deployComposeServicesUnlocked(
     if (withContainer.length === 0) return undefined;
     const domainRows = needsDomainMap
       ? [...domainByHostname.values()]
-      : await repos.domain.listByProject(project.id).catch(() => []);
+      : await repos.domain.listByProject(project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service"); return []; });
     const candidates = enabled.filter((svc) => withContainer.some((r) => r.serviceId === svc.id));
     const primaryId = pickPrimaryServiceId(candidates, domainRows);
     return (
@@ -3956,6 +3982,7 @@ async function deployComposeServicesUnlocked(
     try {
       await runtime.finalizeServiceGroup(group, logger.callback);
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
       logger.log(
         `Warning: service mesh finalize failed: ${err instanceof Error ? err.message : String(err)}\n`,
         "warn",
@@ -3981,6 +4008,7 @@ async function deployComposeServicesUnlocked(
       await applyCloudRouting({ project, routing: opts.routing, defs: services,
         liveRows: await repos.service.listByDeployment(dep.id) });
     } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/deployments/compose/deploy.service");
       composeRouteWarnings.push(`Cloud routing: ${safeErrorMessage(error)}`);
     }
   }
@@ -4103,6 +4131,7 @@ async function deployComposeServicesUnlocked(
             ...(routeContext.proxy ? { proxy: routeContext.proxy } : {}),
           });
         } catch (err) {
+          observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
           composeRouteWarnings.push(
             `${route.hostname}: ${err instanceof Error ? err.message : "route registration failed"}`,
           );
@@ -4123,6 +4152,7 @@ async function deployComposeServicesUnlocked(
           await ensureManagedEdgeProxy(routeContext.organizationId, route.managedSubdomain, {
             serverId: routeContext.serverId,
           }).catch((edgeErr) => {
+            observeCaughtError(edgeErr, "platform/engine/modules/deployments/compose/deploy.service");
             logger.log(
               `Warning: could not sync managed edge proxy for ${route.hostname}: ` +
                 `${safeErrorMessage(edgeErr)}. The app is live; this only affects that free URL.\n`,
@@ -4135,6 +4165,7 @@ async function deployComposeServicesUnlocked(
         // provider records as Action Required — never a failed deploy.
         if (route.provisionSsl) {
           await routeContext.trackedSsl.provisionCert(route.hostname).catch((err) => {
+            observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
             logger.log(
               `SSL provisioning failed for ${route.hostname} (route is up on HTTP, retry from ` +
                 `the Domains tab): ${safeErrorMessage(err)}\n`,
@@ -4144,6 +4175,7 @@ async function deployComposeServicesUnlocked(
         }
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
       // Best-effort like every routing step: the project's own domains are optional and
       // a failure here never fails a deploy (see domains-never-fail-deploy).
       logger.log(
@@ -4295,6 +4327,7 @@ async function deployComposeServicesUnlocked(
         );
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
       logger.log(
         `Single-domain composition skipped: ${err instanceof Error ? err.message : "error"} (services remain on their own routes).\n`,
         "warn",
@@ -4312,6 +4345,7 @@ async function deployComposeServicesUnlocked(
         mutated = true;
         logger.log(`Stopped disabled service container (${previous.containerId.slice(0, 12)}).\n`);
       } catch (err) {
+        observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
         hostPortClaimReapSafe = false;
         const message = err instanceof Error ? err.message : "Unknown error";
         logger.log(`Warning: failed to stop disabled service container: ${message}\n`, "warn");
@@ -4336,7 +4370,7 @@ async function deployComposeServicesUnlocked(
     // container). This is what made adding a service to a single-app project
     // stop the service it had just started.
     const prevWasServices = prevDep
-      ? (await repos.service.listByDeployment(prevDep.id).catch(() => [])).length > 0
+      ? (await repos.service.listByDeployment(prevDep.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/deploy.service"); return []; })).length > 0
       : false;
     const handledContainerIds = new Set(
       previousServiceDeps.map((row) => row.containerId).filter((id): id is string => !!id),
@@ -4351,6 +4385,7 @@ async function deployComposeServicesUnlocked(
         mutated = true;
         logger.log(`Stopped previous single-app container (${prevContainerId.slice(0, 12)}).\n`);
       } catch (err) {
+        observeCaughtError(err, "platform/engine/modules/deployments/compose/deploy.service");
         hostPortClaimReapSafe = false;
         const message = err instanceof Error ? err.message : "Unknown error";
         logger.log(`Warning: failed to stop previous single-app container: ${message}\n`, "warn");
@@ -4419,6 +4454,7 @@ async function deployComposeServicesUnlocked(
           );
         }
       } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/deployments/compose/deploy.service");
         hostPortClaimWarning =
           "Host-port reservation cleanup was deferred; uncertain reservations were retained safely.";
         logger.log(`${hostPortClaimWarning} ${safeErrorMessage(error)}\n`, "warn");

@@ -25,6 +25,49 @@ function files(...names: string[]): RepoFile[] {
   });
 }
 
+describe("repository-owned runtime defaults", () => {
+  it.each([
+    {
+      manifest: "next.config.js",
+      content: "export default {}",
+      packageJson: {
+        dependencies: { next: "^16" },
+        scripts: { start: "next start", build: "next build" },
+      },
+    },
+    {
+      manifest: "manage.py",
+      content: "from django.core.management import execute_from_command_line",
+      packageJson: { scripts: { start: "vite", build: "vite build" } },
+    },
+    {
+      manifest: "go.mod",
+      content: "module example.com/api",
+      packageJson: undefined,
+    },
+  ])(
+    "uses the Dockerfile for $manifest",
+    ({ manifest, content, packageJson }) => {
+      const result = detectStack(
+        files("Dockerfile", manifest, "package.json", "bun.lock"),
+        packageJson,
+        {
+          [manifest]: content,
+          Dockerfile: 'FROM scratch\nEXPOSE 8080\nENTRYPOINT ["/app"]',
+        },
+      );
+      expect(result).toMatchObject({
+        stack: "docker",
+        projectType: "docker",
+        installCommand: "",
+        buildCommand: "",
+        startCommand: "",
+        port: 8080,
+      });
+    },
+  );
+});
+
 // ─── Stack identification - table-driven across every supported framework ────
 
 interface StackCase {
@@ -905,14 +948,14 @@ describe("detectStack - port detection", () => {
     expect(result.port).toBe(9000);
   });
 
-  it("script port wins over Dockerfile EXPOSE", () => {
+  it("Dockerfile EXPOSE wins over scripts that the image does not run", () => {
     const result = detectStack(files("package.json", "Dockerfile"), {
       dependencies: { express: "^5.0.0" },
       scripts: { start: "node server.js --port 7000" },
     }, {
       Dockerfile: "EXPOSE 9000",
     });
-    expect(result.port).toBe(7000);
+    expect(result.port).toBe(9000);
   });
 
   it("framework default for Astro is 4321", () => {
@@ -948,12 +991,21 @@ describe("detectStack - output directory and build image", () => {
     expect(result.port).toBe(3000);
   });
 
+  it("honors an explicit manager over stale lockfiles and carries Bun's version", () => {
+    const result = detectStack(files("package.json", "next.config.js", "pnpm-lock.yaml"), {
+      packageManager: "bun@1.2.10",
+      dependencies: { next: "^15.0.0" },
+    });
+    expect(result.packageManager).toBe("bun");
+    expect(result.buildImage).toBe("oven/bun:1.2.10");
+  });
+
   it("bun build image swaps to oven/bun for JS/TS stacks", () => {
     const result = detectStack(files("package.json", "next.config.js", "bun.lockb"), {
       dependencies: { next: "^15.0.0" },
     });
     expect(result.packageManager).toBe("bun");
-    expect(result.buildImage).toBe("oven/bun:latest");
+    expect(result.buildImage).toBe("oven/bun:1.3.14");
   });
 
   it("bun does NOT override build image for non-JS stacks", () => {
@@ -1524,5 +1576,45 @@ describe("Ruby runtime version detection", () => {
     expect(detectStack(files("Dockerfile", ".ruby-version"), undefined, {
       ".ruby-version": "3.4.1",
     })).toMatchObject({ stack: "docker", buildImage: "ubuntu:22.04" });
+  });
+});
+
+
+describe("repository Node engine compatibility", () => {
+  it("detects a plain Node server with its declared engine without project overrides", () => {
+    const result = detectStack(files("package.json", "server.mjs", "public/"), {
+      scripts: { start: "node server.mjs" },
+      engines: { node: ">=24" },
+    });
+    expect(result.stack).toBe("node");
+    expect(result.startCommand).toContain("start");
+    expect(result.buildImage).toBe("node:24");
+  });
+});
+
+describe("explicit deployment command precedence", () => {
+  it("preserves native configuration over imported Vercel commands", () => {
+    const result = detectStack(
+      files("package.json", "openship.json", "vercel.json"),
+      {
+        scripts: { start: "node server.mjs", build: "echo default" },
+      },
+      {
+        "openship.json": JSON.stringify({ buildCommand: "echo native" }),
+        "vercel.json": JSON.stringify({ buildCommand: "echo imported" }),
+      },
+    );
+    expect(result.buildCommand).toBe("echo native");
+  });
+  it("honors explicitly disabled Vercel build and install steps", () => {
+    const result = detectStack(
+      files("package.json", "vercel.json"),
+      {
+        scripts: { start: "node server.mjs", build: "echo must-not-run" },
+      },
+      { "vercel.json": JSON.stringify({ installCommand: "", buildCommand: "" }) },
+    );
+    expect(result.installCommand).toBe(":");
+    expect(result.buildCommand).toBe(":");
   });
 });

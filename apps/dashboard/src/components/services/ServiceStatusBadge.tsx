@@ -46,7 +46,8 @@ export function getServiceStatus(
   container?: ServiceContainer,
   checking = false,
 ): string {
-  return container?.status ?? (checking ? "checking" : service.enabled ? "unknown" : "disabled");
+  if (checking && (!container || container.status === "unknown")) return "checking";
+  return container?.status ?? (service.enabled ? "unknown" : "disabled");
 }
 
 /** Shared by the service list and detail view so pending and unknown agree. */

@@ -17,6 +17,7 @@
  * the loop window, so it is logged rather than swallowed silently.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { safeErrorMessage } from "@repo/core";
 import { repos } from "@repo/db";
 import { PLATFORM_LOCAL_PART } from "@repo/platform/engine/modules/mail/admin/platform-mailbox.service";
@@ -34,7 +35,7 @@ export async function getInstanceSmtpSenders(): Promise<string[]> {
       if (address.includes("@")) out.add(address);
     }
   } catch (err) {
-    console.warn(`[mail:inbound] could not read instance SMTP sender: ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/modules/mail/inbound/senders", `[mail:inbound] could not read instance SMTP sender: ${safeErrorMessage(err)}`, err);
   }
 
   try {
@@ -43,7 +44,7 @@ export async function getInstanceSmtpSenders(): Promise<string[]> {
       if (domain) out.add(`${PLATFORM_LOCAL_PART}@${domain}`);
     }
   } catch (err) {
-    console.warn(`[mail:inbound] could not read mail server domains: ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/modules/mail/inbound/senders", `[mail:inbound] could not read mail server domains: ${safeErrorMessage(err)}`, err);
   }
 
   return [...out];

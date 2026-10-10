@@ -24,6 +24,7 @@
  * audit log and the operator's Slack tell the same story.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   repos,
   incidentSeverity,
@@ -156,7 +157,7 @@ async function announce(opts: {
       // The alert matters more than its audit cross-link, so this never blocks the
       // notification — it just loses the "view in audit log" deep link. Logged because
       // silently degrading to a linkless alert looked identical to a working one.
-      console.error(`[monitoring] audit event for ${opts.eventType} failed: ${safeErrorMessage(err)}`);
+      errorDiagnostics.error("platform/engine/modules/monitoring/incident.service", `[monitoring] audit event for ${opts.eventType} failed: ${safeErrorMessage(err)}`, err);
       return undefined;
     });
 
@@ -181,8 +182,8 @@ async function announce(opts: {
   await repos.serviceIncident
     .markNotified(opts.incident.id)
     .catch((err) =>
-      console.error(
-        `[monitoring] incident ${opts.incident.id} notified-marker failed (may re-notify): ${safeErrorMessage(err)}`,
+      errorDiagnostics.error("platform/engine/modules/monitoring/incident.service",
+        `[monitoring] incident ${opts.incident.id} notified-marker failed (may re-notify): ${safeErrorMessage(err)}`, err,
       ),
     );
 }

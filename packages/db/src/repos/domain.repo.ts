@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   eq,
   and,
@@ -208,7 +209,7 @@ export function createDomainRepo(db: Database) {
     // shape) instead, which is strictly better than throwing.
     const created = await db.query.domain
       .findFirst({ where: eq(domain.id, row.id) })
-      .catch(() => undefined);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "db/repos/domain.repo"); return undefined; });
     return created ?? ({ ...row, createdAt: new Date(), updatedAt: new Date() } as Domain);
   }
 

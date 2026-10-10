@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { AppError } from "@repo/core";
 import { cloudRuntimeTarget } from "../../config/env";
 import { readCloudJson } from "./transport";
@@ -18,7 +19,7 @@ export async function fetchCloudConnection(path: string, init?: RequestInit): Pr
     const cause =
       error instanceof Error ? (error.cause as { code?: unknown } | undefined)?.code : undefined;
     if (typeof cause === "string" && /^[A-Z0-9_]+$/.test(cause))
-      console.warn(`[cloud-connect] ${path} failed: ${cause}`);
+      errorDiagnostics.warn("platform/engine/lib/cloud/connection", `[cloud-connect] ${path} failed: ${cause}`, error);
     throw new AppError(
       timeout.aborted
         ? "Openship Cloud did not respond in time. Start a new connection attempt."

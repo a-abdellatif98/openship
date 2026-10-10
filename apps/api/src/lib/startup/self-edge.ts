@@ -14,6 +14,7 @@
  * elsewhere.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { env } from "@repo/platform/engine/config/env";
 import { pinnedEdgeImage, withPinnedEdgeImage } from "@repo/platform/engine/lib/edge-image";
 import { edgeProviderOptions } from "@repo/platform/engine/lib/edge-provider-options";
@@ -199,7 +200,8 @@ async function runEnsure(
       let siteCount = 0;
       try {
         siteCount = (await importSites(executor, status)).sites.length;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "api/lib/startup/self-edge");
         /* best-effort site count only */
       }
       const sitesNote = siteCount > 0 ? ` serving ${siteCount} site${siteCount === 1 ? "" : "s"}` : "";

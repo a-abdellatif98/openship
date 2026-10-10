@@ -19,6 +19,7 @@
  * segments.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { repos, type BackupDestination } from "@repo/db";
@@ -133,6 +134,7 @@ export async function hydrateServerAdapterRow(params: {
           extraRoots: [homedir()],
         });
       } catch (err) {
+        observeCaughtError(err, "platform/engine/modules/backup-destinations/hydrate-server");
         throw new Error(
           `Server ${server.id} sshKeyPath rejected: ${
             safeErrorMessage(err)
@@ -143,6 +145,7 @@ export async function hydrateServerAdapterRow(params: {
       try {
         keyMaterial = await readFile(keyPath, "utf-8");
       } catch (err) {
+        observeCaughtError(err, "platform/engine/modules/backup-destinations/hydrate-server");
         throw new Error(
           `Failed to read SSH key at ${keyPath} for server ${server.id}: ${
             safeErrorMessage(err)

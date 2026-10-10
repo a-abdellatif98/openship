@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Value } from "@sinclair/typebox/value";
 import { repos } from "@repo/db";
 import { AppError, safeErrorMessage } from "@repo/core";
@@ -46,7 +47,7 @@ export async function mergeCloudServerInventory(ctx: ExecutionContext, local: Se
   } catch (error) {
     // Cloud being offline must not hide the user's own servers. Never persist an
     // empty result or interpret a failed read as deletion of a Cloud resource.
-    console.warn("[cloud-inventory] Could not list managed servers:", safeErrorMessage(error));
+    errorDiagnostics.warn("platform/engine/lib/cloud/server-inventory", "[cloud-inventory] Could not list managed servers:", safeErrorMessage(error), error);
     return local;
   }
 }

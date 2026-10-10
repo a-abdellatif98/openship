@@ -18,6 +18,7 @@
  * cannot talk to its database.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { SYSTEM, safeErrorMessage } from "@repo/core";
 
 /**
@@ -99,6 +100,7 @@ export async function runReleasePhase(opts: {
       await run(command);
       signal?.throwIfAborted();
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/release-phase");
       signal?.throwIfAborted();
       const message = safeErrorMessage(err);
       log(`${marker} failed: ${message}`, "error");

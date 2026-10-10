@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSSE } from "@repo/core";
 import { ApiError, getApiBaseUrl, getApiErrorMessage } from "@/lib/api/client";
@@ -62,7 +63,7 @@ export function useMonitorStream(serverId: string | null, enabled = true): UseMo
         throw new ApiError(
           response.status,
           response.statusText,
-          await response.json().catch(() => null),
+          await response.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/hooks/useMonitorStream"); return null; }),
         );
       if (!response.body) throw new Error("Live monitoring is unavailable. Retry to reconnect.");
       setConnection({ serverId, connected: true, error: null });

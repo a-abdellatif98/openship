@@ -10,6 +10,7 @@
  * applies localOnly + auth).
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import { AppError, isRelayProviderId, RELAY_PROVIDER_IDS } from "@repo/core";
 import { env } from "@repo/platform/engine/config/index";
@@ -40,7 +41,7 @@ function deployError(c: Context, err: unknown) {
   const message = err instanceof Error ? err.message : "Failed to start deploy";
   // Answered here, so `app.onError` never logs it — same blind spot as the other two
   // self-answered mail 500s.
-  console.error(`[WEBMAIL ERROR] ${requestTag(c)}`, err);
+  errorDiagnostics.error("api/modules/mail/webmail/webmail.controller", `[WEBMAIL ERROR] ${requestTag(c)}`, err);
   return c.json({ error: message }, 500);
 }
 
@@ -88,7 +89,7 @@ export async function startDeployAsProjectHandler(c: Context) {
   if (env.CLOUD_MODE) return c.json({ error: "Not available" }, 404);
 
   const ctx = getRequestContext(c);
-  const body = await c.req.json().catch(() => ({}) as Record<string, unknown>);
+  const body = await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/webmail/webmail.controller"); return ({}) as Record<string, unknown>; });
   const mailServerId = body.mailServerId as string | undefined;
   const hostname = (body.hostname as string | undefined)?.trim().toLowerCase();
   const targetBody = body.target as { kind?: string; serverId?: string } | undefined;
@@ -120,6 +121,7 @@ export async function startDeployAsProjectHandler(c: Context) {
     });
     return c.json({ deploymentId, projectId });
   } catch (err) {
+    observeCaughtError(err, "api/modules/mail/webmail/webmail.controller");
     return deployError(c, err);
   }
 }
@@ -145,7 +147,7 @@ export async function startExternalDeployAsProjectHandler(c: Context) {
   if (env.CLOUD_MODE) return c.json({ error: "Not available" }, 404);
 
   const ctx = getRequestContext(c);
-  const body = await c.req.json().catch(() => ({}) as Record<string, unknown>);
+  const body = await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/webmail/webmail.controller"); return ({}) as Record<string, unknown>; });
 
   const hostname = (body.hostname as string | undefined)?.trim().toLowerCase();
   if (!hostname || !HOSTNAME_RE.test(hostname))
@@ -190,6 +192,7 @@ export async function startExternalDeployAsProjectHandler(c: Context) {
     });
     return c.json({ deploymentId, projectId });
   } catch (err) {
+    observeCaughtError(err, "api/modules/mail/webmail/webmail.controller");
     return deployError(c, err);
   }
 }

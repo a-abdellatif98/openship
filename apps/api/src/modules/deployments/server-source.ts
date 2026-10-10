@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { basename } from "node:path";
 import type { CommandExecutor } from "@repo/adapters";
 import { isIgnoredRepoPath, type RepoTreeEntry } from "@repo/platform/engine/lib/project-root-detector";
@@ -32,7 +33,8 @@ export function createServerReader(executor: CommandExecutor, rootDir: string): 
   const readText = async (path: string): Promise<string | undefined> => {
     try {
       return await executor.readFile(joinRemote(rootDir, path));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "api/modules/deployments/server-source");
       return undefined;
     }
   };
@@ -54,7 +56,8 @@ export function createServerReader(executor: CommandExecutor, rootDir: string): 
               ? { name: name.slice(0, -1), type: "dir" as const }
               : { name, type: "file" as const },
           );
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "api/modules/deployments/server-source");
         return [];
       }
     },
@@ -88,7 +91,8 @@ export function createServerReader(executor: CommandExecutor, rootDir: string): 
               tree.push({ path: rel, type: kind === "d" ? "dir" : "file" });
             }
             return tree;
-          } catch {
+          } catch (diagnosticFailure) {
+            observeCaughtError(diagnosticFailure, "api/modules/deployments/server-source");
             return [];
           }
         })();

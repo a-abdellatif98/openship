@@ -409,7 +409,7 @@
     "failed": "Failed",
     "starting": "Starting",
     "restarting": "Restarting",
-    "unknown": "Unknown"
+    "unknown": "Status unavailable"
   },
   "routingRetry": {
     "title": "Domain routing needs attention",

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@repo/ui/icons";
@@ -68,13 +69,17 @@ export default function AppsPage() {
     let cancelled = false;
     appsApi.catalog()
       .then(response => { if (!cancelled) setCatalog(response.data ?? []); })
-      .catch(() => {})
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/page");
+      })
       .finally(() => { if (!cancelled) setCatalogLoading(false); });
     updatesApi.list(true)
       .then(response => {
         if (!cancelled) setUpdatesBehind(new Set(response.data.map(update => update.projectId)));
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/page");
+      });
     return () => { cancelled = true; };
   }, []);
 

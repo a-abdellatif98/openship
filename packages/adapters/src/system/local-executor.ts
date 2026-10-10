@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { exec, spawn } from "node:child_process";
 import {
   access,
@@ -97,7 +98,8 @@ export class LocalExecutor implements CommandExecutor {
         try {
           if (killProcessTree && child.pid) process.kill(-child.pid, sig);
           else child.kill(sig);
-        } catch { /* process already exited */ }
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/system/local-executor"); /* process already exited */ }
       };
       const onAbort = () => {
         kill("SIGTERM");
@@ -124,7 +126,7 @@ export class LocalExecutor implements CommandExecutor {
         resolve({ code: code ?? 1, output: chunks.join("") });
       });
 
-      child.on("error", (err) => {
+      child.on("error", (err) => { observeCaughtError(err, "adapters/system/local-executor");
         cleanup();
         onLog(logEntry(`Process error: ${err.message}`, "error"));
         resolve({ code: 1, output: err.message });
@@ -163,7 +165,8 @@ export class LocalExecutor implements CommandExecutor {
     try {
       await access(path);
       return true;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/system/local-executor");
       return false;
     }
   }
@@ -175,7 +178,8 @@ export class LocalExecutor implements CommandExecutor {
   async rm(path: string): Promise<void> {
     try {
       await fsRm(path, { recursive: true, force: true });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/system/local-executor");
       // Already gone
     }
   }

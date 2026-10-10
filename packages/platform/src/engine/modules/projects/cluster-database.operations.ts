@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { randomBytes, createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -158,7 +159,7 @@ export async function runClusterDatabase(
         if (!signal.aborted && !(await repos.clusterDatabase.heartbeat(row.id, row.generation)))
           cancelled.abort();
       })
-      .catch(() => cancelled.abort());
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/cluster-database.operations"); return cancelled.abort(); });
   }, 20_000);
   timer.unref();
   let connection: Awaited<ReturnType<typeof openClusterApi>> | undefined;
@@ -305,10 +306,13 @@ export async function runClusterDatabase(
       await repos.clusterDatabase.finish(row.id, row.generation, "ready", observation, null);
     }
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/projects/cluster-database.operations");
     if (await repos.clusterDatabase.active(row.id, row.generation)) {
       const message = safe(error);
       updateNetworkSetupStep(progress, current, "failed", message);
-      await persist().catch(() => {});
+      await persist().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/cluster-database.operations");
+      });
       await repos.clusterDatabase.finish(row.id, row.generation, "failed", null, message);
     }
   } finally {
@@ -629,7 +633,9 @@ export function createClusterDatabaseOperations(
                   ))
                 )
                   await undoPin();
-              } catch {}
+              } catch (diagnosticFailure) {
+                observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/cluster-database.operations");
+              }
             }
             throw error;
           } finally {

@@ -16,6 +16,7 @@
  * to opt out of Redis even when REDIS_URL is set).
  */
 
+import { observedAllSettled, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import IORedis from "ioredis";
 import { env, REDIS_REQUIRED } from "../../config/env";
 import { isRedisReachable } from "../redis";
@@ -71,7 +72,7 @@ function getSharedRedis(): IORedis {
     enableReadyCheck: false,
   });
   sharedRedis.on("error", (err) => {
-    console.warn("[cache-store:redis] connection error:", err.message);
+    errorDiagnostics.warn("platform/engine/lib/cache-store/index", "[cache-store:redis] connection error:", err);
   });
   return sharedRedis;
 }
@@ -124,7 +125,7 @@ export function describeCacheStore(): Backend | null {
 export async function clearAllCacheStores(): Promise<void> {
   // Include stores whose backend selection is still resolving. A store requested
   // before the restore must not escape because its promise settled concurrently.
-  const resolved = await Promise.allSettled([...storesByNamespace.values()]);
+  const resolved = await observedAllSettled([...storesByNamespace.values()], "platform/engine/lib/cache-store/index");
   const stores = new Set<CacheStore<unknown>>(trackedStores);
   const failures: unknown[] = [];
   for (const result of resolved) {
@@ -132,8 +133,8 @@ export async function clearAllCacheStores(): Promise<void> {
     else failures.push(result.reason);
   }
 
-  const invalidated = await Promise.allSettled(
-    [...stores].map((store) => store.invalidateByPrefix("")),
+  const invalidated = await observedAllSettled(
+    [...stores].map((store) => store.invalidateByPrefix("")), "platform/engine/lib/cache-store/index",
   );
   for (const result of invalidated) {
     if (result.status === "rejected") failures.push(result.reason);
@@ -149,7 +150,8 @@ export async function shutdownCacheStores(): Promise<void> {
   for (const store of trackedStores) {
     try {
       await store.dispose();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/cache-store/index");
       // best-effort
     }
   }
@@ -158,7 +160,8 @@ export async function shutdownCacheStores(): Promise<void> {
   if (sharedRedis) {
     try {
       sharedRedis.disconnect();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/cache-store/index");
       // best-effort
     }
     sharedRedis = null;

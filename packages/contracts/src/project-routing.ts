@@ -5,11 +5,36 @@ import { ResourceIdSchema, type DeploymentEvent } from "./deployment-resources";
 import type { ResourceOperationSchema } from "./resource-operations";
 import type { StreamOptions } from "./services";
 
+export interface ProjectRoutingStreamOptions extends StreamOptions {
+  /** Read an existing repair without starting another one. */
+  sessionId?: string;
+  /** Reuse the result if a start request is retried after an uncertain response. */
+  idempotencyKey?: string;
+}
 export interface ProjectRoutingStreams {
-  retryRoutingStream(id: string, options?: StreamOptions): AsyncIterable<DeploymentEvent>;
+  retryRoutingStream(id: string, options?: ProjectRoutingStreamOptions): AsyncIterable<DeploymentEvent>;
 }
 
 const nullableString = Type.Union([Type.String(), Type.Null()]);
+/** Display-only state of a hostname another subsystem permits this project to route.
+ * No domain ID or verification credentials: ownership and certificate actions stay with it. */
+export const ProjectRoutingClaimSchema = Type.Object({
+  hostname: Type.String(),
+  ownerType: nullableString,
+  verified: Type.Union([Type.Boolean(), Type.Null()]),
+  status: nullableString,
+  sslStatus: nullableString,
+  sslExpiresAt: nullableString,
+  manualSsl: Type.Boolean(),
+});
+export type ProjectRoutingClaim = Static<typeof ProjectRoutingClaimSchema>;
+export const ProjectRoutingRetrySchema = Type.Object({
+  sessionId: Type.String(),
+  status: Type.Union([Type.Literal("running"), Type.Literal("completed"), Type.Literal("failed")]),
+  startedAt: Type.Number(),
+  finishedAt: Type.Optional(Type.Number()),
+});
+export type ProjectRoutingRetry = Static<typeof ProjectRoutingRetrySchema>;
 const list = Type.Optional(Type.Array(Type.String()));
 export const RouteRuleSpecSchema = Type.Object({
   rateLimit: Type.Optional(Type.Object({ rps: Type.Number(), burst: Type.Number(), key: Type.Optional(Type.Literal("ip")), status: Type.Optional(Type.Number()) })),

@@ -134,7 +134,15 @@
     "acceptedTitle": "You're in",
     "acceptedRedirect": "Redirecting to the dashboard...",
     "errorTitle": "Can't accept this invite",
-    "backToDashboard": "Back to dashboard"
+    "backToDashboard": "Back to dashboard",
+    "invitedBy": "Invited by {name}",
+    "roleLabel": "Role:",
+    "desktopOpen": "Open in Desktop",
+    "desktopCopy": "Copy invitation link",
+    "desktopCopied": "Link copied",
+    "desktopFallback": "Desktop didn’t open? Paste this invitation link in Settings → Instance → Connect to an instance.",
+    "desktopDescription": "Use Desktop or continue here in your browser.",
+    "switchAccount": "Sign in with the invited account"
   },
   "cloudAuthorize": {
     "missingRedirect": "Missing redirect parameter.",

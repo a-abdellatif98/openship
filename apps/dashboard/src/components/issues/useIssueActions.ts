@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { isCreateDeploymentResult, isRecord } from "@repo/contracts";
 
@@ -153,7 +154,8 @@ export function useIssueActions(
                   c.title,
                 );
               }
-            } catch {
+            } catch (diagnosticFailure) {
+              observeCaughtError(diagnosticFailure, "dashboard/components/issues/useIssueActions");
               // A failed read says nothing about the deployment's outcome.
               failed = true;
             }
@@ -172,7 +174,8 @@ export function useIssueActions(
             if (changed) setPending([...pendingRef.current.values()]);
           }
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/issues/useIssueActions");
         failed = true;
       } finally {
         reading = false;
@@ -228,13 +231,17 @@ export function useIssueActions(
         toast("success", c.resolved, c.title);
         await Promise.resolve()
           .then(() => reload({ silent: true }))
-          .catch(() => {});
+          .catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "dashboard/components/issues/useIssueActions");
+          });
       } catch (err) {
         if (current()) {
           toast("error", getApiErrorMessage(err, c.resolveFailed), c.title);
           await Promise.resolve()
             .then(() => reload({ silent: true }))
-            .catch(() => {});
+            .catch((diagnosticFailure) => {
+              observeCaughtError(diagnosticFailure, "dashboard/components/issues/useIssueActions");
+            });
         }
       } finally {
         if (current() && pendingRef.current.get(issue.id) === action && !action.deploymentId) {

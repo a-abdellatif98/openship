@@ -11,6 +11,7 @@
  * Tools with `providedBy` are skipped if their parent was just installed.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor, LogEntry } from "../types";
 import type { ToolchainInstallResult, ToolStep, ToolStepUser } from "./types";
 import { toolchainCatalog } from "./catalog";
@@ -161,7 +162,7 @@ export async function installTool(
     // that landed in /root and is unreachable for the login user.
     const verifyResult = await executor
       .exec(plan.value.verifyCommand, { timeout: 10_000 })
-      .catch(() => null);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/toolchain/installer"); return null; });
 
     if (!verifyResult) {
       throw new Error(`${recipe.label} installed but verification failed`);
@@ -191,6 +192,7 @@ export async function installTool(
 
     return { tool: name, success: true, version };
   } catch (err) {
+    observeCaughtError(err, "adapters/toolchain/installer");
     const msg = safeErrorMessage(err);
     systemDebug("toolchain", `install:fail ${name} (${formatDuration(startedAt)}) ${msg}`);
 

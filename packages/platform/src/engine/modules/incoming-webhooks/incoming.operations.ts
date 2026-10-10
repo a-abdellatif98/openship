@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { AppError, NotFoundError, ValidationError, safeErrorMessage } from "@repo/core";
 import { repos, type IncomingWebhookActionConfig } from "@repo/db";
 import type { WebhookDependencies } from "../../../webhooks";
@@ -16,7 +17,8 @@ function recorded(ctx: ExecutionContext, projectId: string, operation: string, h
 }
 function normalize(config: IncomingWebhookActionConfig) {
   try { return normalizeDeployActionConfig(config); }
-  catch (error) { throw new ValidationError(safeErrorMessage(error)); }
+  catch (error) {
+    observeCaughtError(error, "platform/engine/modules/incoming-webhooks/incoming.operations"); throw new ValidationError(safeErrorMessage(error)); }
 }
 async function authorizeAction(ctx: ExecutionContext, projectId: string, type: "deploy" | "job", config: IncomingWebhookActionConfig, auth: "none" | "token" | "hmac") {
   if (type === "job") {
@@ -26,7 +28,8 @@ async function authorizeAction(ctx: ExecutionContext, projectId: string, type: "
     await assertJobRunnable(ctx, config.jobKey);
   } else {
     try { await service.assertDeployServiceTargets(projectId, config); }
-    catch (error) { throw new ValidationError(safeErrorMessage(error)); }
+    catch (error) {
+      observeCaughtError(error, "platform/engine/modules/incoming-webhooks/incoming.operations"); throw new ValidationError(safeErrorMessage(error)); }
   }
 }
 async function requireHook(projectId: string, hookId: string) {

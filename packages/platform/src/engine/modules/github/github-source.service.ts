@@ -7,6 +7,7 @@
  * server-internal.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { randomBytes } from "node:crypto";
 import { repos, type GitInstallation, type GitSource } from "@repo/db";
 import { ConflictError, NotFoundError, ValidationError, safeErrorMessage } from "@repo/core";
@@ -114,7 +115,8 @@ export function normalizeGitHubBaseUrl(
   let parsed: URL;
   try {
     parsed = new URL(value);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-source.service");
     throw new ValidationError(`${label} must be a valid absolute URL.`);
   }
   if (parsed.protocol !== "https:") {
@@ -161,7 +163,8 @@ export function readGitHubSourceSecrets(source: GitSource): GitHubSourceSecrets 
   try {
     const plain = decryptSecretField(source.secretsEnc);
     parsed = plain ? JSON.parse(plain) : null;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-source.service");
     throw new Error(`Credentials for GitHub source "${source.name}" cannot be decrypted.`);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -381,7 +384,7 @@ export async function beginGitHubManifestFlow(
     throw new ConflictError(`A GitHub source named "${name}" already exists.`);
   }
   const state = randomBytes(24).toString("base64url");
-  await repos.githubInstallState.purgeExpired().catch(() => 0);
+  await repos.githubInstallState.purgeExpired().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-source.service"); return 0; });
   await repos.githubInstallState.create({
     state,
     userId: ctx.userId,
@@ -460,7 +463,7 @@ export async function convertGitHubManifest(
   ctx: RequestContext,
   input: { state: string; code: string },
 ): Promise<{ source: PublicGitHubSource; installUrl: string }> {
-  const binding = await repos.githubInstallState.find(input.state).catch(() => null);
+  const binding = await repos.githubInstallState.find(input.state).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-source.service"); return null; });
   if (
     !binding ||
     binding.flow !== "manifest" ||
@@ -676,7 +679,7 @@ export async function createSourceInstallUrl(
   const source = await repos.gitSource.findActiveById(ctx.organizationId, sourceId);
   if (!source) throw new NotFoundError("Active GitHub source", sourceId);
   const state = randomBytes(24).toString("base64url");
-  await repos.githubInstallState.purgeExpired().catch(() => 0);
+  await repos.githubInstallState.purgeExpired().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-source.service"); return 0; });
   await repos.githubInstallState.create({
     state,
     userId: ctx.userId,
@@ -760,7 +763,7 @@ export async function listGitHubSourcesForWebhook(input: {
   if (input.installationId) {
     const installations = await repos.gitInstallation
       .findByInstallationIdForProvider(input.installationId)
-      .catch(() => []);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-source.service"); return []; });
     const sources = await Promise.all(
       installations
         .filter((installation) => installation.sourceId)
@@ -791,7 +794,8 @@ export async function collectGitHubSourceWebhookSecrets(input: {
   for (const source of sources) {
     try {
       secrets.add(readGitHubSourceSecrets(source).webhookSecret);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-source.service");
       // An unreadable source is unusable and contributes no candidate. Never
       // treat ciphertext as a secret or log it.
     }

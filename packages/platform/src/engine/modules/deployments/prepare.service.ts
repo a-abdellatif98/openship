@@ -5,6 +5,7 @@
  * No database writes, no deployment logic.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import * as githubService from "../github/github.service";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
 import { MANIFEST_FILES, type RepoFile, type StackResult } from "../../lib/stack-detector";
@@ -34,6 +35,7 @@ import {
 } from "../../lib/project-root-detector";
 import {
   parseDeploymentMetadata,
+  vercelCompatibilityWarnings,
   parseOpenshipConfig,
   METADATA_FILES,
   type ProjectType,
@@ -705,9 +707,12 @@ async function readProjectSnapshot(
   const fileContents: Record<string, string> = {};
 
   await Promise.all(
-    PREPARE_FILE_CONTENTS.filter((name) =>
-      files.some((file) => file.name.toLowerCase() === name.toLowerCase()),
-    ).map(async (name) => {
+    files.filter((file) =>
+      file.type === "file" &&
+      PREPARE_FILE_CONTENTS.some((name) => file.name.toLowerCase() === name.toLowerCase()),
+    ).map(async ({ name }) => {
+      // Match known manifests case-insensitively, but read the actual path.
+      // Linux and GitHub distinguish Dockerfile from dockerfile.
       const content = await reader.readText(joinProjectPath(normalizedRootDirectory, name));
       if (content) {
         fileContents[name] = content;
@@ -764,7 +769,7 @@ async function selectProjectSnapshot(
   reader: ProjectReader,
   rootSnapshot: ProjectRootSnapshotInput,
 ): Promise<SelectedProjectSnapshot> {
-  const treeEntries = await reader.listTree().catch(() => [] as RepoTreeEntry[]);
+  const treeEntries = await reader.listTree().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/prepare.service"); return [] as RepoTreeEntry[]; });
   const hints = discoverProjectRootHints(
     treeEntries,
     rootSnapshot.fileContents,
@@ -1029,12 +1034,22 @@ export async function resolveFromReader(
     },
   );
   if (openship.diagnostics) info.configDiagnostics = openship.diagnostics;
+  const vercelRaw = Object.entries(configSnapshot.fileContents ?? {}).find(
+    ([name]) => name.toLowerCase() === "vercel.json",
+  )?.[1];
+  if (vercelRaw) {
+    const warnings = vercelCompatibilityWarnings(vercelRaw);
+    if (warnings.length) {
+      info.configDiagnostics ??= { errors: [], warnings: [] };
+      info.configDiagnostics.warnings.push(...warnings);
+    }
+  }
   const overlaid = applyOpenshipOverlay(info, openship.config);
   // Log both syntax diagnostics and overrides rejected by workspace discovery.
   // Scans expose the same diagnostics to SDK, CLI and dashboard callers.
   if (overlaid.configDiagnostics) {
-    console.warn(
-      `[openship.json] ${repoMeta.full_name}: ` +
+    errorDiagnostics.warn("platform/engine/modules/deployments/prepare.service",
+      `[deployment config] ${repoMeta.full_name}: ` +
         [...overlaid.configDiagnostics.errors, ...overlaid.configDiagnostics.warnings].join(" · "),
     );
   }
@@ -1128,6 +1143,7 @@ function toProjectInfo(
       // of the file quietly deploying as something else (#533).
       if (parsed.unsupported.length > 0) unsupportedCompose = parsed.unsupported;
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/prepare.service");
       // Surface the broken file — an unusable file (invalid YAML), which is all
       // the parser throws for now. Swallowing it returns a services project with
       // ZERO services — the wizard then shows nothing to deploy and no reason

@@ -19,6 +19,7 @@
  * of it. There is deliberately no host→container conversion yet.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { randomBytes } from "node:crypto";
 import type { CommandExecutor, SystemLogCallback, SystemLog } from "@repo/adapters";
 import { checkMailHealth, requiresMailComponent } from "./mail-health.service";
@@ -651,6 +652,7 @@ export async function stepDeployEngine(
     }
     engine = { image: result.image, container: result.container };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/mail/mail.service");
     return { stepId, success: false, message: `Mail engine deploy failed: ${errMsg(err)}` };
   }
 
@@ -665,7 +667,7 @@ export async function stepDeployEngine(
   // Health-gate on the daemons the container actually reports (via supervisorctl),
   // so a container that starts but whose Postfix/Dovecot never come up is a failure
   // here, not a mystery two steps later.
-  const health = await checkMailHealth(exec).catch(() => null);
+  const health = await checkMailHealth(exec).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail.service"); return null; });
   if (health) {
     // Only the mail-path daemons gate the deploy; ClamAV/freshclam can still be
     // warming up (large signature load) without blocking a working mail server. The
@@ -735,6 +737,7 @@ export async function stepDkimKeys(
   try {
     amavis = await resolveAmavis(exec);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/mail/mail.service");
     return { stepId: 6, success: false, message: errMsg(err) };
   }
   const amavisBin = amavis.run(amavis.bin);
@@ -749,6 +752,7 @@ export async function stepDkimKeys(
   try {
     rawOutput = await exec.exec(`${amavisBin} showkeys 2>&1`);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/mail/mail.service");
     return { stepId: 6, success: false, message: `Failed to retrieve DKIM keys: ${errMsg(err)}` };
   }
 
@@ -902,11 +906,13 @@ export async function provisionDomainDkim(
   await engineExec.exec(run("mkdir -p /var/lib/dkim"));
   // genrsa exits non-zero if the file already exists; treat that as success.
   await engineExec.exec(run(`sh -c ${sq(`[ -s ${keyPath} ] || ${bin} genrsa ${keyPath}`)}`));
-  await engineExec.exec(run("chown -R amavis:amavis /var/lib/dkim")).catch(() => {});
+  await engineExec.exec(run("chown -R amavis:amavis /var/lib/dkim")).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail.service");
+  });
 
   // ── Step 3: splice the directive into 50-user (the writable side) ───────
   const confPath = conf.write;
-  const existing = await hostFiles.readFile(confPath).catch(() => "");
+  const existing = await hostFiles.readFile(confPath).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail.service"); return ""; });
   const dkimKeyLine = `dkim_key('${newDomain}', 'dkim', '${keyPath}');`;
   const signEntry = `   '.${newDomain}'  => { d => '${newDomain}', a => 'rsa-sha256', ttl => 21*24*3600 },`;
   const next = spliceAmavisConf(existing, newDomain, dkimKeyLine, signEntry);
@@ -915,7 +921,9 @@ export async function provisionDomainDkim(
   }
 
   // ── Step 4: reload amavis so the new key is signed with ──────────────
-  await engineExec.exec(mailUnitActionCommand(flavor, "amavis", "amavis", "restart")).catch(() => {});
+  await engineExec.exec(mailUnitActionCommand(flavor, "amavis", "amavis", "restart")).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail.service");
+  });
 
   // ── Step 5: read the public key out ──────────────────────────────────
   const showOutput = await engineExec.exec(`${amavisBin} showkeys ${sq(newDomain)} 2>&1`);
@@ -1056,7 +1064,7 @@ export async function stepRequestSSL(
     const { sslIssueLockKey, acmeIssueLockKey, certComfortablyValid } = await import("../../lib/domain-ssl");
     const result = await createProvisionLock(sslIssueLockKey(mailDomain)).run(() =>
       createProvisionLock(acmeIssueLockKey(target.serverId)).run(async () => {
-        const existing = await platform!.ssl.verifyCert(mailDomain).catch(() => null);
+        const existing = await platform!.ssl.verifyCert(mailDomain).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail.service"); return null; });
         if (existing && certComfortablyValid(existing)) return existing;
         return platform!.ssl.provisionCert(mailDomain, {
           force: true,
@@ -1086,6 +1094,7 @@ export async function stepRequestSSL(
       data: { expiresAt: result.expiresAt, issuer: result.issuer },
     };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/mail/mail.service");
     // Already the summarized, actionable cause (summarizeCertbotFailure).
     return { stepId, success: false, message: errMsg(err) };
   } finally {
@@ -1115,6 +1124,7 @@ export async function stepConfigureSSL(
     log(stepId, "info", "Linking the certificate and reloading Postfix and Dovecot...");
     await configureMailCertificate(exec, mailDomain);
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/mail/mail.service");
     return { stepId, success: false, message: errMsg(error) };
   }
 

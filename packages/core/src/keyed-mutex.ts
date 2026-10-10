@@ -30,7 +30,9 @@ export function withKeyedMutex<T>(
   // The chain tail swallows errors so a throwing fn never blocks later callers.
   const tail = result.then(
     () => {},
-    () => {},
+    () => {
+      /* diagnostics-ignore: The returned result propagates this rejection; only the sequencing tail settles here. */
+},
   );
   tails.set(scopeKey, tail);
   // Drop the entry once idle so the map doesn't grow unbounded.

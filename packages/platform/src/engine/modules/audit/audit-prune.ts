@@ -13,6 +13,7 @@
  * Wired into the job-runner alongside backup retention prune.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos, db, schema } from "@repo/db";
 
 const DEFAULT_RETENTION_DAYS = 90;
@@ -48,7 +49,7 @@ export async function pruneAuditEvents(): Promise<{ orgsProcessed: number; total
 
   let totalPruned = 0;
   for (const org of orgs) {
-    const stored = await repos.auditSettings.find(org.id).catch(() => undefined);
+    const stored = await repos.auditSettings.find(org.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/audit/audit-prune"); return undefined; });
     const days =
       stored?.retentionDays ?? parseRetentionDays(org.metadata) ?? DEFAULT_RETENTION_DAYS;
     const cutoff = new Date(Date.now() - Math.min(days, MAX_RETENTION_DAYS) * 24 * 60 * 60 * 1000);
@@ -56,7 +57,7 @@ export async function pruneAuditEvents(): Promise<{ orgsProcessed: number; total
       await repos.auditEvent.pruneOlderThan(org.id, cutoff);
       totalPruned += 1; // we don't track precise count from the repo
     } catch (err) {
-      console.error(`[audit-prune] org=${org.id}`, err);
+      errorDiagnostics.error("platform/engine/modules/audit/audit-prune", `[audit-prune] org=${org.id}`, err);
     }
   }
 

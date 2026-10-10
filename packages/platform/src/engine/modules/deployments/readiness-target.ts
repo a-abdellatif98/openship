@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { RuntimeAdapter } from "@repo/adapters";
 
 interface ReadinessTargetOptions {
@@ -27,7 +28,8 @@ export async function resolveReadinessTarget(
       const ip = await options.runtime.getContainerIp(options.containerId);
       if (ip) return { host: ip, port: containerPort };
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/readiness-target");
     // The readiness gate reports the exact fallback address if this also fails.
   }
 

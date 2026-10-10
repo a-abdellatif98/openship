@@ -14,6 +14,7 @@
  *     against a hostname that later resolves to a private IP).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { lookup } from "node:dns/promises";
 import net from "node:net";
 import ipaddr from "ipaddr.js";
@@ -81,7 +82,8 @@ export function assertPublicUrlLiteral(raw: string, opts: { allowHttp?: boolean 
   let url: URL;
   try {
     url = new URL(raw);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/ssrf-guard");
     throw new SsrfError(`Malformed URL: ${raw}`);
   }
   if (url.protocol !== "https:" && !(opts.allowHttp && url.protocol === "http:")) {
@@ -129,7 +131,8 @@ export async function resolvePinnedHost(
           signal.removeEventListener("abort", aborted);
         });
     });
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/ssrf-guard");
     signal.throwIfAborted();
     throw new SsrfError(`Cannot resolve host: ${host}`);
   }
@@ -151,7 +154,8 @@ export async function assertPublicUrl(raw: string, opts: { allowHttp?: boolean }
   let url: URL;
   try {
     url = new URL(raw);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/ssrf-guard");
     throw new SsrfError(`Malformed URL: ${raw}`);
   }
   if (url.protocol !== "https:" && !(opts.allowHttp && url.protocol === "http:")) {

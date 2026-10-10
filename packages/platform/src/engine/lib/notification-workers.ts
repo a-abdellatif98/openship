@@ -14,6 +14,7 @@
  * The runner handles retry policy uniformly so each worker stays simple.
  */
 
+import { observedAllSettled, reportError, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { createHmac } from "node:crypto";
 import { repos, type NotificationChannel, type NotificationDelivery } from "@repo/db";
 import { sendMail } from "@repo/platform/engine/lib/mail";
@@ -367,7 +368,7 @@ async function sendWebhook(
     allowPrivate,
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    const text = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/notification-workers"); return ""; });
     throw new Error(`Webhook returned ${res.status}: ${text.slice(0, 200)}`);
   }
 }
@@ -413,7 +414,7 @@ async function sendDiscord(
     allowPrivate,
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    const text = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/notification-workers"); return ""; });
     throw new Error(`Discord webhook returned ${res.status}: ${text.slice(0, 200)}`);
   }
 }
@@ -445,7 +446,7 @@ async function sendSlack(
     allowPrivate,
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    const text = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/notification-workers"); return ""; });
     throw new Error(`Slack webhook returned ${res.status}: ${text.slice(0, 200)}`);
   }
 }
@@ -504,7 +505,7 @@ async function sendMSTeams(
   // Note: Power Automate Workflows respond 202 even when the flow fails
   // downstream — a 2xx means "accepted", not "delivered".
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
+    const text = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/notification-workers"); return ""; });
     throw new Error(`Microsoft Teams webhook returned ${res.status}: ${text.slice(0, 200)}`);
   }
 }
@@ -546,7 +547,7 @@ async function sendTelegram(
       body: JSON.stringify(payload),
       timeoutMs: 10_000,
     });
-    raw = await res.text().catch(() => "");
+    raw = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/notification-workers"); return ""; });
   } catch (err) {
     // The token sits in the URL path, and delivery errors are persisted and shown
     // in the dashboard — never let a transport error carry it out of here.
@@ -606,7 +607,10 @@ export async function sendTestToChannel(channel: NotificationChannel): Promise<v
     },
   } as unknown as NotificationDelivery;
   try { await worker(testDelivery, channel); }
-  catch (error) { throw new Error(channelErrorMessage(error, channel)); }
+  catch (error) {
+    // The caller observes this sanitized error; raw webhook paths are credentials.
+    throw new Error(channelErrorMessage(error, channel));
+  }
 }
 
 function channelErrorMessage(error: unknown, channel: NotificationChannel): string {
@@ -616,7 +620,9 @@ function channelErrorMessage(error: unknown, channel: NotificationChannel): stri
     const stored = config[key];
     if (typeof stored !== "string" || !stored) continue;
     let secret = stored;
-    if (key !== "url") { try { secret = decrypt(stored); } catch {} }
+    if (key !== "url") { try { secret = decrypt(stored); } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/notification-workers");
+    } }
     if (secret) message = message.split(secret).join("<redacted>");
   }
   return message;
@@ -638,17 +644,17 @@ const MAX_ATTEMPTS = 5;
  *   - Lost access or deleted/disabled/unverified channels fail permanently.
  */
 async function deliverQueuedNotifications(): Promise<void> {
-  const queued = await repos.notificationDelivery.claimQueued(25).catch(() => []);
+  const queued = await repos.notificationDelivery.claimQueued(25).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/notification-workers"); return []; });
   if (queued.length === 0) return;
 
-  const settled = await Promise.allSettled(
+  const settled = await observedAllSettled(
     queued.map(async (delivery) => {
       let channel: NotificationChannel | undefined;
       const attempt = delivery.attempts + 1;
       let renewal: Promise<unknown> | undefined;
       const heartbeat = setInterval(() => {
         renewal ??= repos.notificationDelivery.renewLease(delivery.id, attempt)
-          .catch(() => false).finally(() => { renewal = undefined; });
+          .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/notification-workers"); return false; }).finally(() => { renewal = undefined; });
       }, 20_000);
       heartbeat.unref?.();
       try {
@@ -683,23 +689,25 @@ async function deliverQueuedNotifications(): Promise<void> {
         if (!(await repos.notificationDelivery.renewLease(delivery.id, attempt))) return;
         await worker(delivery, channel);
         await repos.notificationDelivery.markSent(delivery.id, attempt);
-        await repos.notificationChannel.touchLastDelivered(channel.id).catch(() => {});
+        await repos.notificationChannel.touchLastDelivered(channel.id).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/lib/notification-workers");
+        });
       } catch (err) {
         const message = channel ? channelErrorMessage(err, channel) : "Notification lookup temporarily unavailable";
         const retry = !(err instanceof PermanentNotificationError) &&
           ((delivery.payload as { durable?: boolean })?.durable === true || attempt < MAX_ATTEMPTS);
         await repos.notificationDelivery.markFailed(delivery.id, message, retry, attempt);
-        if (!retry) {
-          console.error(
-            `[notification] delivery ${delivery.id} failed permanently after ${attempt} attempts:`,
-            message,
-          );
-        }
+        reportError(message, {
+          source: "worker", kind: "background", component: "notification-delivery",
+          operation: "notifications.deliver", resourceType: "notification_delivery", resourceId: delivery.id,
+          userId: delivery.userId, organizationId: delivery.organizationId ?? undefined,
+          attempt, retryable: retry, severity: retry ? "warn" : "error", handled: true,
+        });
       } finally {
         clearInterval(heartbeat);
         await renewal;
       }
-    }),
+    }), "platform/engine/lib/notification-workers",
   );
   const failures = settled.filter((result): result is PromiseRejectedResult => result.status === "rejected");
   if (failures.length) throw new AggregateError(failures.map(result => result.reason), "Notification delivery state could not be recorded");
@@ -718,7 +726,7 @@ export function startNotificationRunner(intervalMs = 5000): void {
   if (runnerInterval) return;
   runnerInterval = setInterval(() => {
     void processQueuedNotifications().catch((err) =>
-      console.error("[notification] runner tick failed:", err),
+      errorDiagnostics.error("platform/engine/lib/notification-workers", "[notification] runner tick failed:", err),
     );
   }, intervalMs);
   runnerInterval.unref?.();

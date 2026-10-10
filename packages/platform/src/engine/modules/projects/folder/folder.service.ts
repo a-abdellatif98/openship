@@ -1,5 +1,6 @@
 /** Authenticated folder uploads, scanned without executing code and transferred to the selected server. */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
@@ -33,7 +34,9 @@ const SESSION_TTL_MS = 60 * 60_000;
  *  owned. The store stays free of node:fs, so the fs cleanup lives here. */
 function sweepExpired(now: number): void {
   for (const s of sweepExpiredFolderSessions(now)) {
-    if (s.stagingDir) void trackBackgroundWork(rm(s.stagingDir, { recursive: true, force: true }).catch(() => {}));
+    if (s.stagingDir) void trackBackgroundWork(rm(s.stagingDir, { recursive: true, force: true }).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/folder/folder.service");
+    }));
   }
 }
 
@@ -251,7 +254,7 @@ export async function resolveFolderSessionSourceEnv(
 
 async function scanSource(session: FolderSession, opts: ResolveOptions = {}) {
   if (!session.stagingDir) throw new Error("Session has no staging directory");
-  const st = await stat(session.stagingDir).catch(() => null);
+  const st = await stat(session.stagingDir).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/folder/folder.service"); return null; });
   if (!st?.isDirectory()) throw new Error("Uploaded source not found");
   const { resolveFromLocal } = await import("../../deployments/local-source");
   return resolveFromLocal(session.stagingDir, opts);

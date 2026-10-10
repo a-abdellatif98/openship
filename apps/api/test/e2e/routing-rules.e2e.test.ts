@@ -587,13 +587,19 @@ http {
     expect(api.headers["x-one"]).toBe("1");
     expect(api.headers["x-two"]).toBe("2");
 
-    const dash = await ask(port, "/a-b/x", "hdrs.test");
+    const dash = await ask(port, "/a-b/", "hdrs.test");
     expect(dash.headers["x-dash"]).toBe("dash");
     expect(dash.headers["x-slash"]).toBeUndefined();
 
-    const slash = await ask(port, "/a/b/x", "hdrs.test");
+    const slash = await ask(port, "/a/b/", "hdrs.test");
     expect(slash.headers["x-slash"]).toBe("slash");
     expect(slash.headers["x-dash"]).toBeUndefined();
+
+    // Literal Vercel sources match exactly, including when a query is present.
+    // Descendants require an explicit wildcard (as used by the /api rules).
+    expect((await ask(port, "/a-b/?q=1", "hdrs.test")).headers["x-dash"]).toBe("dash");
+    expect((await ask(port, "/a-b/x", "hdrs.test")).headers["x-dash"]).toBeUndefined();
+    expect((await ask(port, "/a/b/x", "hdrs.test")).headers["x-slash"]).toBeUndefined();
 
     // Global applies everywhere; path-scoped rules are absent off their path.
     for (const path of ["/", "/api/thing", "/a-b/x"]) {

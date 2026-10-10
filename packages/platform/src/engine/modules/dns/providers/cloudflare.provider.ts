@@ -6,6 +6,7 @@
  * zone-scoped.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type {
   DnsProvider,
   DnsProviderCredentials,
@@ -109,6 +110,7 @@ async function cfRequest<T>(
     });
     text = await res.text();
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/dns/providers/cloudflare.provider");
     // DNS failure, TLS error, connection reset, or our own timeout —
     // indistinguishable from a 5xx to the caller, and just as transient. 503 keeps
     // `isTransient` true so the caller reports "couldn't check" rather than "not
@@ -121,7 +123,8 @@ async function cfRequest<T>(
   let body: CfResponse<T>;
   try {
     body = JSON.parse(text) as CfResponse<T>;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/dns/providers/cloudflare.provider");
     throw new DnsApiError(
       "cloudflare",
       res.status,
@@ -212,6 +215,7 @@ export const cloudflareDnsProvider: DnsProvider = {
       }
       return { ok: false, reason: `Cloudflare reports this token as "${result.status}".` };
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/dns/providers/cloudflare.provider");
       const reason =
         err instanceof DnsApiError && err.isAuthFailure
           ? "Cloudflare rejected this token. Check it was copied in full and has Zone:Read + DNS:Edit."

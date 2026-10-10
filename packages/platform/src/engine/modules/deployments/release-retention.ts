@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { normalizeRollbackWindow } from "@repo/core";
 import type { RollbackCapacity } from "@repo/contracts";
@@ -85,7 +86,8 @@ export async function refreshRollbackCapacity(opts: {
       opts.projectId,
       { snapshotSizeBytes, capacityMeasuredAt: new Date() },
     )
-    .catch(() => {
+    .catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/release-retention");
       /* best-effort: retention still resolves via the instance default */
     });
 }

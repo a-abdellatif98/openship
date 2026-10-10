@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { AppError, safeErrorMessage } from "@repo/core";
@@ -114,7 +115,7 @@ export async function confirmSubscriptionChange(ctx: ExecutionContext, input: Pa
   // A payment result is independent from a resize retry. The latter remains a
   // durable server operation and must never cause another payment attempt.
   await reconcileWorkspaceSubscriptionChange(ctx.organizationId, owner.id).catch(error =>
-    console.warn(`[cloud-plan-change] ${owner.id}: ${safeErrorMessage(error)}`));
+    errorDiagnostics.warn("platform/engine/modules/billing/billing-plan-change", `[cloud-plan-change] ${owner.id}: ${safeErrorMessage(error)}`, error));
   return presentChangeWithServerUpdate(result, await requireOwner(ctx.organizationId, owner.id));
 }
 

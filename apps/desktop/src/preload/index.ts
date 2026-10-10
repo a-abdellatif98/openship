@@ -33,6 +33,17 @@ contextBridge.exposeInMainWorld("desktop", {
     localUrls: () => ipcRenderer.invoke("app:local-urls"),
   },
 
+  /** OS invitation links request local UI confirmation, never authentication. */
+  instanceLinks: {
+    pending: () => ipcRenderer.invoke("instance:pending-link"),
+    acknowledge: (id: number) => ipcRenderer.invoke("instance:acknowledge-link", id),
+    onLink: (cb: () => void) => {
+      const handler = () => cb();
+      ipcRenderer.on("instance:link", handler);
+      return () => ipcRenderer.removeListener("instance:link", handler);
+    },
+  },
+
   /** Onboarding helpers */
   onboarding: {
     /** Mark onboarding as done, push settings to API, and load the dashboard */

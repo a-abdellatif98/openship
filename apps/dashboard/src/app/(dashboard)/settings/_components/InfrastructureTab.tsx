@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -61,7 +62,8 @@ export function InfrastructureTab() {
         const me = res.data?.members?.find((m) => m.userId === session?.user?.id);
         setIsOwner(me?.role === "owner");
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/InfrastructureTab");
         if (!cancelled) setIsOwner(false);
       });
     return () => {
@@ -74,14 +76,18 @@ export function InfrastructureTab() {
     if (isOwner !== true) return;
     let cancelled = false;
     void Promise.all([
-      systemApi.containerIssues().catch(() => null),
-      systemApi.containersBehind().catch(() => null),
+      systemApi.containerIssues().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/InfrastructureTab"); return null; }),
+      systemApi.containersBehind().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/InfrastructureTab"); return null; }),
     ]).then(([issues, behind]) => {
       if (cancelled) return;
       setRollup({ attention: issues?.total ?? 0, updates: behind?.components ?? 0 });
     });
-    void systemApi.getInfraAutoUpdate().then(setAutoUpdateInfra).catch(() => {});
-    void systemApi.getInfraAutoScan().then(setAutoScanInfra).catch(() => {});
+    void systemApi.getInfraAutoUpdate().then(setAutoUpdateInfra).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/InfrastructureTab");
+    });
+    void systemApi.getInfraAutoScan().then(setAutoScanInfra).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/InfrastructureTab");
+    });
     // Host control is server-host only — don't read it on desktop/SaaS where the
     // toggle never renders.
     if (isServerHost) {
@@ -92,7 +98,9 @@ export function InfrastructureTab() {
           setHostControlOn(effective);
           setHostControlFromEnv(stored === null && !effective);
         })
-        .catch(() => {});
+        .catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/InfrastructureTab");
+        });
     }
     return () => {
       cancelled = true;
@@ -101,12 +109,12 @@ export function InfrastructureTab() {
 
   const toggleAutoInfra = useCallback((v: boolean) => {
     setAutoUpdateInfra(v);
-    void systemApi.setInfraAutoUpdate(v).catch(() => setAutoUpdateInfra(!v));
+    void systemApi.setInfraAutoUpdate(v).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/InfrastructureTab"); return setAutoUpdateInfra(!v); });
   }, []);
 
   const toggleAutoScan = useCallback((v: boolean) => {
     setAutoScanInfra(v);
-    void systemApi.setInfraAutoScan(v).catch(() => setAutoScanInfra(!v));
+    void systemApi.setInfraAutoScan(v).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/InfrastructureTab"); return setAutoScanInfra(!v); });
   }, []);
 
   const toggleHostControl = useCallback(
@@ -114,7 +122,8 @@ export function InfrastructureTab() {
       const prevFromEnv = hostControlFromEnv;
       setHostControlOn(v);
       setHostControlFromEnv(false); // an explicit choice now overrides the env
-      void systemApi.setHostControl(v).catch(() => {
+      void systemApi.setHostControl(v).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/InfrastructureTab");
         setHostControlOn(!v);
         setHostControlFromEnv(prevFromEnv);
         showToast(copy.hostControlError, "error", copy.hostControlLabel);

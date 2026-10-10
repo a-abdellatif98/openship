@@ -12,6 +12,7 @@
  * request includes parsed compose services.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { listActiveServiceDeployments } from "@repo/platform/engine/lib/active-deployment";
 import { repos } from "@repo/db";
 import type { Deployment, Project } from "@repo/db";
@@ -116,6 +117,7 @@ async function cleanupBuiltArtifacts(
   for (const [serviceId, imageRef] of builtImageRefs) {
     if (retainedRefs.has(imageRef)) continue;
     await cleanupBuildArtifact(runtime, imageRef).catch((err) => {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/pipeline");
       logger.log(
         `Warning: failed to clean up built service artifact ${serviceId}: ${safeErrorMessage(err)}\n`,
         "warn",
@@ -155,6 +157,7 @@ async function recordCohortAbort(opts: {
         reason: opts.failures.has(service.id) ? "build-failed" : "cohort-aborted",
       })
       .catch((err) => {
+        observeCaughtError(err, "platform/engine/modules/deployments/compose/pipeline");
         opts.logger.log(
           `Warning: could not record the aborted service "${service.name}": ${safeErrorMessage(err)}\n`,
           "warn",
@@ -182,6 +185,7 @@ async function cleanupUnusedBuiltArtifactsAfterDeployError(
   try {
     rows = await repos.service.listByDeployment(dep.id);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/deployments/compose/pipeline");
     logger.log(
       `Warning: could not verify which built service artifacts are unused; retaining them: ${safeErrorMessage(err)}\n`,
       "warn",
@@ -203,6 +207,7 @@ async function cleanupUnusedBuiltArtifactsAfterDeployError(
   for (const [serviceId, imageRef] of builtImageRefs) {
     if (referencedArtifacts.has(imageRef)) continue;
     await cleanupBuildArtifact(runtime, imageRef).catch((err) => {
+      observeCaughtError(err, "platform/engine/modules/deployments/compose/pipeline");
       logger.log(
         `Warning: failed to clean up unused built service artifact ${serviceId}: ${safeErrorMessage(err)}\n`,
         "warn",
@@ -414,7 +419,9 @@ export async function executeComposePipeline(opts: ComposePipelineOpts): Promise
         runtime,
         composeBuild.builtImageRefs,
         logger,
-      ).catch(() => {});
+      ).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/pipeline");
+      });
     } else {
       logger.log(
         "Warning: service activation may have started; retaining built artifacts for reconciliation.\n",

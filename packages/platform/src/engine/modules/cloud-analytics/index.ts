@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { getCloudAnalyticsConfig } from "./config";
 import { CloudAnalytics } from "./service";
@@ -41,7 +42,9 @@ export async function startCloudAnalytics(): Promise<void> {
               return;
             }
             // Provider failures leave the claim retryable. They never mean unpaid.
-            await getCheckoutStatus(checkout.organizationId, checkout.id).catch(() => {});
+            await getCheckoutStatus(checkout.organizationId, checkout.id).catch((diagnosticFailure) => {
+              observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud-analytics/index");
+            });
           }),
         );
       }

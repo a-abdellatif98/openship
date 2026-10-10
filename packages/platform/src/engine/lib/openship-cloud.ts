@@ -3,6 +3,7 @@
  * projects retain their organization namespace. All customer workspace
  * operations use short-lived namespace tokens, including operations on the SaaS.
  */
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import { Oblien } from "@repo/adapters";
 import { AppError, safeErrorMessage } from "@repo/core";
@@ -109,7 +110,7 @@ export async function issueNamespaceToken(organizationId: string, workspaceId?: 
     const result = await getOblienClient().tokens.create({ scope: "namespace", namespace, ttl: 1800 });
     return { token: result.token, namespace, expiresAt: result.expiresAt, providerApiUrl: env.OBLIEN_API_URL };
   } catch (error) {
-    console.warn(`[oblien] token issuance failed for org ${organizationId}: ${safeErrorMessage(error)}`);
+    errorDiagnostics.warn("platform/engine/lib/openship-cloud", `[oblien] token issuance failed for org ${organizationId}: ${safeErrorMessage(error)}`, error);
     throw new AppError("Cloud access is temporarily unavailable. Please retry.", 503, "CLOUD_TOKEN_UNAVAILABLE");
   }
 }

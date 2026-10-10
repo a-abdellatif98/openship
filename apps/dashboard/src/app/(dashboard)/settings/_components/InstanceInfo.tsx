@@ -1,12 +1,13 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect, useState } from "react";
 import { usePlatform } from "@/context/PlatformContext";
 import { useAuth } from "@/context/AuthContext";
 import { SettingsSection } from "./SettingsSection";
-import { UpgradeAuthModal } from "./UpgradeAuthModal";
+import { UpgradeAuthModal } from "@/components/instance/UpgradeAuthModal";
 import { useI18n, interpolate } from "@/components/i18n-provider";
 
 export function InstanceInfo() {
@@ -27,7 +28,9 @@ export function InstanceInfo() {
     bridge
       ?.version()
       .then(setDesktopVersion)
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/InstanceInfo");
+      });
   }, [deployMode]);
   const version = (deployMode === "desktop" ? desktopVersion : serverVersion) ?? null;
 

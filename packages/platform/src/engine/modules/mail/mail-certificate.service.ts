@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "@repo/adapters";
 import { repos } from "@repo/db";
 import {
@@ -59,6 +60,7 @@ export async function refreshMailCertificate(
         ? await probe(options.executor)
         : await sshManager.withExecutor(serverId, probe);
     } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/mail/mail-certificate.service");
       health = {
         hostname: mailHostname(mail.domain),
         checkedAt: new Date().toISOString(),
@@ -129,7 +131,7 @@ export async function applyMailCertificate(serverId: string, hostname: string): 
     await sshManager.withExecutor(serverId, async (executor) => {
       await configureMailCertificate(executor, hostname);
       // A pre-renewal Health request must finish before the post-reload observation.
-      await checks.get(serverId)?.catch(() => undefined);
+      await checks.get(serverId)?.catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail-certificate.service"); return undefined; });
       const health = await refreshMailCertificate(serverId, { executor, force: true });
       if (!health || (health.status !== "ok" && health.status !== "warn")) {
         throw new Error(
@@ -141,7 +143,7 @@ export async function applyMailCertificate(serverId: string, hostname: string): 
   } catch (error) {
     await repos.mailServer
       .setCertificateRenewalError(serverId, safeErrorMessage(error))
-      .catch(() => undefined);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail-certificate.service"); return undefined; });
     throw error;
   }
 }
@@ -188,7 +190,7 @@ export async function renewMailCertificate(
     } catch (error) {
       await repos.mailServer
         .setCertificateRenewalError(serverId, safeErrorMessage(error))
-        .catch(() => undefined);
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail-certificate.service"); return undefined; });
       throw error;
     }
   });

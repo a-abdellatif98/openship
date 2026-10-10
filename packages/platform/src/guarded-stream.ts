@@ -1,4 +1,5 @@
 /** Own the upstream iterator even when a caller closes before its first next(). */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 export function guardedStream<T>(source: AsyncIterable<T>, options: {
   check?(): Promise<void>;
   /** Interrupt pending reads before waiting for the iterator to settle. */
@@ -28,7 +29,9 @@ export function guardedStream<T>(source: AsyncIterable<T>, options: {
         else await options.check?.();
         if (closed) return { done: true, value: undefined };
         return result;
-      } catch (error) { await close().catch(() => {}); throw error; }
+      } catch (error) { await close().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/guarded-stream");
+      }); throw error; }
     },
     async return() { await close(); return { done: true, value: undefined }; },
     async throw(error) { await close(); throw error; },

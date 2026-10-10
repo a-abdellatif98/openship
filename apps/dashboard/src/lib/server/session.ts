@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import "server-only";
 import { cache } from "react";
 import { serverApi, ServerApiError } from "./api";
@@ -62,7 +63,8 @@ export async function needsOrgSelection(
     // disagree and loop, and the UI scopes to an org the user isn't in.
     if (activeOrganizationId && orgs.some((o) => o.id === activeOrganizationId)) return false;
     return orgs.length >= 2;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/lib/server/session");
     return false;
   }
 }
@@ -86,6 +88,7 @@ export const getSession = cache(async (): Promise<SessionData | null> => {
       });
       return data;
     } catch (err) {
+      observeCaughtError(err, "dashboard/lib/server/session");
       // 401 = genuinely unauthenticated - no point retrying
       if (err instanceof ServerApiError && err.status === 401) {
         return null;
@@ -226,6 +229,7 @@ export async function getDeploymentInfo(
     _deploymentInfo = await fetchDeploymentInfoWithRetry();
     _deploymentInfoFetchedAt = Date.now();
   } catch (err) {
+    observeCaughtError(err, "dashboard/lib/server/session");
     // Last-known-good beats a transient refetch failure.
     if (_deploymentInfo) {
       return _deploymentInfo;

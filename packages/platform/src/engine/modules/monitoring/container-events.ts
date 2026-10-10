@@ -43,6 +43,7 @@
  * surfaces as `onClose` and reconnects with the new credentials.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { safeErrorMessage } from "@repo/core";
 import { repos } from "@repo/db";
 import { activeDeploymentForProject } from "../../lib/active-deployment";
@@ -266,6 +267,7 @@ async function connect(sub: Subscription): Promise<void> {
     // were not listening has no event left to replay.
     schedule(sub);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/monitoring/container-events");
     if (isManagedServerIdle(err)) {
       await teardown(sub, "managed server is stopped or starting");
       return;
@@ -297,7 +299,7 @@ async function onClose(sub: Subscription, err: Error | null): Promise<void> {
   if (sub.closed) return;
   await releaseTransport(sub);
   if (err) {
-    console.warn(`[container-events] ${sub.key} stream closed: ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/modules/monitoring/container-events", `[container-events] ${sub.key} stream closed: ${safeErrorMessage(err)}`);
   }
   // Lease already gone, or the feature was turned off mid-stream: don't reconnect.
   if (sub.leaseUntil <= Date.now() || !eventsEnabled()) {
@@ -359,7 +361,7 @@ async function sweep(sub: Subscription): Promise<void> {
     }
   } catch (err) {
     // runHealthWatch swallows its own failures; this only catches the unexpected.
-    console.error(`[container-events] ${sub.key} sweep failed: ${safeErrorMessage(err)}`);
+    errorDiagnostics.error("platform/engine/modules/monitoring/container-events", `[container-events] ${sub.key} sweep failed: ${safeErrorMessage(err)}`, err);
   } finally {
     sub.lastRunAt = Date.now();
     sub.running = false;
@@ -387,7 +389,7 @@ async function releaseTransport(sub: Subscription): Promise<void> {
     // Logged, not rethrown: the SSH hold below is released in the same breath, and
     // stranding it would leak a pooled connection for a stream that was already going
     // away. But an aborter that throws every reconnect is a leak of its own.
-    console.error(`[container-events] ${sub.key} stream would not close: ${safeErrorMessage(err)}`);
+    errorDiagnostics.error("platform/engine/modules/monitoring/container-events", `[container-events] ${sub.key} stream would not close: ${safeErrorMessage(err)}`, err);
   }
   const runtime = sub.runtime;
   sub.runtime = null;
@@ -428,7 +430,7 @@ async function closeTransport(runtime: RuntimeAdapter | null, key: string): Prom
     // release is the next statement at every call site. It does leak an ssh child and
     // its fd though, so it says so: a reconnect loop over a transport that never
     // disposes is otherwise invisible until the process runs out of descriptors.
-    console.error(`[container-events] ${key} transport did not close cleanly: ${safeErrorMessage(err)}`);
+    errorDiagnostics.error("platform/engine/modules/monitoring/container-events", `[container-events] ${key} transport did not close cleanly: ${safeErrorMessage(err)}`, err);
   }
 }
 

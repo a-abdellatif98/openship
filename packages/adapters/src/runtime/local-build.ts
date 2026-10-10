@@ -13,6 +13,7 @@
  * the transfer callback and optional preflight hooks.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { BuildConfig, CommandExecutor } from "../types";
 import { LocalExecutor, wrapLocalBuildCommand } from "../system/executor";
 import {
@@ -110,7 +111,9 @@ export async function runLocalBuild(
 
     return result;
   } finally {
-    await localExec.rm(buildDir).catch(() => {});
+    await localExec.rm(buildDir).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/local-build");
+    });
     await localExec.dispose();
   }
 }

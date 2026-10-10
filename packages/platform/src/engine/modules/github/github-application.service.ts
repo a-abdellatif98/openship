@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { instanceAuthorization } from "../../lib/instance-authorization";
 import { assertCloudTenantScope } from "../../lib/cloud/scope";
 /**
@@ -57,7 +58,7 @@ export async function getStatus(
     input?.includeInstallUrl === false
       ? { url: "", cloudUnreachable: false }
       : source.resolveInstallUrl(),
-    hasConfiguredGitHubSource(ctx.organizationId).catch(() => false),
+    hasConfiguredGitHubSource(ctx.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-application.service"); return false; }),
   ]);
   const allowedAccounts = await filterAllowedAccounts(ctx, accounts, (a) => a.login);
   // Connect methods, derived server-side from the SAME chain table that resolves
@@ -67,8 +68,8 @@ export async function getStatus(
   const { resolveGitHubCapabilities } = await import("@repo/platform/engine/modules/github/github.capabilities");
   const { isCloudConnected } = await import("@repo/platform/engine/lib/cloud/session");
   const capabilities = await resolveGitHubCapabilities(ctx, {
-    cloudConnected: await isCloudConnected(ctx.userId).catch(() => false),
-  }).catch(() => null);
+    cloudConnected: await isCloudConnected(ctx.userId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-application.service"); return false; }),
+  }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-application.service"); return null; });
   return {
     state,
     accounts: allowedAccounts,
@@ -119,8 +120,8 @@ export async function getHome(ctx: ExecutionContext) {
   const { resolveGitHubCapabilities } = await import("@repo/platform/engine/modules/github/github.capabilities");
   const { isCloudConnected } = await import("@repo/platform/engine/lib/cloud/session");
   const capabilities = await resolveGitHubCapabilities(ctx, {
-    cloudConnected: await isCloudConnected(ctx.userId).catch(() => false),
-  }).catch(() => null);
+    cloudConnected: await isCloudConnected(ctx.userId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-application.service"); return false; }),
+  }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-application.service"); return null; });
 
   return {
     ...data,
@@ -457,6 +458,7 @@ export async function connect(ctx: ExecutionContext, input: NonNullable<Paramete
         interval: verification.interval,
       };
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/github/github-application.service");
       throw responseError({ connected: false, error: (err as Error).message }, 500);
     }
   }
@@ -590,6 +592,7 @@ export async function setInstanceToken(ctx: ExecutionContext, input: NonNullable
   try {
     report = await githubService.inspectPatScope(token);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/github/github-application.service");
     throw responseError({
         error: err instanceof Error ? err.message : "Could not validate token",
         code: "INVALID_TOKEN",
@@ -786,7 +789,7 @@ export async function getCloneToken(ctx: ExecutionContext, input: NonNullable<Pa
 
   const { resolveGitHubWebBaseUrl } = await import("@repo/platform/engine/modules/github/github-source.service");
   const webBaseUrl =
-    (await resolveGitHubWebBaseUrl(ctx.organizationId, owner).catch(() => null)) ??
+    (await resolveGitHubWebBaseUrl(ctx.organizationId, owner).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github-application.service"); return null; })) ??
     "https://github.com";
   const cloneOrigin = webBaseUrl.replace(/^https:\/\//, "").replace(/\/+$/, "");
   const cloneUrl = `https://x-access-token:${token}@${cloneOrigin}/${owner}/${repo}.git`;

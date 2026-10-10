@@ -21,7 +21,11 @@ import { AppError } from "@repo/core";
 import { ProjectSchema } from "./projects";
 import type { ResourceOperationSchema, ResourceOperations } from "./resource-operations";
 import { ProjectIntegrationSchemas } from "./project-integrations";
-import { ProjectRoutingSchemas } from "./project-routing";
+import {
+  ProjectRoutingSchemas,
+  ProjectRoutingClaimSchema,
+  ProjectRoutingRetrySchema,
+} from "./project-routing";
 import { ProjectLogSchemas } from "./project-logs";
 import { ProjectTransferSchemas } from "./project-transfer";
 import { AppProjectSchemas } from "./apps";
@@ -195,6 +199,8 @@ export const ProjectDetailsSchema = Type.Object({
   project: Type.Intersect([
     ProjectSchema,
     Type.Object({
+      routingClaims: Type.Optional(Type.Array(ProjectRoutingClaimSchema)),
+      routingRetry: Type.Optional(Type.Union([ProjectRoutingRetrySchema, Type.Null()])),
       serviceCount: Type.Integer({ minimum: 0 }),
       hasMultipleServices: Type.Boolean(),
       projectType: Type.Union([

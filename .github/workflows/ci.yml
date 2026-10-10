@@ -55,6 +55,11 @@ jobs:
       - name: Typecheck apps/api
         run: bun run --cwd apps/api lint
 
+      - name: Audit structured error boundaries
+        run: |
+          bun test scripts/audit-error-boundaries.test.ts
+          bun run errors:check
+
       - name: Typecheck apps/dashboard
         working-directory: apps/dashboard
         run: |
@@ -81,11 +86,23 @@ jobs:
             command: bun run --cwd apps/api test --shard=2/2
           - suite: Database
             command: bun run --cwd packages/db test
+          # Separate API processes and databases exercise both move directions,
+          # recovery, authentication and Desktop relays on every PR. No live
+          # server, provider account or outbound email is used.
+          - suite: Instance control plane
+            command: >-
+              bun run --cwd apps/api test:e2e
+              test/e2e/instance-handoff.e2e.test.ts
+              test/e2e/instance-protocol.e2e.test.ts
+              test/e2e/instance-relay.e2e.test.ts
+              test/e2e/instance-invitation.e2e.test.ts
+              test/e2e/error-reporting.e2e.test.ts
           - suite: Cloud Docker workspaces
             command: >-
               RUN_DOCKER_E2E=1 bun run --cwd apps/api test:e2e
               test/e2e/cloud-build-capacity.e2e.test.ts
               test/e2e/cloud-shared-workspace.e2e.test.ts
+              test/e2e/cloud-error-storage.e2e.test.ts
               test/e2e/migration-direct-transfer.e2e.test.ts
               test/e2e/migration-takeover.e2e.test.ts
               test/e2e/backup-volume-roundtrip.e2e.test.ts

@@ -3,6 +3,7 @@
  * Credential selection stays in tokenFor; App installation ownership and
  * OAuth completion stay with the underlying source. No host identity is used.
  */
+import { observedAllSettled } from "@repo/core/diagnostics";
 import type {
   GitHubConnectionState,
   GitHubRepository,
@@ -113,18 +114,18 @@ export class PersonalTokenGitHubSource implements GitHubSource {
   }
 
   async getConnectionState(): Promise<GitHubConnectionState> {
-    const [base, profile] = await Promise.allSettled([
+    const [base, profile] = await observedAllSettled([
       this.base.getConnectionState(),
       this.profile(),
-    ]);
+    ], "platform/engine/modules/github/sources/personal-token-source");
     return this.state(base.status === "fulfilled" ? base.value : emptyState(), profile);
   }
 
   async getConnectionStatus(): Promise<GitHubConnectionStatus> {
-    const [base, profile] = await Promise.allSettled([
+    const [base, profile] = await observedAllSettled([
       this.base.getConnectionStatus(),
       this.profile(),
-    ]);
+    ], "platform/engine/modules/github/sources/personal-token-source");
     return {
       state: this.state(base.status === "fulfilled" ? base.value.state : emptyState(), profile),
       accounts: this.accounts(
@@ -137,11 +138,11 @@ export class PersonalTokenGitHubSource implements GitHubSource {
   }
 
   async getHome(): Promise<GitHubHome> {
-    const [base, profile, repos] = await Promise.allSettled([
+    const [base, profile, repos] = await observedAllSettled([
       this.base.getHome(),
       this.profile(),
       this.repositories(),
-    ]);
+    ], "platform/engine/modules/github/sources/personal-token-source");
     const home =
       base.status === "fulfilled" ? base.value : { state: emptyState(), accounts: [], repos: [] };
     const errors = { ...home.errors };
@@ -171,10 +172,10 @@ export class PersonalTokenGitHubSource implements GitHubSource {
 
   async listReposForOwner(owner?: string): Promise<MappedRepository[] | null> {
     if (owner && !(await this.githubComOwner(owner))) return this.base.listReposForOwner(owner);
-    const [base, personal] = await Promise.allSettled([
+    const [base, personal] = await observedAllSettled([
       this.base.listReposForOwner(owner),
       this.repositories(),
-    ]);
+    ], "platform/engine/modules/github/sources/personal-token-source");
     const repos =
       personal.status === "fulfilled"
         ? mapRepositories(personal.value)

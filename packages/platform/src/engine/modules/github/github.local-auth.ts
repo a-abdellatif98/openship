@@ -27,6 +27,7 @@
  * and bailing on null.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { probeLocalGitHubToken } from "@repo/adapters";
 import { readFile } from "fs/promises";
 import { homedir } from "os";
@@ -113,6 +114,7 @@ async function readStoredDeviceToken(): Promise<string | null> {
     if (!sealed) return null;
     return decrypt(sealed);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/github/github.local-auth");
     systemDebug("github", `stored device token unreadable: ${safeErrorMessage(err)}`);
     return null;
   }
@@ -162,7 +164,7 @@ export type GitIdentityProblem = "rejected" | "unreachable";
 
 export async function getGitIdentityMethod(): Promise<GitIdentityMethod | null> {
   if (env.CLOUD_MODE) return null;
-  const stored = await repos.instanceSettings.get().catch(() => null);
+  const stored = await repos.instanceSettings.get().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.local-auth"); return null; });
   if (stored?.ghDeviceTokenEncrypted) return stored.ghDeviceTokenMethod ?? "device";
   return (await getLocalGhToken()) ? "host-cli" : null;
 }
@@ -178,7 +180,8 @@ export async function getGitIdentityMethod(): Promise<GitIdentityMethod | null> 
 export async function hasLocalGitIdentity(): Promise<boolean> {
   try {
     return !!(await getLocalGhToken());
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.local-auth");
     return false;
   }
 }
@@ -243,7 +246,7 @@ export async function getLocalGhStatus(): Promise<LocalGhStatus> {
 
   // The credential exists, so from here on every return carries the method —
   // a warning the operator can act on has to name what is broken.
-  const method = (await getGitIdentityMethod().catch(() => null)) ?? "host-cli";
+  const method = (await getGitIdentityMethod().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.local-auth"); return null; })) ?? "host-cli";
 
   try {
     const res = await fetch("https://api.github.com/user", {
@@ -259,7 +262,7 @@ export async function getLocalGhStatus(): Promise<LocalGhStatus> {
       // authorization failures. A throttled check says nothing about token validity.
       let rejected = isGitHubCredentialRejected(res.status, res.headers);
       if (res.status === 403 && rejected) {
-        const body = (await res.json().catch(() => null)) as { message?: unknown } | null;
+        const body = (await res.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.local-auth"); return null; })) as { message?: unknown } | null;
         rejected = isGitHubCredentialRejected(res.status, res.headers, body?.message);
       }
       systemDebug(
@@ -279,6 +282,7 @@ export async function getLocalGhStatus(): Promise<LocalGhStatus> {
     const user = (await res.json()) as { login: string; id: number; avatar_url: string };
     return { available: true, ...user, method, checkedAt };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/github/github.local-auth");
     systemDebug("gh-cli", `/user verify threw: ${safeErrorMessage(err)}`);
     // Network-level failure: never blame the credential.
     return { available: false, method, problem: "unreachable", checkedAt };
@@ -468,6 +472,7 @@ export async function ghAuthTokenViaConfig(
     }
     systemDebug("gh-cli", `${path}: parsed but no oauth_token for github.com`);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/github/github.local-auth");
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== "ENOENT") {
       systemDebug("gh-cli", `${path}: ${code ?? "read error"}`);
@@ -629,6 +634,7 @@ async function runDeviceFlow(
         if (!state.abort.signal.aborted && activeFlows.get(flowKey) === state) state.status = "complete";
       })
       .catch((err: Error) => {
+        observeCaughtError(err, "platform/engine/modules/github/github.local-auth");
         state.status = "error";
         state.error = safeErrorMessage(err);
         // If onVerification never fired, reject the start promise

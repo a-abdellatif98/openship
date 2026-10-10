@@ -10,6 +10,7 @@
  * `./connectivity-checks` and self-register when imported; callers that run
  * checks import that module for its side effect.
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { classifyConnectivityError, connFail, type ConnectivityResult } from "@repo/core";
 
 export type ConnectivityCheck<I> = (input: I) => Promise<ConnectivityResult>;
@@ -35,6 +36,7 @@ export async function runConnectivityCheck<I = unknown>(
   try {
     return await check(input as unknown);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/connectivity");
     const { code, message } = classifyConnectivityError(err);
     return connFail(code, message);
   }

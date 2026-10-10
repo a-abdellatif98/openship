@@ -17,6 +17,11 @@ declare global {
 
   interface DesktopBridge {
     isDesktop?: boolean;
+    instanceLinks?: {
+      pending: () => Promise<import("@repo/core").DesktopInstanceLinkRequest | null>;
+      acknowledge: (id: number) => Promise<boolean>;
+      onLink: (cb: () => void) => () => void;
+    };
     reset?: () => Promise<unknown>;
     app?: {
       version: () => Promise<string>;

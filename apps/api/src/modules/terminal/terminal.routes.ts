@@ -1,8 +1,6 @@
 import { Hono } from "hono";
 import { secureRouter } from "../../lib/secure-router";
 import { issueTicket, terminalWsHandler } from "./terminal.controller";
-import { repos } from "@repo/db";
-import { env } from "@repo/platform/engine/config/env";
 
 /**
  * Interactive server terminals over the shared authorized connection boundary.
@@ -38,23 +36,4 @@ r.public(
   terminalWsHandler,
 );
 
-// Boot-time sweep: any audit rows left open by a prior crash are
-// finalized as 'server_error'. Their underlying ssh2 channels are dead
-// (process died), so the rows are accurate after this. Runs once at
-// module load - no top-level await in the route file itself, so we
-// chain it onto a fire-and-forget promise.
-if (!env.CLOUD_MODE) void repos.terminalSession
-  .closeAllActive("server_error")
-  .then((n) => {
-    if (n > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[terminal] swept ${n} orphan session row(s) from previous run`);
-    }
-  })
-  .catch(() => {
-    // Sweep failure is non-fatal; the rows just remain open until the
-    // next restart succeeds.
-  });
-
 export const terminalRoutes = r.hono;
-

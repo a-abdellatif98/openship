@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { SYSTEM, currentMailCertificateHealth, mailHostname } from "@repo/core";
 /**
  * @module issues
@@ -459,17 +460,17 @@ export async function listOrganizationIssues(
   });
   const [incidents, components, behind, pending, updates, names, mailServers, renewalJob] = await Promise.all([
     infra
-      ? repos.serviceIncident.listByOrg(organizationId, { status: "open" }).catch(() => [])
+      ? repos.serviceIncident.listByOrg(organizationId, { status: "open" }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/issues/issues.service"); return []; })
       : Promise.resolve([]),
-    infra ? loadOrgContainerIssues(organizationId).catch(() => null) : Promise.resolve(null),
+    infra ? loadOrgContainerIssues(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/issues/issues.service"); return null; }) : Promise.resolve(null),
     infra
-      ? repos.serverContainerStatus.listBehindByOrg(organizationId).catch(() => [])
+      ? repos.serverContainerStatus.listBehindByOrg(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/issues/issues.service"); return []; })
       : Promise.resolve([]),
-    getOrgPendingActions(organizationId).catch(() => new Map<string, PendingAction[]>()),
-    listOrganizationUpdates(ctx, { behindOnly: true }).catch(() => []),
+    getOrgPendingActions(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/issues/issues.service"); return new Map<string, PendingAction[]>(); }),
+    listOrganizationUpdates(ctx, { behindOnly: true }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/issues/issues.service"); return []; }),
     loadNames(organizationId),
-    mailVisible ? repos.mailServer.listByOrganization(organizationId).catch(() => []) : Promise.resolve([]),
-    mailVisible ? repos.job.findByKey("ssl:renew").catch(() => null) : Promise.resolve(null),
+    mailVisible ? repos.mailServer.listByOrganization(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/issues/issues.service"); return []; }) : Promise.resolve([]),
+    mailVisible ? repos.job.findByKey("ssl:renew").catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/issues/issues.service"); return null; }) : Promise.resolve(null),
   ]);
 
   const issues: SystemIssue[] = [];
@@ -588,8 +589,8 @@ async function loadNames(organizationId: string) {
     repos.project
       .listByOrganization(organizationId, { perPage: 1000 })
       .then((r) => r.rows)
-      .catch(() => []),
-    repos.server.listByOrganization(organizationId).catch(() => []),
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/issues/issues.service"); return []; }),
+    repos.server.listByOrganization(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/issues/issues.service"); return []; }),
   ]);
   return {
     project: new Map(projects.map((p) => [p.id, p.name])),

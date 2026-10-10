@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 import React, { useCallback, useEffect, useState } from "react";
 import { useProjectSettings } from "@/context/ProjectSettingsContext";
@@ -252,7 +253,8 @@ export const AdvancedSettings = ({ onDeleteProject }: Props) => {
     try {
       await navigator.clipboard.writeText(id);
       showToast(id, "success", menu.idCopied);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/AdvancedSettings");
       // Insecure context or a denied clipboard permission — say so rather than
       // reporting a copy that never happened.
       showToast(menu.copyFailed, "error", menu.copyId);
@@ -758,7 +760,8 @@ function RoutingStrategyCard({
         "success",
         t.projectSettings.advanced.routing.title,
       );
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/AdvancedSettings");
       setStrategy(prev);
       showToast(
         t.projectSettings.advanced.routing.toast.failed,
@@ -850,7 +853,8 @@ function InternalAliasCard({
       if ((res as { success?: boolean })?.success === false) throw new Error("update failed");
       setSaved(trimmed);
       showToast(c.toast.saved, "success", c.title);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/AdvancedSettings");
       showToast(c.toast.failed, "error", c.title);
     } finally {
       setSaving(false);
@@ -951,7 +955,8 @@ function ReadinessCard({
         const res = await projectsApi.update(projectId, { readiness: resolved });
         if ((res as { success?: boolean })?.success === false) throw new Error("update failed");
         savedRef.current = resolved;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/AdvancedSettings");
         setValue(previous);
         showToast(t.projectSettings.advanced.routing.toast.failed, "error", title);
       }

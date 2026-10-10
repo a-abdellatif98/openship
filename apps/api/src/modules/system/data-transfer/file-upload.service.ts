@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   assertCompleteChunkSet,
   claimSession,
@@ -125,7 +126,7 @@ export async function finalizeFileUpload(input: {
     // capabilities. Preserve their verified chunks so a wrong passphrase,
     // merge collision, or transient migration lock can be corrected without
     // uploading hundreds of megabytes again.
-    await releaseSessionClaim(session).catch(() => undefined);
+    await releaseSessionClaim(session).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/system/data-transfer/file-upload.service"); return undefined; });
     throw error;
   }
 }

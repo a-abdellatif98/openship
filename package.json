@@ -53,7 +53,8 @@
     "prepare": "git config core.hooksPath .githooks || true",
     "build:sdk": "bun run --cwd packages/openship build",
     "docs:reference": "node scripts/generate-api-reference.mjs --write && node scripts/generate-cli-reference.mjs --write && node scripts/generate-mcp-reference.mjs --write",
-    "docs:check": "node scripts/check-docs.mjs"
+    "docs:check": "node scripts/check-docs.mjs",
+    "errors:check": "node scripts/audit-error-boundaries.mjs --check"
   },
   "devDependencies": {
     "prettier": "^3.8.1",

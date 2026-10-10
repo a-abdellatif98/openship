@@ -41,6 +41,7 @@
  * every call, same as a transient failure.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { randomBytes } from "node:crypto";
 import { dirname } from "node:path/posix";
 
@@ -209,7 +210,7 @@ async function loginCanManageMailFiles(
     .exec(
       `if ${checks.join(" && ")}; then echo opsh_mail_access=yes; else echo opsh_mail_access=no; fi`,
     )
-    .catch(() => "");
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail-engine"); return ""; });
   return result.trim() === "opsh_mail_access=yes";
 }
 
@@ -261,7 +262,7 @@ export async function writeMailConfigFile(
     if (writer.rename) await writer.rename(tmp, path);
     else await writer.exec(`mv -f ${sq(tmp)} ${sq(path)}`);
   } catch (err) {
-    await writer.rm(tmp).catch(() => undefined);
+    await writer.rm(tmp).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail-engine"); return undefined; });
     throw err;
   }
 }
@@ -405,7 +406,7 @@ export async function runMailSql(target: MailTarget, sql: string): Promise<strin
       // Logged here because the throw below is a 409, and the error handler only logs
       // 5xx — without this line the condition being fixed leaves no trace at all,
       // which is the complaint that opened the issue.
-      console.warn(`[mail] vmail schema missing on ${flavor} engine: ${firstOutputLine(message)}`);
+      errorDiagnostics.warn("platform/engine/modules/mail/mail-engine", `[mail] vmail schema missing on ${flavor} engine: ${firstOutputLine(message)}`, err);
       throw new MailDbNotInitializedError(flavor, firstOutputLine(message));
     }
     throw err;
@@ -458,7 +459,7 @@ async function reclassify(
   detail: string,
 ): Promise<MailEngineUnavailableError> {
   forgetMailEngine(executor);
-  const fresh = await resolveMailEngine(executor).catch(() => previous);
+  const fresh = await resolveMailEngine(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail-engine"); return previous; });
   if (fresh.flavor === "none") {
     return new MailEngineUnavailableError(
       "not_installed",

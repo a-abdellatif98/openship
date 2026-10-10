@@ -27,6 +27,7 @@
  *
  * See ./README.md for the full design + the out-of-folder touch points.
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { Duplex } from "node:stream";
 import type { CommandExecutor } from "@repo/adapters";
@@ -157,12 +158,14 @@ function handleConnection(
     log(result, { serverId: ctx.serverId, sessionId: ctx.sessionId, ...meta });
     try {
       if (response) stream.write(response);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/git-forwarding/relay");
       /* peer gone */
     }
     try {
       stream.end();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/git-forwarding/relay");
       /* already closed */
     }
   };
@@ -170,7 +173,7 @@ function handleConnection(
   const timer = setTimeout(() => finish(null, "timeout"), REQUEST_TIMEOUT_MS);
   timer.unref?.();
 
-  stream.on("error", () => finish(null, "stream-error"));
+  stream.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "platform/engine/lib/git-forwarding/relay"); return finish(null, "stream-error"); });
   stream.on("data", (chunk: Buffer) => {
     if (done) return;
     buf += chunk.toString("utf8");
@@ -222,7 +225,7 @@ function handleConnection(
         // this is the credential-helper protocol, not a URL, so it stays put.
         finish(`username=x-access-token\npassword=${token}\n\n`, "granted", meta);
       })
-      .catch(() => finish(null, "token-error", meta));
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/git-forwarding/relay"); return finish(null, "token-error", meta); });
   });
 }
 
@@ -275,7 +278,9 @@ export async function openRelay(opts: {
   const close = async () => {
     if (closed) return;
     closed = true;
-    await forward.close().catch(() => {});
+    await forward.close().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/git-forwarding/relay");
+    });
     sshManager.release(opts.serverId);
   };
 
@@ -303,7 +308,9 @@ export async function writeHelperScript(
   try {
     await executor.exec(`chmod 700 "${scriptPath}"`);
   } catch (err) {
-    await Promise.resolve(executor.rm(scriptPath)).catch(() => {});
+    await Promise.resolve(executor.rm(scriptPath)).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/git-forwarding/relay");
+    });
     throw err;
   }
   return scriptPath;

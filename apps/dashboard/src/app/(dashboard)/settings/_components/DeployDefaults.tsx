@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useRef, useState } from "react";
 import { settingsApi } from "@/lib/api";
 import { useSession } from "@/lib/auth-client";
@@ -27,7 +28,8 @@ export function DeployDefaults() {
     setStateError(null);
     void settingsApi.get().then(settings => {
       if (active) setSaved({ contextKey, serverId: settings.defaultServerId });
-    }).catch(() => { if (active) setStateError(t.settings.deployDefaults.toast.failed); });
+    }).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/DeployDefaults"); if (active) setStateError(t.settings.deployDefaults.toast.failed); });
     return () => { active = false; };
   }, [contextKey, revision, t.settings.deployDefaults.toast.failed]);
 
@@ -44,7 +46,8 @@ export function DeployDefaults() {
       setSaved({ contextKey, serverId: server?.id ?? null });
       showToast(server ? interpolate(t.settings.deployDefaults.toast.setTo, { label: server.name })
         : t.settings.deployDefaults.toast.cleared, "success", t.settings.common.toast.defaults);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/DeployDefaults");
       if (contextRef.current === owner) showToast(t.settings.deployDefaults.toast.failed, "error", t.settings.common.toast.defaults);
     } finally {
       setSaving(false);

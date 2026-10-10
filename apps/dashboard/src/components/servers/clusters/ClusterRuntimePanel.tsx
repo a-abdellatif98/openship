@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -103,7 +104,8 @@ export function ClusterRuntimePanel({
       // A lost POST response may already have started work. Read its durable state once.
       try {
         receive(await computeClustersApi.runtime(cluster.id));
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/servers/clusters/ClusterRuntimePanel");
         /* Preserve the action's original error. */
       }
     } finally {

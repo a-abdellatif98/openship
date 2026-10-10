@@ -20,6 +20,7 @@
  * paths with the raw host executor is the GH-562 bug class.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { safeErrorMessage, shellQuote } from "@repo/core";
 import { repos, type MailInboundRule } from "@repo/db";
 import { mailEngineCommand, runMailCommand } from "@repo/platform/engine/modules/mail/mail-engine";
@@ -192,8 +193,9 @@ export async function runInboundForServer(opts: {
         for (const [ruleId, group] of perRule) {
           try {
             emitted += await emitForRule(organizationId, serverId, domain, group);
-            await repos.mailInbound.markMatched(ruleId).catch(() => undefined);
+            await repos.mailInbound.markMatched(ruleId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/inbound/read"); return undefined; });
           } catch (err) {
+            observeCaughtError(err, "platform/engine/modules/mail/inbound/read");
             for (const { message } of group) retry.add(message.file);
             errors.push(`${domain} rule ${ruleId}: ${safeErrorMessage(err)}`);
           }
@@ -205,10 +207,12 @@ export async function runInboundForServer(opts: {
         try {
           await deleteMessages(serverId, folder, handled.filter((file) => !retry.has(file)));
         } catch (delErr) {
+          observeCaughtError(delErr, "platform/engine/modules/mail/inbound/read");
           errors.push(`${domain} message cleanup: ${safeErrorMessage(delErr)}`);
         }
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/mail/inbound/read");
       errors.push(`${domain}: ${safeErrorMessage(err)}`);
     }
   }
@@ -272,7 +276,7 @@ async function emitForRule(
 
   const channelIds = rule.channelIds ?? [];
   if (channelIds.length === 0) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/mail/inbound/read",
       `[mail:inbound] rule ${rule.id} (“${rule.name}”) matched ${group.length} message(s) ` +
         `but has no notification channels — nothing was sent.`,
     );

@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { AppError, NotFoundError, isWildcardHostname, normalizeCustomHostname, safeErrorMessage } from "@repo/core";
 import { OperationError, type ProjectRoutingSchemas } from "@repo/contracts";
@@ -33,7 +34,7 @@ async function ownedDomain(projectId: string, domainId?: string | null) {
 async function repush(projectId: string) {
   if (process.env.OPENSHIP_NATIVE === "true" && process.env.OPENSHIP_NATIVE_ROUTING === "none") return;
   await pushProjectRulesResolved(projectId).catch(error =>
-    console.warn(`[route-rules] push failed: ${safeErrorMessage(error)}`));
+    errorDiagnostics.warn("platform/engine/modules/projects/project-routing.operations", `[route-rules] push failed: ${safeErrorMessage(error)}`, error));
 }
 function record(ctx: ExecutionContext, projectId: string, operation: string, ruleId: string) {
   audit.recordAsync(operationAuditContext(ctx), {

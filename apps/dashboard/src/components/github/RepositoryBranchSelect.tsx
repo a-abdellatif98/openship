@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -70,7 +71,8 @@ function BranchSelect({
         ...new Set([...previous, ...result.data.map((branch) => branch.name)]),
       ]);
       setHasMore(result.pagination.hasMore);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/github/RepositoryBranchSelect");
       if (active.current) setFailed(true);
     } finally {
       pending.current = false;

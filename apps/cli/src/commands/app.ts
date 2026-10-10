@@ -1,4 +1,5 @@
 /** Catalog and app commands are presentation over the native/remote SDK. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Command } from "commander";
 import { readFile } from "node:fs/promises";
 import type { AppOperations, InstallAppInput, ProjectOperations } from "@repo/sdk";
@@ -15,7 +16,9 @@ appCommand.addCommand(new Command("list").aliases(["ls", "catalog"])
   .description("List available catalog apps")
   .action(async () => {
     try { printTable(await getShipClient().apps.listCatalog(), ["id", "name", "category", "verified", "comingSoon"]); }
-    catch (error) { fail(error); }
+    catch (error) {
+      observeCaughtError(error, "cli/commands/app");
+ fail(error); }
   }));
 appCommand.addCommand(new Command("get").argument("<id>", "Catalog app ID")
   .description("Show an app template and an accessible installation draft")
@@ -40,7 +43,9 @@ appCommand.addCommand(new Command("install").argument("<id>", "Catalog app ID")
 const custom = new Command("custom").description("Manage this organization's custom app definitions");
 custom.addCommand(new Command("list").alias("ls").action(async () => {
   try { printTable(await getShipClient().apps.listCustom(), ["appId", "name", "updatedAt"]); }
-  catch (error) { fail(error); }
+  catch (error) {
+    observeCaughtError(error, "cli/commands/app");
+ fail(error); }
 }));
 custom.addCommand(new Command("add").argument("<file>", "AppTemplate JSON file")
   .description("Validate and save a custom app definition")

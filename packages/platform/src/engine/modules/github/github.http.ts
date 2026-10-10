@@ -23,6 +23,7 @@
  * data).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { cacheStore } from "../../lib/cache-store/index";
 
 export interface GhRequest {
@@ -142,7 +143,8 @@ export async function ghFetchSoft<T = unknown>(token: string, req: GhRequest): P
     });
     if (!res.ok) return null;
     return (await res.json()) as T;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.http");
     return null;
   }
 }
@@ -171,7 +173,8 @@ export async function ghFetchPublic<T = unknown>(req: GhRequest): Promise<T | nu
     if (res.status === 204) return { success: true } as T;
     if (!res.ok) return null;
     return (await res.json()) as T;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.http");
     return null;
   }
 }
@@ -211,7 +214,8 @@ export async function isPublicRepo(owner: string, repo: string): Promise<boolean
         return true;
       }
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.http");
     /* network/timeout → treat as not-known-public */
   }
   return false;

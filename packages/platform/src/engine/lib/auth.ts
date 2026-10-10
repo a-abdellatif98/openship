@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { organizationOptions, isSaasDeployment } from "./organization-lifecycle";
 import { betterAuth, type User } from "better-auth";
 import { APIError } from "better-auth/api";
@@ -86,6 +87,15 @@ const googleOAuth = socialProviderCredentials("google");
 
 export const auth = betterAuth({
   basePath: "/api/auth",
+  logger: {
+    level: "warn",
+    // Better Auth plugins can catch failures internally before returning an
+    // HTTP response. Retain those causes without dumping SDK request objects.
+    log(level, message, ...args) {
+      if (level === "error") errorDiagnostics.error("auth", message, ...args);
+      else if (level === "warn") errorDiagnostics.warn("auth", message, ...args);
+    },
+  },
   // Dynamic when served on a public URL — every absolute OAuth/auth URL is built
   // from the forwarded public host so remote MCP clients get reachable endpoints
   // (see resolveAuthBaseUrl). Static runtimeTarget.api otherwise (cloud/dev).
@@ -419,7 +429,7 @@ export const auth = betterAuth({
           // value throws at boot), and the `cloud-saas` row — production — cannot
           // reach this branch. It is NOT gated on NODE_ENV, which flips by accident.
           if (runtimeTargetId === "local-saas") {
-            console.warn(
+            errorDiagnostics.warn("platform/engine/lib/auth",
               `\n[dev:local-saas] email verification code for ${email}: ${otp}\n` +
                 `  (expires in 10 min. Logged because this target has no mail transport; ` +
                 `never happens on cloud-saas.)\n`,

@@ -25,6 +25,7 @@
  * TCP port (the SSH bridge is a local port), or TLS.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import net from "node:net";
 import tls from "node:tls";
 import { Duplex } from "node:stream";
@@ -107,7 +108,7 @@ function bridgeSocket(socket: Duplex, leftover: Buffer): Duplex {
     if (!out.push(chunk)) socket.pause();
   });
   socket.on("end", endRead);
-  socket.on("error", (err: Error) => out.destroy(err));
+  socket.on("error", (err: Error) => { observeCaughtError(err, "adapters/runtime/docker-exec-stream"); return out.destroy(err); });
   // A raw socket emits `close` however it dies, and the consumer keys its
   // exit-code lookup off that event. Finish BOTH sides here so autoDestroy emits
   // the duplex's own `close` — it fires after `end`, so a final burst of output
@@ -363,7 +364,7 @@ export function installDockerodeBuildKitSessionWorkaround(docker: { modem?: unkn
       sessionName || "openship",
     ).then(
       (socket) => callback(null, socket),
-      (error: unknown) => callback(error instanceof Error ? error : new Error(String(error)), null),
+      (error: unknown) => { /* diagnostics-ignore: The Docker transport callback propagates the failure to the request consumer. */ return callback(error instanceof Error ? error : new Error(String(error)), null); },
     );
   };
   patchedBuildKitModems.add(modem);

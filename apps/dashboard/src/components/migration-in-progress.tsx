@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect } from "react";
@@ -45,7 +46,8 @@ export function MigrationInProgress() {
           window.location.reload();
           return;
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/migration-in-progress");
         // Network blip mid-cutover is expected — just keep polling.
       }
       schedule();

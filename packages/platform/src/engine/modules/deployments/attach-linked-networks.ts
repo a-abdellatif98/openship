@@ -4,6 +4,7 @@
  * older project links retain their project network. Service links fail the deploy
  * if networking cannot be established. Legacy links remain advisory.
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { findProjectDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos } from "@repo/db";
 
@@ -66,13 +67,13 @@ export async function attachLinkedNetworks(
        * resolve while the UI reported success. Stored container ids are the identity the READ
        * paths already use (services/live-state.ts).
        */
-      const project = await repos.project.findById(projectId).catch(() => null);
+      const project = await repos.project.findById(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/attach-linked-networks"); return null; });
       const currentDeploymentId = deploymentId ?? project?.activeDeploymentId;
       const deployment = !onlyContainerIds && project && currentDeploymentId
-        ? await findProjectDeployment(project, currentDeploymentId).catch(() => undefined)
+        ? await findProjectDeployment(project, currentDeploymentId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/attach-linked-networks"); return undefined; })
         : undefined;
       const stored = deployment
-        ? (await repos.service.listByDeployment(deployment.id).catch(() => []))
+        ? (await repos.service.listByDeployment(deployment.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/attach-linked-networks"); return []; }))
             .map((row) => row.containerId)
             .filter((id): id is string => !!id)
         : [];

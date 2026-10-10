@@ -17,6 +17,7 @@
  * parameter rather than a branch in here.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos, type Service } from "@repo/db";
 import type { BackupExecutor, ServiceHandle } from "@repo/adapters";
 import { ValidationError } from "@repo/core";
@@ -39,8 +40,8 @@ async function resolveServiceEnv(
   const [projectLevel, serviceScoped] = await Promise.all([
     // serviceId === null is what pins this to project-level rows only; omitting it
     // is what made the query return everything.
-    repos.project.getEnvMap(serviceRow.projectId, environment, null).catch(() => ({})),
-    repos.project.getEnvMap(serviceRow.projectId, environment, serviceRow.id).catch(() => ({})),
+    repos.project.getEnvMap(serviceRow.projectId, environment, null).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/service-handle"); return ({}); }),
+    repos.project.getEnvMap(serviceRow.projectId, environment, serviceRow.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/service-handle"); return ({}); }),
   ]);
   const resolved = mergeServiceDeployEnv(
     {
@@ -119,7 +120,7 @@ export async function withContainerEnv(
   executor: BackupExecutor,
 ): Promise<ServiceHandle> {
   if (!executor.readContainerEnv || !handle.containerId) return handle;
-  const fromContainer = await executor.readContainerEnv(handle).catch(() => ({}));
+  const fromContainer = await executor.readContainerEnv(handle).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/service-handle"); return ({}); });
   if (Object.keys(fromContainer).length === 0) return handle;
   return { ...handle, env: { ...fromContainer, ...handle.env } };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -27,6 +28,7 @@ import { getApiBaseUrl, domainsApi, projectsApi, systemApi } from "@/lib/api";
 import { canReportStreamEnd, reportLostStream } from "./prepare-stream-outcome";
 import { invalidateProjectCaches } from "./useProjectEndpoints";
 import { useI18n } from "@/components/i18n-provider";
+import { randomUUID } from "@/lib/random-uuid";
 
 interface StreamPrompt {
   promptId: string;
@@ -81,6 +83,8 @@ export interface SystemPrepareOptions {
   labels?: { working?: string; done?: string; failed?: string; close?: string };
   /** Fired when the viewer starts an attempt, including an explicit Retry. */
   onStart?: () => void;
+  /** The server-owned operation ID, for reconnecting to the same log. */
+  onSession?: (sessionId: string) => void;
   /** Fired once on successful completion. */
   onDone?: () => void;
   /** Refresh saved state after success, partial failure, or a disconnected viewer. */
@@ -175,7 +179,8 @@ export function PrepareStreamContent({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sessionId: sid, action }),
         });
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/hooks/useSystemPrepareModal");
         /* the stream reports the outcome */
       }
     },
@@ -189,7 +194,7 @@ export function PrepareStreamContent({
    */
   const reportUnknownOutcome = useCallback(
     async (signal: AbortSignal) => {
-      const outcome = (await opts.resolveOutcome?.().catch(() => null)) ?? null;
+      const outcome = (await opts.resolveOutcome?.().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/hooks/useSystemPrepareModal"); return null; })) ?? null;
       if (signal.aborted) return;
       terminalRef.current = true;
       const report = reportLostStream(outcome);
@@ -232,7 +237,9 @@ export function PrepareStreamContent({
       const decoder = new TextDecoder();
       let buffer = "";
       const cancel = () => {
-        void reader.cancel().catch(() => {});
+        void reader.cancel().catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/hooks/useSystemPrepareModal");
+        });
       };
       controller.signal.addEventListener("abort", cancel, { once: true });
       try {
@@ -259,8 +266,12 @@ export function PrepareStreamContent({
             } catch {
               continue;
             }
-            if (json.type === "session" && json.sessionId) sessionIdRef.current = json.sessionId;
-            else if (json.type === "steps") setSteps(json.steps ?? []);
+            if (json.type === "session" && json.sessionId) {
+              sessionIdRef.current = json.sessionId;
+              if (opts.attachUrl && opts.retryMode === "reattach")
+                attachSessionIdRef.current = json.sessionId;
+              opts.onSession?.(json.sessionId);
+            } else if (json.type === "steps") setSteps(json.steps ?? []);
             else if (json.type === "log")
               setLogs((p) => [...p, { message: json.message ?? "", level: json.level ?? "info" }]);
             else if (json.type === "prompt") setPrompt(json as StreamPrompt);
@@ -313,7 +324,8 @@ export function PrepareStreamContent({
             let sid: string | undefined;
             try {
               sid = (await res.json())?.sessionId;
-            } catch {
+            } catch (diagnosticFailure) {
+              observeCaughtError(diagnosticFailure, "dashboard/hooks/useSystemPrepareModal");
               /* fall through to the generic !res.ok handling below */
             }
             if (sid) {
@@ -325,7 +337,9 @@ export function PrepareStreamContent({
         }
 
         if (controller.signal.aborted) {
-          await res.body?.cancel().catch(() => {});
+          await res.body?.cancel().catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "dashboard/hooks/useSystemPrepareModal");
+          });
           return;
         }
         if (!res.ok || !res.body) {
@@ -335,7 +349,8 @@ export function PrepareStreamContent({
             const j = await res.json();
             code = j.error;
             msg = j.error || j.message || msg;
-          } catch {
+          } catch (diagnosticFailure) {
+            observeCaughtError(diagnosticFailure, "dashboard/hooks/useSystemPrepareModal");
             /* keep statusText */
           }
           if (controller.signal.aborted) return;
@@ -353,6 +368,7 @@ export function PrepareStreamContent({
           await reportUnknownOutcome(controller.signal);
         }
       } catch (e) {
+        observeCaughtError(e, "dashboard/hooks/useSystemPrepareModal");
         // A late failure AFTER the outcome is known is teardown noise — the
         // server already told us how it went, and overwriting that with a
         // network message would replace a real result with a lie.
@@ -392,7 +408,8 @@ export function PrepareStreamContent({
       await navigator.clipboard.writeText(logs.map((entry) => entry.message).join("\n"));
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/hooks/useSystemPrepareModal");
       /* clipboard denied — nothing useful to say */
     }
   };
@@ -627,9 +644,16 @@ export function useRoutingRetryModal(present?: SystemPreparePresenter) {
   const prepare = useSystemPrepareModal(present);
   const { t } = useI18n();
   return useCallback(
-    (projectId: string, opts?: Pick<SystemPrepareOptions, "onDone">): string =>
+    (
+      projectId: string,
+      opts?: Pick<SystemPrepareOptions, "onDone" | "onSession"> & { attachSessionId?: string },
+    ): string =>
       prepare({
-        streamUrl: `projects/${encodeURIComponent(projectId)}/routing/retry/stream`,
+        streamUrl: `projects/${encodeURIComponent(projectId)}/routing/retry/stream?idempotencyKey=${randomUUID()}`,
+        attachUrl: (sessionId) =>
+          `projects/${encodeURIComponent(projectId)}/routing/retry/stream?sessionId=${encodeURIComponent(sessionId)}`,
+        initialAttachSessionId: opts?.attachSessionId,
+        retryMode: "reattach",
         title: t.projects.routingRetry.retry,
         labels: {
           working: t.projects.routingRetry.retrying,
@@ -637,6 +661,7 @@ export function useRoutingRetryModal(present?: SystemPreparePresenter) {
           failed: t.projects.routingRetry.failed,
         },
         onDone: opts?.onDone,
+        onSession: opts?.onSession,
         onSettled: () => invalidateProjectCaches(projectId),
         // A dropped stream has no terminal result. Refresh the cards, but do not
         // infer success from an old warning flag while the repair may still run.
@@ -674,7 +699,7 @@ export function useContainerApplyModal(present?: SystemPreparePresenter) {
       // running (new image, or simply started) and the row already say so. Read it
       // back rather than reporting an unknown outcome for a run that finished.
       const resolveOutcome = async () => {
-        const list = await systemApi.listServerContainers(serverId).catch(() => null);
+        const list = await systemApi.listServerContainers(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/hooks/useSystemPrepareModal"); return null; });
         const row = list?.find((r) => r.component === component) ?? null;
         if (repair) {
           if (row && !row.detail?.down) {
@@ -771,7 +796,7 @@ export function useServerEdgeInstallModal(present?: SystemPreparePresenter) {
         // the edge row back rather than reporting an unknown outcome for an
         // install that actually finished. Present && not down == success.
         resolveOutcome: async () => {
-          const list = await systemApi.listServerContainers(serverId).catch(() => null);
+          const list = await systemApi.listServerContainers(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/hooks/useSystemPrepareModal"); return null; });
           const edge = list?.find((r) => r.component === "edge") ?? null;
           if (edge && !edge.detail?.down) {
             return {

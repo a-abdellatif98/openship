@@ -11,6 +11,7 @@
  *   3. Reconcile all enabled policies at boot.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import cronParser from "cron-parser";
 import { repos } from "@repo/db";
 import { getJobRunner } from "@repo/platform/engine/lib/job-runner/index";
@@ -32,6 +33,7 @@ export function validateCronExpression(expr: string): CronValidationResult {
       nextRunAt: interval.next().toDate(),
     };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/backups/triggers/cron");
     return {
       valid: false,
       reason: err instanceof Error ? err.message : "Invalid cron expression",
@@ -60,7 +62,7 @@ export async function syncPolicySchedule(policyId: string): Promise<void> {
   }
 
   if (!validateCronExpression(policy.cronExpression).valid) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/backups/triggers/cron",
       `[cron-trigger] policy ${policyId} has invalid cron "${policy.cronExpression}" — schedule disabled`,
     );
     await runner.removeRecurring(scheduleJobId(policyId));
@@ -112,7 +114,7 @@ export async function reconcileAllSchedules(): Promise<{
       await syncPolicySchedule(row.id);
       registered += 1;
     } catch (err) {
-      console.warn(`[cron-trigger] failed to register ${row.id}: ${safeErrorMessage(err)}`);
+      errorDiagnostics.warn("platform/engine/modules/backups/triggers/cron", `[cron-trigger] failed to register ${row.id}: ${safeErrorMessage(err)}`, err);
       skipped += 1;
     }
   }

@@ -2,6 +2,7 @@
  * Project environment variables service - list & set encrypted env vars.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { ValidationError, SYSTEM } from "@repo/core";
 import { encrypt, decrypt, decryptEnvMap } from "../../lib/encryption";
@@ -23,7 +24,8 @@ export async function listEnvVars(projectId: string, organizationId: string, env
     let plainValue: string;
     try {
       plainValue = decrypt(v.value);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-env.service");
       plainValue = v.value;
     }
     return {

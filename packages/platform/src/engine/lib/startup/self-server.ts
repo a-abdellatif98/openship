@@ -37,6 +37,7 @@
  * mid-deploy. So {@link localServerHostChannel} reports the channel for the row, for
  * the target list and the deploy wizard to surface — an annotation, never a gate.
  */
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { env } from "../../config/env";
 import { hostChannelAccount } from "@repo/core";
 import type { ServerDetail } from "@repo/contracts";
@@ -155,7 +156,7 @@ async function register(opts?: EnsureLocalServerOptions): Promise<Server | null>
             `[self-server] reconciled ssh_user → ${desiredSshUser} (matches host channel)`,
           ),
         )
-        .catch((err: unknown) => console.warn("[self-server] ssh_user reconcile failed:", err));
+        .catch((err: unknown) => errorDiagnostics.warn("platform/engine/lib/startup/self-server", "[self-server] ssh_user reconcile failed:", err));
       return { ...existing, sshUser: desiredSshUser };
     }
     return existing;
@@ -211,7 +212,7 @@ export async function localServerHostChannel(
   // Dynamic, like `hostControlDisabled` in `register()`: this file runs on the boot
   // path and must not drag the SSH stack in before anything asks it a question.
   const { sshManager } = await import("../ssh-manager");
-  const d = await sshManager.diagnoseReachability(serverId).catch(() => null);
+  const d = await sshManager.diagnoseReachability(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/startup/self-server"); return null; });
   if (!d?.channel) return null;
   return {
     ok: d.channel === "ok" || d.channel === "not_applicable",
@@ -234,7 +235,9 @@ export function registerSelfServerReconcile(): void {
       // window: until this runs the override is null and the env default governs,
       // exactly as before the toggle existed.
       const { syncHostControlOverride } = await import("../host-control");
-      await syncHostControlOverride().catch(() => {});
+      await syncHostControlOverride().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/startup/self-server");
+      });
       await ensureLocalServer();
     },
   });

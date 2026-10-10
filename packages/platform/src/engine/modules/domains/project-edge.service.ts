@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
 import {
@@ -53,9 +54,9 @@ export async function resolveProjectServer(
   if (!project.activeDeploymentId)
     return { error: "Deploy the project before setting up its edge", status: 400 };
   if (!serverId && deployTarget === "local")
-    serverId = (await findLocalServer().catch(() => null))?.id ?? null;
+    serverId = (await findLocalServer().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/project-edge.service"); return null; }))?.id ?? null;
   if (!serverId) return { error: "Project is not deployed to a server", status: 400 };
-  const server = await repos.server.getInOrganization(serverId, organizationId).catch(() => null);
+  const server = await repos.server.getInOrganization(serverId, organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/project-edge.service"); return null; });
   if (!server) return { error: "Project deployment server was not found", status: 400 };
   return { project, serverId, isLocal: Boolean(server.isLocal) };
 }
@@ -163,14 +164,14 @@ export async function applyProjectEdgeRoutes(
       await repairEdgeVhosts(routing, {
         onLog: (message, level) => opts.onLog(message.trim(), level),
       });
-    }).catch((error) => warn(`Edge preparation: ${safeErrorMessage(error)}`));
+    }).catch((error) => { observeCaughtError(error, "platform/engine/modules/domains/project-edge.service"); return warn(`Edge preparation: ${safeErrorMessage(error)}`); });
     // Per-domain writes first, topology overlays last. Reversing these erases fan-out.
     await reapplyProjectLiveRoutes(project, opts.previousHostnames ?? [], {
       isSelfApp: await canRouteSelfApp(ctx, projectId),
       onWarning: warn,
-    }).catch((error) => warn(`Route apply: ${safeErrorMessage(error)}`));
+    }).catch((error) => { observeCaughtError(error, "platform/engine/modules/domains/project-edge.service"); return warn(`Route apply: ${safeErrorMessage(error)}`); });
     await applyProjectRouting(projectId, { onWarning: warn }).catch((error) =>
-      warn(`Route apply: ${safeErrorMessage(error)}`),
+      { observeCaughtError(error, "platform/engine/modules/domains/project-edge.service"); return warn(`Route apply: ${safeErrorMessage(error)}`); },
     );
     return true;
   });
@@ -198,6 +199,7 @@ export async function applyProjectEdgeRoutes(
       if (!result.verified)
         warn(`${domain.hostname}: ${result.message || "verification is still pending"}`);
     } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/domains/project-edge.service");
       warn(`${domain.hostname}: ${safeErrorMessage(error)}`);
     }
   }

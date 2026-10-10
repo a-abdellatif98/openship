@@ -26,6 +26,7 @@
  * couldn't ask is the bug, not the safeguard.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Duplex } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
 import { LocalExecutor, waitForReady, type CommandExecutor } from "@repo/adapters";
@@ -173,7 +174,7 @@ function probeHttpStream(
       const status = match ? Number(match[1]) : 0;
       done(status > 0 && status < acceptStatusBelow);
     });
-    stream.once("error", () => done(false));
+    stream.once("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "platform/engine/modules/deployments/forwarded-readiness"); return done(false); });
     stream.once("end", () => done(false));
 
     if (signal?.aborted || !isProbePathSafe(path)) {
@@ -341,6 +342,7 @@ async function waitForExecReady(
     try {
       stdout = await executor.exec(command, { timeout: (probeSeconds + 5) * 1000 });
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/forwarded-readiness");
       // The channel itself failed, so there is no verdict to give. Reported as
       // unavailable rather than "not ready" — see the module note.
       const detail = err instanceof Error ? err.message : String(err);
@@ -405,6 +407,7 @@ export async function waitForReadyFromExecutor(
     );
     disconnected.signal.throwIfAborted();
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/deployments/forwarded-readiness");
     const cause = disconnected.signal.aborted ? disconnected.signal.reason : error;
     return {
       ready: false,

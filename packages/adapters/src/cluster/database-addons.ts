@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseAllDocuments } from "yaml";
@@ -129,7 +130,9 @@ export async function downloadClusterAddon(
   for await (const chunk of response.body) {
     size += chunk.length;
     if (size > source.bytes + 1024) {
-      await response.body.cancel().catch(() => {});
+      await response.body.cancel().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/cluster/database-addons");
+      });
       throw new Error(`The ${name} add-on exceeded its reviewed size.`);
     }
     chunks.push(chunk);

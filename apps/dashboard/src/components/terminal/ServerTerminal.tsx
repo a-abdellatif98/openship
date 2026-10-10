@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -274,11 +275,13 @@ export const ServerTerminal = forwardRef<ServerTerminalHandle, ServerTerminalPro
         if (!cancelled) {
           const webgl = new WebglAddon();
           webgl.onContextLoss(() => {
-            try { webgl.dispose(); } catch { /* already gone → DOM renderer */ }
+            try { webgl.dispose(); } catch (diagnosticFailure) {
+              observeCaughtError(diagnosticFailure, "dashboard/components/terminal/ServerTerminal"); /* already gone → DOM renderer */ }
           });
           terminal.loadAddon(webgl);
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/terminal/ServerTerminal");
         /* WebGL not available → default DOM renderer, still fully works */
       }
 
@@ -302,7 +305,8 @@ export const ServerTerminal = forwardRef<ServerTerminalHandle, ServerTerminalPro
         selectionTimer = setTimeout(() => {
           const sel = terminal.getSelection();
           if (!sel) return;
-          try { void navigator.clipboard?.writeText?.(sel); } catch { /* no perms */ }
+          try { void navigator.clipboard?.writeText?.(sel); } catch (diagnosticFailure) {
+            observeCaughtError(diagnosticFailure, "dashboard/components/terminal/ServerTerminal"); /* no perms */ }
         }, 150);
       });
 
@@ -314,7 +318,8 @@ export const ServerTerminal = forwardRef<ServerTerminalHandle, ServerTerminalPro
         if (!visibleRef.current) return;
         const el = containerRef.current;
         if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
-        try { fitAddon.fit(); } catch { /* container not yet sized */ }
+        try { fitAddon.fit(); } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/components/terminal/ServerTerminal"); /* container not yet sized */ }
         if (resizeTimer) clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
           const cols = terminal.cols;
@@ -335,7 +340,8 @@ export const ServerTerminal = forwardRef<ServerTerminalHandle, ServerTerminalPro
         window.removeEventListener("resize", fit);
         if (resizeTimer) clearTimeout(resizeTimer);
         if (selectionTimer) clearTimeout(selectionTimer);
-        try { terminal.dispose(); } catch { /* already disposed */ }
+        try { terminal.dispose(); } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/components/terminal/ServerTerminal"); /* already disposed */ }
         if (xtermRef.current === terminal) {
           xtermRef.current = null;
           fitAddonRef.current = null;
@@ -377,11 +383,13 @@ export const ServerTerminal = forwardRef<ServerTerminalHandle, ServerTerminalPro
     const t = window.setTimeout(() => {
       const el = containerRef.current;
       if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
-      try { fitAddon.fit(); } catch { /* not sized yet */ }
+      try { fitAddon.fit(); } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/terminal/ServerTerminal"); /* not sized yet */ }
       if (xterm.cols && xterm.rows) {
         ptyRef.current.sendResize(xterm.cols, xterm.rows);
       }
-      try { xterm.focus(); } catch { /* not focusable */ }
+      try { xterm.focus(); } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/terminal/ServerTerminal"); /* not focusable */ }
     }, 30);
     return () => window.clearTimeout(t);
   }, [visible]);

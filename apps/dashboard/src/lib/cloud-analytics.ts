@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type {
   CloudAttribution,
   CloudBrowserCapture,
@@ -135,7 +136,8 @@ export function configureCloudAnalytics(
   identity.userId = userId;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/lib/cloud-analytics");
     /* Optional storage. */
   }
   active = true;
@@ -164,8 +166,11 @@ export function trackCloudEvent(data: CloudBrowserEvent): void {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(3_000),
-    }).catch(() => {});
-  } catch {
+    }).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/lib/cloud-analytics");
+    });
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/lib/cloud-analytics");
     /* Telemetry must never interrupt checkout/navigation. */
   }
 }

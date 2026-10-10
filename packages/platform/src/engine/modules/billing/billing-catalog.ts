@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   AppError,
   PRICING,
@@ -116,7 +117,8 @@ export function subscriptionPlan(subscription: OblienSubscription, organizationI
         !monthlyVersion || !offer.capacity) invalidContract();
     try {
       if (!isDeepStrictEqual(monthlyCapacity(offer.resourceLimits as ReturnType<typeof cloudNamespaceLimits>), offer.capacity)) invalidContract();
-    } catch { invalidContract(); }
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/billing/billing-catalog"); invalidContract(); }
   } else if (monthlyVersion) invalidContract();
   if (custom) {
     if (subscription.billingInterval !== "monthly" || !validCustomOffer(tier, parsed.data, offer)) invalidContract();

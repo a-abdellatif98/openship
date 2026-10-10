@@ -7,6 +7,7 @@
  * "deployments:reconcile" system job (every 10 min) via the jobs module.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { reconcileDeployment } from "@repo/platform/engine/modules/deployments/reconcile.service";
 
@@ -21,7 +22,7 @@ export async function runReconcileSweep(): Promise<{ finalized: number; pending:
       else pending++;
     } catch (err) {
       pending++;
-      console.error(`[reconcile] ${dep.id} failed`, err);
+      errorDiagnostics.error("platform/engine/modules/deployments/reconcile-schedule", `[reconcile] ${dep.id} failed`, err);
     }
   }
   return { finalized, pending };

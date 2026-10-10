@@ -1,3 +1,4 @@
+import { reportError } from "@repo/core/diagnostics";
 import { OperationError } from "@repo/contracts";
 
 /** Remote failures share the native error family and retain HTTP diagnostics. */
@@ -6,6 +7,7 @@ export class ApiError extends OperationError {
     message: string,
     readonly status: number,
     readonly body: unknown,
+    readonly requestId?: string,
   ) {
     const details =
       body && typeof body === "object" && !Array.isArray(body)
@@ -31,5 +33,7 @@ export async function responseError(response: Response): Promise<ApiError> {
       : typeof record?.message === "string"
         ? record.message
         : "API error: " + response.status;
-  return new ApiError(message, response.status, body);
+  const error = new ApiError(message, response.status, body, response.headers.get("X-Request-ID") ?? undefined);
+  reportError(error, { source: "sdk", kind: "http", component: "sdk-http", requestId: error.requestId, handled: true });
+  return error;
 }

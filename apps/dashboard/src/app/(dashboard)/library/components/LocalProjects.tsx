@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
@@ -36,7 +37,8 @@ export function LocalProjects() {
     try {
       const res = await projectsApi.getLocal();
       setProjects(res.projects ?? []);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/library/components/LocalProjects");
       setProjects([]);
     } finally {
       setLoading(false);
@@ -51,7 +53,8 @@ export function LocalProjects() {
     try {
       await projectsApi.deleteLocal(id);
       setProjects((prev) => prev.filter((p) => p.id !== id));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/library/components/LocalProjects");
       // Silently fail
     }
   };
@@ -305,6 +308,7 @@ function ImportForm({ onClose, onImported }: ImportFormProps) {
       setScanResult(result);
       setName(result.name);
     } catch (err: unknown) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/library/components/LocalProjects");
       const message = err instanceof Error ? err.message : t.library.localProjects.form.scanErrorDefault;
       setScanError(message);
     } finally {
@@ -361,7 +365,7 @@ function ImportForm({ onClose, onImported }: ImportFormProps) {
     setImporting(true);
 
     try {
-      const hasServer = !!scanResult.startCommand;
+      const hasServer = scanResult.stack === "docker" || !!scanResult.startCommand;
       const hasBuild = !!scanResult.buildCommand;
 
       await projectsApi.importLocal({
@@ -382,6 +386,7 @@ function ImportForm({ onClose, onImported }: ImportFormProps) {
       });
       onImported();
     } catch (err: unknown) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/library/components/LocalProjects");
       const message = err instanceof Error ? err.message : t.library.localProjects.form.importError;
       setScanError(message);
       setImporting(false);

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useState, useEffect, useCallback } from "react";
@@ -76,7 +77,8 @@ export function EmailSettings() {
       setFrom(res.from ?? "");
       setPassword("");
       setProvider(matchSmtpProvider(res.host));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/EmailSettings");
       /* silent — leave the form empty */
     } finally {
       setLoading(false);

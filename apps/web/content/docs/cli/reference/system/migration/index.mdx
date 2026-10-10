@@ -17,7 +17,7 @@ openship system migration [options] [command]
 | Subcommand | Purpose |
 | --- | --- |
 | [`preflight [options]`](/docs/cli/reference/system/migration#openship-system-migration-preflight) | Read-only readiness check for the own-server migration |
-| [`start [options]`](/docs/cli/reference/system/migration#openship-system-migration-start) | Migrate this instance onto your own server |
+| [`start [options]`](/docs/cli/reference/system/migration#openship-system-migration-start) | Earlier migration endpoint; use Settings → Instance → Instance location to move |
 | [`start-cloud [options]`](/docs/cli/reference/system/migration#openship-system-migration-start-cloud) | Migrate this instance to Openship Cloud |
 | [`start-tunnel [options]`](/docs/cli/reference/system/migration#openship-system-migration-start-tunnel) | Expose this instance via an edge tunnel |
 | [`switch-back [options]`](/docs/cli/reference/system/migration#openship-system-migration-switch-back) | Reverse migration back to single-user (teammates lose access) |
@@ -38,7 +38,7 @@ openship system migration preflight [options]
 
 ## openship system migration start
 
-Migrate this instance onto your own server
+Earlier migration endpoint; use Settings → Instance → Instance location to move
 
 ```text
 openship system migration start [options]

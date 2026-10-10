@@ -58,6 +58,7 @@
  * full priority chain lives here and ONLY here.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { AppError } from "@repo/core";
 import { env } from "../../config/env";
@@ -242,7 +243,7 @@ export const SPECS: Record<GitHubTokenSource, CredentialSpec> = {
       const { getLocalGhToken } = await import("./github.local-auth");
       return getLocalGhToken();
     },
-    probe: async (c) => Boolean(await SPECS["gh-cli"].resolve(c).catch(() => null)),
+    probe: async (c) => Boolean(await SPECS["gh-cli"].resolve(c).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token"); return null; })),
   },
 
   /* NOTE for anyone adding a credential kind below: if it is NOT the caller's own
@@ -275,11 +276,11 @@ export const SPECS: Record<GitHubTokenSource, CredentialSpec> = {
       let installId: number | null = null;
       if (c.organizationId) {
         installId = await getInstallationIdByOrg(c.organizationId, c.tokenCtx.owner).catch(
-          () => null,
+          (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token"); return null; },
         );
       }
       if (!installId) {
-        installId = await getInstallationId(c.ctx, c.tokenCtx.owner).catch(() => null);
+        installId = await getInstallationId(c.ctx, c.tokenCtx.owner).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token"); return null; });
       }
       return Boolean(installId);
     },
@@ -297,7 +298,7 @@ export const SPECS: Record<GitHubTokenSource, CredentialSpec> = {
       // the mint will refuse is exactly the preflight/resolution drift this table
       // exists to make impossible.
       if (!borrowableForOp(c) || !c.tokenCtx.projectId) return false;
-      const project = await repos.project.findById(c.tokenCtx.projectId).catch(() => null);
+      const project = await repos.project.findById(c.tokenCtx.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token"); return null; });
       return Boolean(project?.cloneTokenEncrypted);
     },
   },
@@ -307,7 +308,7 @@ export const SPECS: Record<GitHubTokenSource, CredentialSpec> = {
     shippable: true, // same reasoning as `project`
     resolve: async (c) => readUserGlobalToken(c.userId),
     probe: async (c) => {
-      const settings = await repos.settings.findByUser(c.userId).catch(() => null);
+      const settings = await repos.settings.findByUser(c.userId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token"); return null; });
       return Boolean(settings?.cloneTokenEncrypted && settings.cloneTokenAsDefault);
     },
   },
@@ -325,7 +326,7 @@ export const SPECS: Record<GitHubTokenSource, CredentialSpec> = {
      */
     shippable: true,
     resolve: async (c) => getUserToken(c.userId),
-    probe: async (c) => Boolean(await getUserToken(c.userId).catch(() => null)),
+    probe: async (c) => Boolean(await getUserToken(c.userId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token"); return null; })),
   },
 };
 
@@ -535,7 +536,7 @@ export async function requireTokenFor(
  */
 async function isCliOperatorAllowed(userId: string): Promise<boolean> {
   if (env.GITHUB_AUTH_MODE === "cli") return true;
-  const settings = await repos.settings.findByUser(userId).catch(() => null);
+  const settings = await repos.settings.findByUser(userId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token"); return null; });
   return settings?.ghCliOperatorOptedIn === true;
 }
 
@@ -586,32 +587,34 @@ async function tryInstallationToken(
       repositories: repo ? [repo] : undefined,
     });
   } catch (err) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/github/github.token",
       `[github.token] App installation token mint failed for owner=${owner}` +
         `${installationId ? ` install=${installationId}` : ""}: ` +
-        `${(err as Error).message} — falling through to the next credential`,
+        `${(err as Error).message} — falling through to the next credential`, err,
     );
     return null;
   }
 }
 
 async function readProjectToken(projectId: string): Promise<string | null> {
-  const project = await repos.project.findById(projectId).catch(() => null);
+  const project = await repos.project.findById(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token"); return null; });
   if (!project?.cloneTokenEncrypted) return null;
   try {
     return decrypt(project.cloneTokenEncrypted);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token");
     return null;
   }
 }
 
 async function readUserGlobalToken(userId: string): Promise<string | null> {
-  const settings = await repos.settings.findByUser(userId).catch(() => null);
+  const settings = await repos.settings.findByUser(userId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token"); return null; });
   if (!settings?.cloneTokenEncrypted) return null;
   if (!settings.cloneTokenAsDefault) return null;
   try {
     return decrypt(settings.cloneTokenEncrypted);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.token");
     return null;
   }
 }

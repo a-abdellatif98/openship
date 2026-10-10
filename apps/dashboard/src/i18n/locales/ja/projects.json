@@ -352,7 +352,7 @@
     "failed": "失敗",
     "starting": "起動中",
     "restarting": "再起動中",
-    "unknown": "不明"
+    "unknown": "状態を確認できません"
   },
   "routingRetry": {
     "title": "ドメインのルーティングに対応が必要です",

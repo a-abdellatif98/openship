@@ -6,6 +6,7 @@
  * resolved directly without a build step.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
@@ -175,7 +176,9 @@ async function materializeInlineBuildContexts(buildable: Service[], inMemory = f
   const root = inMemory ? undefined : await mkdtemp(join(tmpdir(), "openship-catalog-build-"));
   const files: NonNullable<BuildConfig["inlineSourceFiles"]> = [];
   const cleanup = async () => {
-    if (root) await rm(root, { recursive: true, force: true }).catch(() => {});
+    if (root) await rm(root, { recursive: true, force: true }).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/build.service");
+    });
   };
   const write = async (path: string, content: string) => {
     if (root) {
@@ -614,6 +617,7 @@ export async function buildComposeImages(opts: {
           status: "built",
         });
       } catch (err) {
+        observeCaughtError(err, "platform/engine/modules/deployments/compose/build.service");
         const failureMessage =
           err instanceof Error ? err.message : `Invalid image for service "${service.name}"`;
         buildFailures.set(service.id, failureMessage);

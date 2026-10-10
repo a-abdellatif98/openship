@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { AppError, validateClusterStorage, type ClusterStorageStep } from "@repo/core";
 import { repos, type ClusterStorageRecord } from "@repo/db";
 import { ClusterStorageAdapter, prepareStorageHost } from "@repo/adapters";
@@ -97,7 +98,7 @@ export async function runClusterStorage(
         if (!signal.aborted && !(await repos.clusterStorage.heartbeat(row.id, row.generation)))
           cancelled.abort();
       })
-      .catch(() => cancelled.abort());
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/cluster-storage.operations"); return cancelled.abort(); });
   }, 20_000);
   timer.unref();
   let connection: Awaited<ReturnType<typeof openClusterApi>> | undefined;
@@ -137,7 +138,7 @@ export async function runClusterStorage(
                         ...entry,
                         message: `${host.name}: ${entry.message}`,
                       });
-                      void persist().catch(() => cancelled.abort());
+                      void persist().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/cluster-storage.operations"); return cancelled.abort(); });
                     },
                     signal,
                   );
@@ -172,12 +173,17 @@ export async function runClusterStorage(
     if (await repos.clusterStorage.finish(row.id, row.generation, progress, observation, null))
       notifyNetworkSetup(ctx.organizationId, "storage", row.clusterId);
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/system/cluster-storage.operations");
     const message = networkSetupMessage(error instanceof Error ? error.message : String(error));
     updateNetworkSetupStep(progress, current, "failed", message);
-    await writes.catch(() => {});
+    await writes.catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/cluster-storage.operations");
+    });
     await repos.clusterStorage
       .finish(row.id, row.generation, progress, null, message)
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/cluster-storage.operations");
+      });
     notifyNetworkSetup(ctx.organizationId, "storage", row.clusterId);
   } finally {
     clearInterval(timer);

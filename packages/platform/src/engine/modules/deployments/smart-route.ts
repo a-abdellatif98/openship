@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos, type Project } from "@repo/db";
 import { compareCommitSha } from "@repo/core";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
@@ -44,7 +45,7 @@ export async function resolveSmartRoute(
   let resolvedChangedPaths: string[] | undefined;
 
   if (opts.smartRoute && !opts.forceAll && !opts.serviceIds?.length && !opts.isReuse) {
-    const enabled = (await repos.service.listByProject(project.id).catch(() => [])).filter(
+    const enabled = (await repos.service.listByProject(project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/smart-route"); return []; })).filter(
       (s) => s.enabled,
     );
     const routable = enabled.filter((s) => s.kind === "compose" || s.kind === "monorepo");
@@ -67,7 +68,7 @@ export async function resolveSmartRoute(
         project.gitRepo,
         opts.commitShaBefore,
         opts.commitSha,
-      ).catch(() => null);
+      ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/smart-route"); return null; });
       if (!compare || compare.truncated) {
         resolvedForceAll = true; // can't determine the diff → safe full rebuild
       } else {

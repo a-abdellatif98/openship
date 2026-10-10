@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   networkCollection,
   computeClusterCollection,
@@ -25,6 +26,7 @@ import * as managed from "../cloud-workspaces/cloud-workspace.service";
 import { withServerExecution } from "../../lib/server-execution";
 import { managedServerCollection, serverLifecycleResources } from "./server-lifecycle.operations";
 import { serverNetworkSettings } from "./server-network-settings.operations";
+import { serverManagedControls } from "./server-managed.operations";
 import { hostControlDisabled } from "@repo/adapters";
 import { AppError, assertSshSettings, normalizeSshTransport, safeErrorMessage } from "@repo/core";
 import { invalidateOpenRestyPaths } from "../../lib/openresty-paths";
@@ -64,6 +66,7 @@ function validateConnectionOptions(settings: Parameters<typeof assertSshSettings
   try {
     assertSshSettings(settings);
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/system/server.operations");
     failServer({ error: safeErrorMessage(error) }, 400);
   }
 }
@@ -76,7 +79,7 @@ async function listServers(ctx: ExecutionContext, live = true) {
   // materialize it on read instead of trusting whichever install branch ran (that
   // trust is why a free-domain install listed no servers). Idempotent, single-flight
   // and a no-op — one findLocal — once the row exists.
-  if (!env.CLOUD_MODE) await ensureLocalServer().catch(() => null);
+  if (!env.CLOUD_MODE) await ensureLocalServer().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return null; });
   const rows = await repos.server.listByOrganization(ctx.organizationId, true);
   // Host control off (`openship up --no-host-control`): this box is not a deploy
   // target and every host operation refuses, so the local row is hidden rather
@@ -92,7 +95,7 @@ async function listServers(ctx: ExecutionContext, live = true) {
   // Projects currently deployed to each server (active deployment → meta.serverId).
   const projectCounts = await repos.project
     .countActiveByServer(ctx.organizationId)
-    .catch(() => ({}) as Record<string, number>);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return ({}) as Record<string, number>; });
   // The local row's container→host channel, as an ANNOTATION (#509). Never a filter:
   // ordinary container deploys run over the mounted Docker socket and survive a dead
   // channel, so hiding the row would break them — only `hostControlDisabled()` above
@@ -100,7 +103,7 @@ async function listServers(ctx: ExecutionContext, live = true) {
   const channels = await Promise.all(
     // `.catch` at the call site as well as inside: one rejected probe must not 500 the
     // whole list. An annotation that can break the page it annotates is a gate.
-    all.map((s) => (s.isLocal ? localServerHostChannel(s.id).catch(() => null) : null)),
+    all.map((s) => (s.isLocal ? localServerHostChannel(s.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return null; }) : null)),
   );
   const local = await Promise.all(all.map(async (s, i) => {
     const cloud = s.workspaceId ? await managed.summary(await requireCloudWorkspace(ctx.organizationId, s.workspaceId), live) : null;
@@ -129,11 +132,11 @@ async function getServer(ctx: ExecutionContext, id: string) {
   // report different numbers.
   const projectCounts = await repos.project
     .countActiveByServer(ctx.organizationId)
-    .catch(() => ({}) as Record<string, number>);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return ({}) as Record<string, number>; });
   return {
     ...serializeServer(server, cloud),
     projectCount: cloud?.projectCount ?? projectCounts[id] ?? 0,
-    hostChannel: server.isLocal ? await localServerHostChannel(server.id).catch(() => null) : null,
+    hostChannel: server.isLocal ? await localServerHostChannel(server.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return null; }) : null,
   };
 }
 
@@ -158,13 +161,14 @@ async function probeReachability(ctx: ExecutionContext, id: string) {
       await withServerExecution(ctx.organizationId, id, executor => executor.exec("true", { timeout: 10_000 }));
       return { reachable: true, code: "ok", target: null, port: null, hint: null, rule: null, channel: null };
     } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/system/server.operations");
       return { reachable: false, code: "managed_unavailable", target: null, port: null, hint: safeErrorMessage(error), rule: null, channel: null };
     }
   }
 
   const d: ReachabilityDiagnosis = await sshManager
     .diagnoseReachability(id)
-    .catch(() => ({ reachable: false, code: "unknown" }));
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return ({ reachable: false, code: "unknown" }); });
   return {
     reachable: d.reachable,
     code: d.code,
@@ -256,7 +260,7 @@ async function createServer(ctx: ExecutionContext, body: CreateServerInput) {
   // createServer upserts, so this id may now point at DIFFERENT hardware —
   // re-probe rather than validate resource limits against the old box's specs.
   await invalidateHostCapacity(ctx.organizationId, server.id).catch((err: unknown) =>
-    console.error("[server.create] capacity cache cleanup failed:", err),
+    errorDiagnostics.error("platform/engine/modules/system/server.operations", "[server.create] capacity cache cleanup failed:", err),
   );
 
   // Names + non-secret connection details only. SSH passwords & key
@@ -378,7 +382,7 @@ async function updateServer(ctx: ExecutionContext, id: string, body: UpdateServe
   // Edited connection details can repoint this row at another machine (and a
   // resize changes the specs of the same one) — re-probe capacity either way.
   await invalidateHostCapacity(ctx.organizationId, id).catch((err: unknown) =>
-    console.error("[server.update] capacity cache cleanup failed:", err),
+    errorDiagnostics.error("platform/engine/modules/system/server.operations", "[server.update] capacity cache cleanup failed:", err),
   );
 
   // Audit only the fields the caller intended to touch. Skip secrets entirely.
@@ -428,14 +432,14 @@ async function serverDeletionPreview(ctx: ExecutionContext, id: string) {
   if (server.workspaceId) return failServer({ error: "Delete this server through its Cloud workspace", code: "MANAGED_SERVER_LIFECYCLE_REQUIRED" }, 409);
 
   const [workloads, mail, tunnels, github, destinations] = await Promise.all([
-    repos.project.listActiveByServer(ctx.organizationId, id).catch(() => []),
-    repos.mailServer.get(id).catch(() => undefined),
-    repos.serverTunnel.listByServer(id).catch(() => []),
-    repos.serverGithubAuth.getByServer(id).catch(() => undefined),
+    repos.project.listActiveByServer(ctx.organizationId, id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return []; }),
+    repos.mailServer.get(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return undefined; }),
+    repos.serverTunnel.listByServer(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return []; }),
+    repos.serverGithubAuth.getByServer(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return undefined; }),
     // No by-server lookup exists on the backup repo and an org has few
     // destinations, so filter the org list rather than add a method for one line
     // of confirm copy.
-    repos.backupDestination.listByOrganization(ctx.organizationId).catch(() => []),
+    repos.backupDestination.listByOrganization(ctx.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return []; }),
   ]);
 
   // Gates the "also destroy on the server" option: offering to stop containers on a
@@ -446,7 +450,7 @@ async function serverDeletionPreview(ctx: ExecutionContext, id: string) {
     : await sshManager
         .diagnoseReachability(id)
         .then((d: ReachabilityDiagnosis) => d.reachable)
-        .catch(() => null);
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server.operations"); return null; });
 
   return {
     ok: true,
@@ -588,14 +592,14 @@ async function deleteServerUnderLock(
       // NOT forceOrphan: an orphan recorded here can never be reclaimed once the
       // server row goes, so a stubborn resource must surface as a retryable failure
       // rather than a silent leak.
-    }).catch((err: unknown) => ({
+    }).catch((err: unknown) => { observeCaughtError(err, "platform/engine/modules/system/server.operations"); return ({
       ok: false,
       rowDeleted: false,
       unrecoverable: [
         { step: "teardown", status: "failed" as const, error: safeErrorMessage(err) },
       ],
       orphaned: [],
-    }));
+    }); });
 
     results.push({
       id: p.id,
@@ -649,11 +653,11 @@ async function deleteServerUnderLock(
   // id need cleanup too since they share the server's id.
   await repos.resourceGrant
     .deleteForResource(ctx.organizationId, "server", id)
-    .catch((err: unknown) => console.error("[server.delete] grant cleanup failed:", err));
+    .catch((err: unknown) => errorDiagnostics.error("platform/engine/modules/system/server.operations", "[server.delete] grant cleanup failed:", err));
   await repos.resourceGrant
     .deleteForResource(ctx.organizationId, "mail_server", id)
     .catch((err: unknown) =>
-      console.error("[server.delete] mail_server grant cleanup failed:", err),
+      errorDiagnostics.error("platform/engine/modules/system/server.operations", "[server.delete] mail_server grant cleanup failed:", err),
     );
   sshManager.invalidate(id);
   await invalidateOpenRestyPaths(id);
@@ -661,7 +665,7 @@ async function deleteServerUnderLock(
   // reused id) re-probes instead of validating resource limits against the
   // hardware of a machine that's gone.
   await invalidateHostCapacity(ctx.organizationId, id).catch((err: unknown) =>
-    console.error("[server.delete] capacity cache cleanup failed:", err),
+    errorDiagnostics.error("platform/engine/modules/system/server.operations", "[server.delete] capacity cache cleanup failed:", err),
   );
 
   audit.recordAsync(operationAuditContext(ctx), {
@@ -795,6 +799,7 @@ export const serverDependencies: ServerDependencies = {
   resources: {
     ...serverLifecycleResources,
     ...serverNetworkSettings,
+    ...serverManagedControls,
     ...infrastructureResources,
     get: getServer,
     reachability: probeReachability,

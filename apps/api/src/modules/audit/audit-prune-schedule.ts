@@ -5,6 +5,7 @@
  * other jobs land on).
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { getJobRunner } from "@repo/platform/engine/lib/job-runner/index";
 import { pruneAuditEvents } from "@repo/platform/engine/modules/audit/audit-prune";
 
@@ -23,7 +24,7 @@ export async function scheduleAuditPrune(): Promise<void> {
           `[audit-prune] processed ${stats.orgsProcessed} orgs, pruned ${stats.totalPruned} batches`,
         );
       } catch (err) {
-        console.error("[audit-prune] sweep failed", err);
+        errorDiagnostics.error("api/modules/audit/audit-prune-schedule", "[audit-prune] sweep failed", err);
       }
     },
   });

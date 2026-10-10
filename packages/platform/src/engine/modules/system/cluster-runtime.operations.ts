@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import {
   AppError,
@@ -147,10 +148,10 @@ export async function runClusterRuntime(
         if (!signal.aborted && !(await repos.clusterRuntime.heartbeat(row.id, row.generation)))
           cancellation.abort();
       })
-      .catch(() => cancellation.abort());
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/cluster-runtime.operations"); return cancellation.abort(); });
   }, 20_000);
   const logTimer = setInterval(() => {
-    if (dirty) void persist().catch(() => cancellation.abort());
+    if (dirty) void persist().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/cluster-runtime.operations"); return cancellation.abort(); });
   }, 1000);
   leaseTimer.unref();
   logTimer.unref();
@@ -341,6 +342,7 @@ export async function runClusterRuntime(
               "The host supports cluster setup and its private interface is available.",
             );
           } catch (error) {
+            observeCaughtError(error, "platform/engine/modules/system/cluster-runtime.operations");
             await step(
               host,
               host.steps.find((entry) => entry.status === "running")?.id ?? "inspect",
@@ -408,6 +410,7 @@ export async function runClusterRuntime(
               joinToken = await checked(bootstrap, (executor) => k3sTools.token(executor));
               break;
             } catch (error) {
+              observeCaughtError(error, "platform/engine/modules/system/cluster-runtime.operations");
               diagnostic = message(error);
               await pause(3000, signal);
             }
@@ -519,15 +522,16 @@ export async function runClusterRuntime(
       row.intent === "setup" ? "cluster.runtime.ready" : "cluster.runtime.removed",
     );
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/system/cluster-runtime.operations");
     const reason = message(error);
     for (const host of plan.hosts) {
       const current = host.steps.find((entry) => entry.status === "running");
       if (current) updateNetworkSetupStep(host, current.id, "failed", reason);
     }
-    await writes.catch(() => undefined);
+    await writes.catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/cluster-runtime.operations"); return undefined; });
     await repos.clusterRuntime
       .finish(row.id, row.generation, plan, row.intent, reason)
-      .catch(() => undefined);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/cluster-runtime.operations"); return undefined; });
   } finally {
     clearInterval(logTimer);
     clearInterval(leaseTimer);

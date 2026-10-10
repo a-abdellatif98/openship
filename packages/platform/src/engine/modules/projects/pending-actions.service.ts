@@ -29,6 +29,7 @@
  * nothing for it.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { activeDeploymentForProject, findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos } from "@repo/db";
 import type { Deployment } from "@repo/db";
@@ -516,11 +517,11 @@ export async function getProjectPendingActions(
   if (!project || project.organizationId !== organizationId) return [];
 
   const [latest, active, domains] = await Promise.all([
-    repos.deployment.findLatestByProject(projectId).catch(() => null),
+    repos.deployment.findLatestByProject(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/pending-actions.service"); return null; }),
     project.activeDeploymentId
-      ? findActiveDeployment(project).catch(() => null)
+      ? findActiveDeployment(project).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/pending-actions.service"); return null; })
       : Promise.resolve(null),
-    repos.domain.listByProject(projectId).catch(() => []),
+    repos.domain.listByProject(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/pending-actions.service"); return []; }),
   ]);
 
   return collectPendingActions({ project, latest: latest ?? null, active: active ?? null, domains });
@@ -551,9 +552,9 @@ export async function getOrgPendingActions(
   const activeIds = projects.map((p) => p.activeDeploymentId).filter((id): id is string => !!id);
 
   const [latestByProject, activeById, domainsByProject] = await Promise.all([
-    repos.deployment.findLatestByProjects(ids).catch(() => new Map<string, Deployment>()),
-    repos.deployment.findManyById(activeIds).catch(() => new Map<string, Deployment>()),
-    repos.domain.listByProjects(ids).catch(() => new Map<string, DomainRow[]>()),
+    repos.deployment.findLatestByProjects(ids).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/pending-actions.service"); return new Map<string, Deployment>(); }),
+    repos.deployment.findManyById(activeIds).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/pending-actions.service"); return new Map<string, Deployment>(); }),
+    repos.domain.listByProjects(ids).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/pending-actions.service"); return new Map<string, DomainRow[]>(); }),
   ]);
 
   for (const project of projects) {
@@ -583,7 +584,7 @@ export async function getDeploymentPendingActions(
   if (!dep || dep.organizationId !== organizationId) return [];
   // Needed only to pick the right dismissal target for a port advisory (service
   // id for compose, port otherwise) — see buildPortAdvisories.
-  const project = await repos.project.findById(dep.projectId).catch(() => null);
+  const project = await repos.project.findById(dep.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/pending-actions.service"); return null; });
 
   const actions: PendingAction[] = [];
   const prompt = buildPrompt(dep);

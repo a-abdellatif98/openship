@@ -13,6 +13,7 @@
  *   const plain  = decrypt(sealed); // "my secret"
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 export const DEFAULT_ENCRYPTION_SECRET = "change-me-in-production";
@@ -107,6 +108,7 @@ export function createEncryption(secret: string) {
       try {
         result[k] = decrypt(v);
       } catch (err) {
+        observeCaughtError(err, "db/encryption");
         onError?.(k, err);
         // Omit keys that fail decryption - never leak ciphertext into containers
       }

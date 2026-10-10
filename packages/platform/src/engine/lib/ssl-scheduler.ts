@@ -12,6 +12,7 @@
  * (BYO) certs are skipped: certbot never issued them, so they can't be renewed.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { SYSTEM, currentMailCertificateHealth, mailHostname } from "@repo/core";
 import { env } from "../config/env";
@@ -123,11 +124,14 @@ export async function renewExpiringCerts(): Promise<RenewalResult> {
       // ssl_renewed isn't a notification category (renewal success is
       // expected — only failures are noteworthy). Skip dispatch.
     } catch (err) {
+      observeCaughtError(err, "platform/engine/lib/ssl-scheduler");
       failed++;
       const message = err instanceof Error ? err.message : "Unknown error";
       details.push({ domain: domain.hostname, status: "failed", error: message });
 
-      await repos.domain.updateSsl(domain.id, { sslStatus: "error" }).catch(() => {});
+      await repos.domain.updateSsl(domain.id, { sslStatus: "error" }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/ssl-scheduler");
+      });
 
       if (ctx) {
         const daysLeft = Math.ceil(
@@ -157,11 +161,12 @@ export async function renewExpiringCerts(): Promise<RenewalResult> {
       renewed++;
       details.push({ domain: hostname, status: "renewed" });
     } catch (error) {
+      observeCaughtError(error, "platform/engine/lib/ssl-scheduler");
       const message = error instanceof Error ? error.message : "Mail certificate renewal failed";
       failed++;
       details.push({ domain: hostname, status: "failed", error: message });
-      const owner = await resolveMailOwner(hostname).catch(() => null);
-      const row = await repos.domain.findByHostname(hostname).catch(() => null);
+      const owner = await resolveMailOwner(hostname).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/ssl-scheduler"); return null; });
+      const row = await repos.domain.findByHostname(hostname).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/ssl-scheduler"); return null; });
       if (owner)
         notification.emit({
           organizationId: owner.organizationId,

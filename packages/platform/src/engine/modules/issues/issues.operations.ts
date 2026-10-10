@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { randomUUID } from "node:crypto";
 import { getPlatform } from "@repo/adapters";
 import { repos } from "@repo/db";
@@ -83,11 +84,12 @@ export const issuesDependencies: IssueDependencies = {
             const result = await runJobNow(key);
             stage.status = "completed";
             stage.summary = result.summary ?? {};
-          } catch (error) { stage.status = "failed"; stage.error = safeErrorMessage(error); }
+          } catch (error) {
+            observeCaughtError(error, "platform/engine/modules/issues/issues.operations"); stage.status = "failed"; stage.error = safeErrorMessage(error); }
         }));
         session.status = "completed";
         session.finishedAt = new Date().toISOString();
-      }).catch(error => { console.error("[issues] rescan failed:", safeErrorMessage(error)); });
+      }).catch(error => { errorDiagnostics.error("platform/engine/modules/issues/issues.operations", "[issues] rescan failed:", safeErrorMessage(error), error); });
       audit.recordAsync(operationAuditContext(ctx), { eventType: "job:write", resourceType: "job", after: { operation: "issues.rescan", scanSessionId: session.id, stages: available, skipped: RESCAN_JOBS.filter(key => !available.includes(key)) } });
       return session;
     },

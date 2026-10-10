@@ -15,6 +15,7 @@
  * new job does not depend on this process refreshing its local set.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
 import { startCommandRun } from "./job-command";
@@ -59,7 +60,7 @@ export async function refreshTriggerArm(): Promise<void> {
     }
     armed = next;
   } catch (err) {
-    console.warn(`[job-events] arm refresh failed: ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/modules/jobs/job-events", `[job-events] arm refresh failed: ${safeErrorMessage(err)}`, err);
   }
 }
 
@@ -97,11 +98,11 @@ export function fireJobTriggers(eventType: string, organizationId: string): void
         try {
           await startCommandRun(job, "event");
         } catch (err) {
-          console.warn(`[job-events] ${job.key} dispatch failed: ${safeErrorMessage(err)}`);
+          errorDiagnostics.warn("platform/engine/modules/jobs/job-events", `[job-events] ${job.key} dispatch failed: ${safeErrorMessage(err)}`, err);
         }
       }
     } catch (err) {
-      console.warn(`[job-events] trigger dispatch failed for ${eventType}: ${safeErrorMessage(err)}`);
+      errorDiagnostics.warn("platform/engine/modules/jobs/job-events", `[job-events] trigger dispatch failed for ${eventType}: ${safeErrorMessage(err)}`, err);
     }
   })());
 }

@@ -203,8 +203,8 @@
 			},
 			"environmentApply": {
 				"title": "Umgebungsänderungen anwenden",
-        "applying": "Änderungen werden angewendet…",
-        "applied": "Umgebungsänderungen angewendet",
+				"applying": "Änderungen werden angewendet…",
+				"applied": "Umgebungsänderungen angewendet",
 				"hint": "Gespeicherte Variablen ohne erneuten Build auf diesen Dienst anwenden. Der Dienst wird neu gestartet.",
 				"saveFirst": "Speichere deine Änderungen, bevor du sie auf diesen Dienst anwendest.",
 				"restartBlocked": "Für {name} sind Umgebungsänderungen gespeichert, die ein normaler Neustart nicht anwenden kann. Prüfe sie im Tab „Umgebung“ und wende sie dort an.",
@@ -370,6 +370,46 @@
 			},
 			"orBuildFromSource": "oder aus Quellcode bauen",
 			"imageHint": "Leer lassen, um aus einem Dockerfile unten zu bauen."
+		},
+		"connection": {
+			"terminal": "Terminal",
+			"statusTitle": "Dienststatus nicht verfügbar",
+			"statusHint": "Openship konnte den aktuellen Status nicht bestätigen. Dein Dienst läuft möglicherweise noch.",
+			"checkingTitle": "Dienst wird geprüft",
+			"checkingHint": "Warten auf eine Antwort des Servers. Du kannst schon versuchen, das Terminal zu öffnen.",
+			"startingTitle": "Warten auf den Dienst",
+			"startingHint": "Das Terminal ist verfügbar, sobald der Dienst läuft.",
+			"stoppedTitle": "Kein laufender Dienst",
+			"openTerminal": "Terminal öffnen",
+			"serviceSettings": "Diensteinstellungen",
+			"connectingTitle": "Terminal wird geöffnet",
+			"connectingHint": "Eine sichere Verbindung mit {name} wird hergestellt.",
+			"reconnectingTitle": "Verbindung wird wiederhergestellt",
+			"reconnectingHint": "Deine Sitzung wird wiederhergestellt. Die bisherige Ausgabe bleibt hier erhalten.",
+			"attempt": "Versuch {attempt}",
+			"connected": "Verbunden",
+			"cancel": "Abbrechen",
+			"reconnect": "Erneut verbinden",
+			"closedTitle": "Sitzung beendet",
+			"closedHint": "Öffne eine neue Sitzung, um fortzufahren.",
+			"exitCode": "Exit-Code {code}",
+			"exitSignal": "Beendet mit Signal {signal}",
+			"pausedTitle": "Verbindung pausiert",
+			"pausedHint": "Verbinde dich erneut, wenn du eine Shell öffnen möchtest.",
+			"errorTitle": "Terminal nicht verfügbar",
+			"errors": {
+				"auth": "Dein Zugriff konnte nicht bestätigt werden. Melde dich erneut an oder prüfe deine Berechtigungen.",
+				"connect": "Openship konnte die Shell des Dienstes nicht erreichen. Versuche es erneut, sobald der Server wieder erreichbar ist.",
+				"notFound": "Dieser Dienst ist nicht verfügbar oder du hast keinen Zugriff.",
+				"notDeployed": "Es läuft kein Container, mit dem du dich verbinden kannst. Prüfe den Dienststatus und versuche es erneut.",
+				"notSupported": "Die Laufzeitumgebung dieses Dienstes unterstützt kein interaktives Terminal.",
+				"maxSessions": "Schließe eine ungenutzte Terminalsitzung und verbinde dich erneut.",
+				"idleTimeout": "Deine Sitzung wurde wegen Inaktivität beendet. Verbinde dich erneut, um fortzufahren.",
+				"sessionCap": "Die maximale Sitzungsdauer wurde erreicht. Verbinde dich erneut, um fortzufahren.",
+				"server": "Das Terminal konnte nicht geöffnet werden. Bitte versuche es erneut.",
+				"maxReconnects": "Die Verbindung konnte nicht wiederhergestellt werden. Du kannst es erneut versuchen.",
+				"transport": "Die Verbindung wurde unterbrochen. Dein Dienst läuft möglicherweise noch."
+			}
 		}
 	}
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import * as CountryFlags from "country-flag-icons/react/3x2";
@@ -28,7 +29,8 @@ export function ServerConnectionCard({ server }: { server: ConnectionServer }) {
   const isCloudflare = server.sshTransport === "cloudflare";
   let accessUrl: string | undefined;
   if (isCloudflare) {
-    try { accessUrl = cloudflareSshUrl(server.sshHost); } catch { /* invalid legacy data has no external action */ }
+    try { accessUrl = cloudflareSshUrl(server.sshHost); } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/servers/[serverId]/_components/connection-card"); /* invalid legacy data has no external action */ }
   }
   return (
     <div className="bg-card rounded-2xl border border-border/50 p-5">

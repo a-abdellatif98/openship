@@ -13,6 +13,7 @@
  * could rotate inviters within their tenant; this is the cross-cutting
  * SaaS-side ceiling.
  */
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { cacheStore } from "@repo/platform/engine/lib/cache-store/index";
 import { sendMail } from "@repo/platform/engine/lib/mail";
 
@@ -60,8 +61,8 @@ export async function sendCloudInvitation(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown mail error";
-    console.error(
-      `[cloud-invitations] sendMail failed for org=${organizationId}: ${message}`,
+    errorDiagnostics.error("api/modules/cloud/cloud-invitations.service",
+      `[cloud-invitations] sendMail failed for org=${organizationId}: ${message}`, err,
     );
     return { ok: false, status: 502, error: `Mail delivery failed: ${message}` };
   }

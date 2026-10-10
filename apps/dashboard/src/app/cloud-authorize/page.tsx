@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -173,7 +174,8 @@ function CloudAuthorizeInner() {
       try {
         window.close();
         return;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/cloud-authorize/page");
         /* user-gesture missing or blocked — fall through */
       }
     }

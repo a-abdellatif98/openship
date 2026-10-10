@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Oblien, Runtime, WorkloadInfo } from "oblien";
 import { AppError } from "@repo/core";
 import type { ContainerStatus, ProvisionLock } from "../../types";
@@ -120,7 +121,9 @@ async function bridgeVersionMatches(response: Response): Promise<boolean> {
       body += decoder.decode(value, { stream: true });
     }
   } finally {
-    await reader.cancel().catch(() => {});
+    await reader.cancel().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/server-connection");
+    });
   }
 }
 
@@ -237,6 +240,7 @@ export class CloudServerConnection {
             .proxy(CLOUD_DOCKER_BRIDGE_PORT)
             .fetch("/health", { signal: AbortSignal.timeout(5000), redirect: "error" });
         } catch (error) {
+          observeCaughtError(error, "adapters/runtime/cloud/server-connection");
           lastProbe =
             error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)
               ? "Bridge health request timed out"
@@ -248,14 +252,17 @@ export class CloudServerConnection {
           requestId && /^[a-zA-Z0-9_.:-]{1,128}$/.test(requestId) ? `; request ${requestId}` : "";
         lastProbe = `Bridge health HTTP ${response.status}${reference}`;
         if (!response.ok) {
-          await response.body?.cancel().catch(() => {});
+          await response.body?.cancel().catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/server-connection");
+          });
           if (response.status === 401 && !refreshed) {
             refreshed = true;
             try {
               // Refresh only through this namespace's existing client. A revoked
               // namespace credential must still fail the control-plane check.
               runtime = await this.client.workspace(this.workspaceId).runtime({ force: true });
-            } catch {
+            } catch (diagnosticFailure) {
+              observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/server-connection");
               throw new AppError(
                 `The workspace Docker connection is unavailable: ${lastProbe}; workspace ${this.workspaceId}. Runtime credential refresh failed. Check namespace access.`,
                 503,
@@ -282,7 +289,8 @@ export class CloudServerConnection {
         try {
           if (await bridgeVersionMatches(response)) return true;
           lastProbe += "; unexpected bridge version";
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/server-connection");
           lastProbe += "; health response interrupted";
         }
         return false;
@@ -323,7 +331,7 @@ export class CloudServerConnection {
       }
       const failed = await workspace.workloads.list({ name: BRIDGE_WORKLOAD }).then(
         (items) => items.find((item) => item.name === BRIDGE_WORKLOAD),
-        () => undefined,
+        (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/server-connection"); return undefined; },
       );
       const state = String(failed?.state ?? failed?.status ?? "unknown");
       const safeState = /^[a-z_]{1,32}$/.test(state) ? state : "unknown";

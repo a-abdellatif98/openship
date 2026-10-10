@@ -2,6 +2,7 @@
  * SSL service - certificate status checks and renewal via platform adapters.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { NotFoundError, safeErrorMessage, wwwSiblingHostname } from "@repo/core";
 import { assertResourceInOrg } from "@repo/platform/engine/lib/resource-access";
@@ -107,12 +108,12 @@ export async function renew(
     // pointed here, or may be externally-certed. None of that is a reason to
     // fail the renewal the caller actually asked for.
     results.push(
-      await renewOne(www, organizationId, assertAccess).catch((err) => ({
+      await renewOne(www, organizationId, assertAccess).catch((err) => { observeCaughtError(err, "platform/engine/modules/deployments/ssl.service"); return ({
         success: false,
         domain: www,
         status: "error",
         message: safeErrorMessage(err),
-      })),
+      }); }),
     );
   }
 

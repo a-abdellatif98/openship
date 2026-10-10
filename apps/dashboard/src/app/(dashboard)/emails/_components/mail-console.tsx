@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -632,7 +633,7 @@ function MailConsoleInner() {
                         password: r.password,
                       })
                       .then(() => showToast(t.emailsAdmin.sending.saved, "success", t.emailsAdmin.sending.title))
-                      .catch(() => showToast(t.emailsAdmin.sending.saveFailed, "error", t.emailsAdmin.sending.title))
+                      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/mail-console"); return showToast(t.emailsAdmin.sending.saveFailed, "error", t.emailsAdmin.sending.title); })
                       .finally(finalize);
                   } else {
                     // The install just registered/marked this server — refresh
@@ -688,7 +689,8 @@ function MailConsoleInner() {
     abortRef.current?.abort();
     try {
       await mailApi.cancelSetup();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/mail-console");
       // Already stopped
     }
     setRunning(false);
@@ -723,12 +725,15 @@ function MailConsoleInner() {
 
     // (2) Ask the backend to drop its in-memory session pointer. We catch
     // the rejection - it's normal for there to be no active session.
-    await mailApi.cancelSetup().catch(() => {});
+    await mailApi.cancelSetup().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/mail-console");
+    });
 
     // (3) Wipe the on-server state file
     try {
       await mailApi.resetSetup(selectedServer.id);
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/emails/_components/mail-console");
       setError(err instanceof Error ? err.message : t.emails.page.errors.resetFailed);
       return;
     }
@@ -806,6 +811,7 @@ function MailConsoleInner() {
         await handleStart(next);
       }
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/emails/_components/mail-console");
       setError(err instanceof Error ? err.message : t.emails.page.errors.ackDns);
     } finally {
       setAcknowledgingDns(false);
@@ -826,6 +832,7 @@ function MailConsoleInner() {
       setPtrPending(null);
       await handleStart(next);
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/emails/_components/mail-console");
       setError(err instanceof Error ? err.message : t.emails.page.errors.ackPtr);
     } finally {
       setAcknowledgingPtr(false);
@@ -857,6 +864,7 @@ function MailConsoleInner() {
           setError(result.message);
         }
       } catch (err) {
+        observeCaughtError(err, "dashboard/app/(dashboard)/emails/_components/mail-console");
         setError(err instanceof Error ? err.message : t.emails.page.errors.resolutionFailed);
       } finally {
         setResolving(false);

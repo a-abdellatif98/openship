@@ -12,6 +12,7 @@
  * updates to matching project records; they can never wipe an instance.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   db,
   assertDumpSchemaCompatible,
@@ -127,6 +128,7 @@ export function assertValidEnvelope(file: DataTransferFile): void {
     try {
       assertDumpSchemaCompatible(file.dump);
     } catch (error) {
+      observeCaughtError(error, "api/modules/system/data-transfer/import.service");
       throw new InvalidTransferFileError(error instanceof Error ? error.message : "This export requires a newer destination build.");
     }
   }

@@ -210,8 +210,8 @@
 			},
 			"environmentApply": {
 				"title": "Apply environment changes",
-        "applying": "Applying changes…",
-        "applied": "Environment changes applied",
+				"applying": "Applying changes…",
+				"applied": "Environment changes applied",
 				"hint": "Apply saved variables to this service without rebuilding. The service will restart.",
 				"saveFirst": "Save your changes before applying them to this service.",
 				"restartBlocked": "{name} has saved environment changes that a normal restart cannot apply. Review and apply them in the Environment tab.",
@@ -377,6 +377,46 @@
 			},
 			"orBuildFromSource": "or build from source",
 			"imageHint": "Leave empty to build from a Dockerfile below."
+		},
+		"connection": {
+			"terminal": "Terminal",
+			"statusTitle": "Service status unavailable",
+			"statusHint": "Openship couldn’t confirm the current status. Your service may still be running.",
+			"checkingTitle": "Checking this service",
+			"checkingHint": "Waiting for a response from the server. You can try opening the terminal now.",
+			"startingTitle": "Waiting for the service",
+			"startingHint": "The terminal will be available once the service is running.",
+			"stoppedTitle": "No running service",
+			"openTerminal": "Open terminal",
+			"serviceSettings": "Service settings",
+			"connectingTitle": "Opening terminal",
+			"connectingHint": "Establishing a secure connection to {name}.",
+			"reconnectingTitle": "Reconnecting",
+			"reconnectingHint": "Trying to restore your session. Previous output is kept here.",
+			"attempt": "Attempt {attempt}",
+			"connected": "Connected",
+			"cancel": "Cancel",
+			"reconnect": "Reconnect",
+			"closedTitle": "Session ended",
+			"closedHint": "Open a new session to continue.",
+			"exitCode": "Exit code {code}",
+			"exitSignal": "Signal {signal}",
+			"pausedTitle": "Connection paused",
+			"pausedHint": "Reconnect when you’re ready to open a shell.",
+			"errorTitle": "Terminal unavailable",
+			"errors": {
+				"auth": "Your access couldn’t be verified. Sign in again or check your permissions.",
+				"connect": "Openship couldn’t reach the service’s shell. Retry after the server reconnects.",
+				"notFound": "This service is unavailable or you don’t have access.",
+				"notDeployed": "There is no running container to connect to. Check the service’s status and try again.",
+				"notSupported": "This service’s runtime doesn’t support an interactive terminal.",
+				"maxSessions": "Close an unused terminal session, then reconnect.",
+				"idleTimeout": "Your session ended after being idle. Reconnect to continue.",
+				"sessionCap": "This session reached its time limit. Reconnect to continue.",
+				"server": "The terminal couldn’t be opened. Please try again.",
+				"maxReconnects": "The connection couldn’t be restored. You can try reconnecting again.",
+				"transport": "The connection was interrupted. Your service may still be running."
+			}
 		}
 	}
 }

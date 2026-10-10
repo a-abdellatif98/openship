@@ -17,6 +17,7 @@
  * warning, never a failed deploy.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { Platform } from "@repo/adapters";
 import { safeErrorMessage } from "@repo/core";
 
@@ -49,7 +50,7 @@ export async function repairEdgeVhosts(
     result = await routing.reapplyStoredRoutes();
   } catch (err) {
     const reason = safeErrorMessage(err);
-    console.warn(`[edge-vhost-repair] sweep failed (non-fatal): ${reason}`);
+    errorDiagnostics.warn("platform/engine/lib/edge-vhost-repair", `[edge-vhost-repair] sweep failed (non-fatal): ${reason}`, err);
     return { ...empty, failed: [{ slug: "*", reason }] };
   }
 
@@ -63,7 +64,7 @@ export async function repairEdgeVhosts(
   for (const f of result.failed) {
     const line = `Could not update the edge config for ${f.slug}: ${f.reason}`;
     opts.onLog?.(`${line}\n`, "warn");
-    console.warn(`[edge-vhost-repair] ${line}`);
+    errorDiagnostics.warn("platform/engine/lib/edge-vhost-repair", `[edge-vhost-repair] ${line}`);
   }
   return result;
 }

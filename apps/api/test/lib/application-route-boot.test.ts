@@ -98,6 +98,8 @@ it.each([true, false])(
     mode.cloud = cloud;
     vi.resetModules();
     const { app } = await import("../../src/app");
+    const { observeRequestErrors } = await import("../../src/middleware/error-observation");
+    expect(app.routes[0]?.handler).toBe(observeRequestErrors);
     const { scanRoutes, enforceRouteScanAtBoot } = await import("../../src/lib/route-scanner");
     const result = scanRoutes(app);
     expect(result.summary.permissionGated).toBeGreaterThan(300);
@@ -107,6 +109,7 @@ it.each([true, false])(
     expect(paths.has("/api/system/servers/:id/resize")).toBe(true);
     expect(paths.has("/api/system/onboarding")).toBe(!cloud);
     expect(paths.has("/api/migration/sources")).toBe(true);
+    expect(paths.has("/api/diagnostics/client-errors")).toBe(cloud);
     expect(paths.has("/api/migration/migrate")).toBe(true);
     const { getMcpTools, resetMcpToolCache } = await import("../../src/modules/mcp/mcp-tools");
     resetMcpToolCache();

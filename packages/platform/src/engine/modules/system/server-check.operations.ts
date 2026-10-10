@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { withServerExecution } from "../../lib/server-execution";
 /** Retained server diagnostics and component installers behind shared authorization. */
 import { OperationError, type CreateServerInput, type ServerOperations } from "@repo/contracts";
@@ -330,7 +331,7 @@ export async function checkServer(ctx: ExecutionContext, serverId: string, body:
       // would fall through to the generic credentials answer this branch exists to
       // prevent — the #527 card, restored by a cache.
       if (isSshAuthError(err)) invalidateHostChannelAuth();
-      const d = await sshManager.diagnoseReachability(serverId).catch(() => null);
+      const d = await sshManager.diagnoseReachability(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-check.operations"); return null; });
       if (d?.code === "host_channel_blocked") {
         return failSystem({
             error: "host_channel_blocked",
@@ -560,7 +561,7 @@ export async function scanExposedPorts(ctx: ExecutionContext, serverId: string) 
 
   if (!server.workspaceId) {
     await assertServerExecution(server);
-    const reachable = await sshManager.probeReachable(serverId).catch(() => false);
+    const reachable = await sshManager.probeReachable(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-check.operations"); return false; });
     if (!reachable) {
       return failSystem({ error: "unreachable", message: "Server is not reachable over SSH right now." }, 502);
     }

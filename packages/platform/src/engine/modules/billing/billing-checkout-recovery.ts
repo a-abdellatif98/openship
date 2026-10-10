@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import { AppError } from "@repo/core";
 import { repos, type CloudWorkspace } from "@repo/db";
@@ -49,7 +50,7 @@ export async function listCheckouts(ctx: ExecutionContext, input: BillingScopeIn
         owner.pendingCheckouts.some(
           (intent) => intent.checkoutId && intent.request.kind === "subscription",
         )
-          ? await billing.getPendingCapacityCheckout(owner.namespace).catch(() => null)
+          ? await billing.getPendingCapacityCheckout(owner.namespace).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/billing/billing-checkout-recovery"); return null; })
           : null;
       return mapWithLimit(
         owner.pendingCheckouts,
@@ -60,7 +61,7 @@ export async function listCheckouts(ctx: ExecutionContext, input: BillingScopeIn
             ? await billing
                 .getCheckout(owner.namespace!, intent.checkoutId)
                 .then((result) => result.checkout)
-                .catch(() => null)
+                .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/billing/billing-checkout-recovery"); return null; })
             : null;
           if (checkout && settled(checkout)) return null;
           const canResume =
@@ -162,7 +163,7 @@ export async function resumeCheckout(
         }
         const capacity =
           request.kind === "subscription"
-            ? await billing.getPendingCapacityCheckout(owner.namespace!).catch(() => null)
+            ? await billing.getPendingCapacityCheckout(owner.namespace!).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/billing/billing-checkout-recovery"); return null; })
             : null;
         if (
           capacity?.pendingCheckout?.checkoutId === intent.checkoutId &&
@@ -245,6 +246,7 @@ export async function cancelCheckout(
       try {
         await billing.cancelCapacityCheckout(owner.namespace!, intent.cancellation!);
       } catch (caught) {
+        observeCaughtError(caught, "platform/engine/modules/billing/billing-checkout-recovery");
         error = caught;
       }
       // A concurrent payment or lost cancellation response is resolved by this

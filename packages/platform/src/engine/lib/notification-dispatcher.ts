@@ -29,6 +29,7 @@
  * them.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos, createNotificationDeliveryRepo, type Database, type NotificationDelivery } from "@repo/db";
 import type { ChannelKind } from "@repo/db";
 import { categoryForEventType, findCategory } from "./notification-categories";
@@ -61,11 +62,11 @@ async function dispatch(input: NotificationEmitInput, prepared?: PendingDelivery
   if (!category) return;
   const strict = !!prepared;
   const source = repos;
-  const read = <T>(promise: Promise<T>, fallback: T): Promise<T> => strict ? promise : promise.catch(() => fallback);
+  const read = <T>(promise: Promise<T>, fallback: T): Promise<T> => strict ? promise : promise.catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/notification-dispatcher"); return fallback; });
   const tolerate = async (work: () => Promise<void>) => {
     try { await work(); } catch (error) {
       if (strict) throw error;
-      console.error(`[notification] dispatch failed for category=${category}:`, error);
+      errorDiagnostics.error("platform/engine/lib/notification-dispatcher", `[notification] dispatch failed for category=${category}:`, error);
     }
   };
   const org = input.organizationId;
@@ -130,7 +131,7 @@ export const notification = {
     // Custom jobs can also be TRIGGERED by an event (cheap no-op when unarmed).
     fireJobTriggers(input.eventType, input.organizationId);
     void trackBackgroundWork(dispatch(input).catch((err) => {
-      console.error(
+      errorDiagnostics.error("platform/engine/lib/notification-dispatcher",
         `[notification] dispatch failed for eventType=${input.eventType}:`,
         err,
       );

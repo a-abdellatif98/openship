@@ -1,5 +1,6 @@
 'use client';
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useState, useEffect } from 'react';
@@ -177,7 +178,7 @@ export default function MachineSettingsModal({
         showToast(response.message || w.toastFailed, 'error');
       }
     } catch (error) {
-      console.error('Error updating resources:', error);
+      errorDiagnostics.error("dashboard/components/shared/MachineSettingsModal", 'Error updating resources:', error);
       showToast(w.toastFailed, 'error');
     } finally {
       setIsSaving(false);

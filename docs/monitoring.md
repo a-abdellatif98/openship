@@ -1,5 +1,9 @@
 # Monitoring
 
+For failures inside Openship itself, see [Structured error reporting](structured-error-reporting.md).
+That covers request references, exceptions, background operations and configurable log destinations.
+The monitoring system below measures deployed applications and traffic.
+
 Openship's per-project Monitoring tab answers three questions — what is my app using
 right now, where is my traffic coming from, and what is it returning — and it is designed
 so that answering them costs your visitors nothing.

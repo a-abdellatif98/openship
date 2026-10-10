@@ -293,8 +293,13 @@ export function createRemoteProjectOperations(
     },
     async *retryRoutingStream(value, options = {}) {
       const id = parseInput(ResourceIdSchema, value);
-      yield* http.events(http.url(`${path(id)}/routing/retry/stream`).href, {
-        method: "POST",
+      const url = http.url(`${path(id)}/routing/retry/stream`);
+      if (options.sessionId !== undefined)
+        url.searchParams.set("sessionId", parseInput(ResourceIdSchema, options.sessionId));
+      else if (options.idempotencyKey !== undefined)
+        url.searchParams.set("idempotencyKey", parseInput(ResourceIdSchema, options.idempotencyKey));
+      yield* http.events(url.href, {
+        method: options.sessionId === undefined ? "POST" : "GET",
         signal: options.signal,
       });
     },

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@repo/ui/icons";
@@ -155,7 +156,9 @@ export function ClusterStoragePanel({
       setError(getApiErrorMessage(reason));
       try {
         receive(await clusterStorageApi.get(cluster.id));
-      } catch {}
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/servers/clusters/ClusterStoragePanel");
+      }
     } finally {
       pending.current = false;
       setBusy(false);

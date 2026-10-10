@@ -1,5 +1,6 @@
 /** Organization-scoped billing operations. Oblien is the Cloud payment authority. */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { ExecutionContext } from "../../../context";
 import {
   BillingPlansSchema,
@@ -40,7 +41,8 @@ export async function listPlans(input: NonNullable<Parameters<BillingOperations[
     if (!response.ok) throw new Error("Cloud catalog unavailable");
     const payload = (await response.json()) as { data?: unknown };
     return parseInput(BillingPlansSchema, payload.data);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/billing/billing-application.service");
     throw new AppError(
       "Openship Cloud prices are temporarily unavailable. Please retry.",
       503,

@@ -7,6 +7,7 @@
  * Returns an absolute URL string or null.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { env } from "../config/env";
 import { safeFetch } from "./safe-fetch";
@@ -124,7 +125,7 @@ export function refreshProjectFaviconIfStale(
 
     await detectAndStoreFavicon(project.id, siteUrl);
   })()
-    .catch(() => undefined)
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/favicon-detector"); return undefined; })
     .finally(() => {
       inFlightRefreshes.delete(project.id);
     }));
@@ -147,11 +148,12 @@ export async function detectAndStoreFavicon(projectId: string, siteUrl: string):
       });
       return;
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/favicon-detector");
     // Best-effort - don't break anything if this fails
   }
 
   await repos.project.updateFaviconCache(projectId, {
     faviconCheckedAt: checkedAt,
-  }).catch(() => undefined);
+  }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/favicon-detector"); return undefined; });
 }

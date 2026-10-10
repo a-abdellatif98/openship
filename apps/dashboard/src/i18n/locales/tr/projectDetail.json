@@ -210,8 +210,8 @@
 			},
 			"environmentApply": {
 				"title": "Ortam değişikliklerini uygula",
-        "applying": "Değişiklikler uygulanıyor…",
-        "applied": "Ortam değişiklikleri uygulandı",
+				"applying": "Değişiklikler uygulanıyor…",
+				"applied": "Ortam değişiklikleri uygulandı",
 				"hint": "Kaydedilen değişkenleri yeniden derlemeden bu hizmete uygulayın. Hizmet yeniden başlatılacak.",
 				"saveFirst": "Bu hizmete uygulamadan önce değişikliklerinizi kaydedin.",
 				"restartBlocked": "{name} için normal yeniden başlatmanın uygulayamayacağı kayıtlı ortam değişiklikleri var. Ortam sekmesinde değişiklikleri inceleyip uygulayın.",
@@ -377,6 +377,46 @@
 			},
 			"orBuildFromSource": "veya kaynaktan derle",
 			"imageHint": "Aşağıdaki bir Dockerfile'dan derlemek için boş bırakın."
+		},
+		"connection": {
+			"terminal": "Terminal",
+			"statusTitle": "Servis durumu alınamıyor",
+			"statusHint": "Openship güncel durumu doğrulayamadı. Servisiniz hâlâ çalışıyor olabilir.",
+			"checkingTitle": "Servis kontrol ediliyor",
+			"checkingHint": "Sunucudan yanıt bekleniyor. Terminali açmayı şimdi de deneyebilirsiniz.",
+			"startingTitle": "Servis bekleniyor",
+			"startingHint": "Servis çalışmaya başladığında terminal kullanılabilir olacak.",
+			"stoppedTitle": "Çalışan servis yok",
+			"openTerminal": "Terminali aç",
+			"serviceSettings": "Servis ayarları",
+			"connectingTitle": "Terminal açılıyor",
+			"connectingHint": "{name} ile güvenli bağlantı kuruluyor.",
+			"reconnectingTitle": "Yeniden bağlanılıyor",
+			"reconnectingHint": "Oturumunuz geri yüklenmeye çalışılıyor. Önceki çıktı burada korunur.",
+			"attempt": "Deneme {attempt}",
+			"connected": "Bağlandı",
+			"cancel": "İptal",
+			"reconnect": "Yeniden bağlan",
+			"closedTitle": "Oturum sona erdi",
+			"closedHint": "Devam etmek için yeni bir oturum açın.",
+			"exitCode": "Çıkış kodu {code}",
+			"exitSignal": "Sinyal {signal}",
+			"pausedTitle": "Bağlantı duraklatıldı",
+			"pausedHint": "Kabuk açmaya hazır olduğunuzda yeniden bağlanın.",
+			"errorTitle": "Terminal kullanılamıyor",
+			"errors": {
+				"auth": "Erişiminiz doğrulanamadı. Yeniden oturum açın veya izinlerinizi kontrol edin.",
+				"connect": "Openship servisin kabuğuna ulaşamadı. Sunucu yeniden erişilebilir olduğunda tekrar deneyin.",
+				"notFound": "Bu servis kullanılamıyor veya erişim izniniz yok.",
+				"notDeployed": "Bağlanılabilecek çalışan bir konteyner yok. Servisin durumunu kontrol edip tekrar deneyin.",
+				"notSupported": "Bu servisin çalışma ortamı etkileşimli terminali desteklemiyor.",
+				"maxSessions": "Kullanmadığınız bir terminal oturumunu kapatıp yeniden bağlanın.",
+				"idleTimeout": "Oturumunuz hareketsizlik nedeniyle sona erdi. Devam etmek için yeniden bağlanın.",
+				"sessionCap": "Bu oturum süre sınırına ulaştı. Devam etmek için yeniden bağlanın.",
+				"server": "Terminal açılamadı. Lütfen tekrar deneyin.",
+				"maxReconnects": "Bağlantı geri yüklenemedi. Yeniden bağlanmayı deneyebilirsiniz.",
+				"transport": "Bağlantı kesildi. Servisiniz hâlâ çalışıyor olabilir."
+			}
 		}
 	}
 }

@@ -20,6 +20,7 @@
  * deletes their subscription's managed server.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   dumpSubgraph,
   restoreSubgraph,
@@ -413,7 +414,9 @@ export async function transferProjectToSelfHosted(
 
   // The project is local again — drop any cloud webhook binding so pushes are
   // handled locally, not forwarded to the (now torn-down) SaaS copy.
-  await repos.cloudWebhookBinding.deleteByCloudProject(project.id).catch(() => {});
+  await repos.cloudWebhookBinding.deleteByCloudProject(project.id).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/transfer.service");
+  });
 
   // 5) Tear down the SaaS copy's ROWS so it doesn't linger as a leftover that
   //    would collide on a future re-promote. Best-effort: the local copy is
@@ -425,7 +428,7 @@ export async function transferProjectToSelfHosted(
     organizationId: input.organizationId,
   }).teardownProject({ projectId: project.id });
   if (!teardown.ok) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/projects/transfer.service",
       `[transfer] bring-home: cloud teardown failed for project ${project.id}: ${teardown.error}`,
     );
   }

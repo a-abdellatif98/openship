@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -74,7 +75,9 @@ export function DnsTab({
           onSelectDomain(primaryDomain);
         }
       })
-      .catch(() => {})
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/dns-tab");
+      })
       .finally(() => {
         if (!cancelled) setLoadingDomains(false);
       });
@@ -105,7 +108,8 @@ export function DnsTab({
       .then((res) => {
         if (!cancelled) setRecords(res.records as unknown as DnsRecords);
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/dns-tab");
         // 404 = no records generated for this domain → empty, not an error.
         if (!cancelled) {
           setRecords(null);

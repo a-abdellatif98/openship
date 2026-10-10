@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect, useState, type ReactNode } from "react";
@@ -89,7 +90,7 @@ export function ConnectionCard({
     let cancelled = false;
     (async () => {
       try {
-        const res = await appsApi.getConnection(projectId).catch(() => null);
+        const res = await appsApi.getConnection(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/ConnectionCard"); return null; });
         const data = res?.data;
         if (!cancelled) {
           setView(data ? { ...data, outputs: data.outputs.map(sanitizeOutput) } : { outputs: [] });
@@ -241,7 +242,9 @@ function OutputRow({
 
   const copy = async () => {
     if (!value) return;
-    await navigator.clipboard.writeText(value).catch(() => {});
+    await navigator.clipboard.writeText(value).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/ConnectionCard");
+    });
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

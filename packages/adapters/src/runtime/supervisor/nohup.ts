@@ -14,6 +14,7 @@
  * Good enough for: development, macOS desktop, CI environments.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor, LogEntry, LogCallback, ResourceUsage, RuntimeLogStreamOptions } from "../../types";
 import type { ProcessSupervisor, SupervisorDeployOpts } from "./types";
 import { sampleBareUsage, ZERO_USAGE } from "./usage";
@@ -51,7 +52,8 @@ export class NohupSupervisor implements ProcessSupervisor {
       const content = await this.executor.readFile(this.pidFile(id));
       const pid = Number(content.trim());
       return Number.isSafeInteger(pid) && pid > 1 ? pid : null;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/supervisor/nohup");
       return null;
     }
   }
@@ -69,7 +71,8 @@ export class NohupSupervisor implements ProcessSupervisor {
     try {
       await this.executor.exec(`kill -0 ${pid} 2>/dev/null`);
       return true;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/supervisor/nohup");
       return false;
     }
   }
@@ -80,7 +83,8 @@ export class NohupSupervisor implements ProcessSupervisor {
     try {
       const content = await this.executor.readFile(this.artifactFile(id));
       return content.trim() || null;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/supervisor/nohup");
       return null;
     }
   }
@@ -141,7 +145,8 @@ export class NohupSupervisor implements ProcessSupervisor {
       try {
         const tail = await this.executor.exec(`tail -n 10 ${sq(logPath)}`);
         hint = tail.trim();
-      } catch { /* log may not exist yet */ }
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/supervisor/nohup"); /* log may not exist yet */ }
 
       // Detect EADDRINUSE - another process is holding the port
       if (hint.includes("EADDRINUSE")) {
@@ -275,7 +280,8 @@ export class NohupSupervisor implements ProcessSupervisor {
           message: line,
           level: parseLogLevel(line),
         }));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/supervisor/nohup");
       return [];
     }
   }
@@ -291,7 +297,7 @@ export class NohupSupervisor implements ProcessSupervisor {
     let stopped = false;
     // An adopted deployment has no supervisor log at all, and an empty viewer
     // gives the operator nothing to act on — say so once, up front.
-    if (!(await this.executor.exists(logPath).catch(() => true))) {
+    if (!(await this.executor.exists(logPath).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/supervisor/nohup"); return true; }))) {
       onLog({
         timestamp: new Date().toISOString(),
         message:
@@ -323,13 +329,16 @@ export class NohupSupervisor implements ProcessSupervisor {
           : new Error(`Log reader exited with code ${result.code}`));
       },
       (error) => {
+        observeCaughtError(error, "adapters/runtime/supervisor/nohup");
         if (!stopped) opts?.onEnd?.(error instanceof Error ? error : new Error(String(error)));
       },
     );
 
     return () => {
       stopped = true;
-      this.executor.exec(`pkill -f ${sq(`tail.*${logPath}`)} 2>/dev/null || true`).catch(() => {});
+      this.executor.exec(`pkill -f ${sq(`tail.*${logPath}`)} 2>/dev/null || true`).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/supervisor/nohup");
+      });
     };
   }
 }

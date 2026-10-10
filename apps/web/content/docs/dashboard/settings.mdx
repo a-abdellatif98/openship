@@ -104,9 +104,19 @@ Who can reach this organization's projects, deployments, and servers. See
 
 - **Active members** — everyone with access, their role, and a **Remove member** action.
 - **Pending invitations** — invites you've sent that haven't been accepted yet.
-- **Invite member** — email a join link. Pick a role: **Member** (read + write to everything), **Admin**
+- **Invite member** — send through the instance's configured email service or create a link to copy.
+  Pick a role: **Member** (read + write to everything), **Admin**
   (Member plus manage members and billing), or **Restricted** (no default access — you choose exactly which
   resources to unlock). Restricted invites open a resource picker.
+
+Both delivery choices use the same email-bound invitation. The link is shown after creation
+and stays available in Pending invitations, where it can also be revoked. From a connected
+Desktop, copied links point to the remote instance. Recipients use their own accounts and
+enter the invited organization after accepting.
+Self-hosted recipients can choose **Open in Desktop** on the invitation page, confirm the
+instance, and use the same sign-in and acceptance flow in the app. The page also provides
+a copyable invitation URL for manual connection. Joining never grants more than the offered
+role and resource access; opening the link alone does not join a workspace.
 
 If you're on a personal workspace, this tab also offers **Create team** to spin up a separate, isolated
 team organization.
@@ -151,7 +161,20 @@ you add an email + password login without losing any projects or history.
 **Update & security notifications**. Openship only ever *pulls* this data from the public GitHub releases —
 nothing can push updates to your install. More in [Updating Openship](/docs/guides/updating).
 
-### Export / Import data
+### Instance location
+
+Move between Desktop and a connected or managed server from one card. Choose API-only or
+API + dashboard, or connect Desktop to an existing remote instance without copying its data.
+The move preserves workspaces and credentials, verifies the receiver before cutover, and
+keeps the source inactive afterward. **Move back to Desktop** transfers the latest remote
+state. [Read the instance move guide](/docs/guides/migrate-control-plane).
+
+The card shows the current location and its main action. The **More instance options** menu
+contains existing-instance connections, move codes and returning to a previous server.
+An active server offers **Connect a Desktop** directly; a retired server offers
+**Move an instance here**.
+
+### Backup & recovery
 
 *(Self-hosted and desktop, instance administrators only.)* **Export instance or projects** downloads a
 portable JSON file. Choose the entire instance, or select projects and individual environments in bulk.
@@ -190,8 +213,8 @@ files stay on their server. Keep using that server, or move the runtime data wit
 restore. Reconnect local source folders and update Git/webhook callback URLs when the control-plane
 address changes. The import result keeps these follow-up notes available.
 
-Direct transfer continues to move an entire instance. Use an export file for project selections so you
-can review conflicts and server mappings on the destination before applying them.
+Use **Instance location** for a live move of the whole control plane. Use an export file for
+project selections so you can review conflicts and server mappings before applying them.
 
 <Callout title="Import can wipe this instance" type="warn">
 An instance archive offers merge or full replacement. Replacement erases

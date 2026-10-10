@@ -54,6 +54,31 @@ describe("routing retry stream", () => {
     expect(subscribe).not.toHaveBeenCalled();
   });
 
+  it("allows a project reader to reattach but never upgrades a read into a new repair", async () => {
+    state.members.set("org-a:alice", { id: "a", role: "restricted" });
+    state.grants.set("org-a:alice:project:project-a", { permissions: ["read"] });
+    const iterator = operations
+      .retryRoutingStream(context, "project-a", { sessionId: "routing-a" })
+      [Symbol.asyncIterator]();
+    expect((await iterator.next()).value?.event).toBe("session");
+    expect(subscribe).toHaveBeenCalledWith(
+      expect.any(Object),
+      "project-a",
+      expect.objectContaining({ sessionId: "routing-a" }),
+    );
+    await iterator.return?.();
+    await expect(
+      operations.retryRoutingStream(context, "project-a")[Symbol.asyncIterator]().next(),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      operations
+        .retryRoutingStream(context, "project-b", { sessionId: "routing-a" })
+        [Symbol.asyncIterator]()
+        .next(),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(subscribe).toHaveBeenCalledOnce();
+  });
+
   it("stops disclosing logs when access is revoked", async () => {
     const iterator = operations.retryRoutingStream(context, "project-a")[Symbol.asyncIterator]();
     await iterator.next();

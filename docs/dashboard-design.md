@@ -32,6 +32,45 @@ Reuse [Input](../apps/dashboard/src/components/ui/input.tsx),
 
 ## Layout and density
 
+Instance relocation has one entry in **Settings → Instance → Instance location**. Keep moving
+the control plane, connecting a Desktop, and backup/archive recovery distinct. Reuse the
+shared server selector and option cards for API-only versus API + dashboard. Show progress
+and recovery in the same card; do not add another direct-transfer or Team migration wizard.
+Choose the destination before asking a fresh Desktop user to create an account. Keep that
+account form inside the same dialog, retain the server and address, and return to explicit
+move confirmation after account setup. Team and push-to-deploy prerequisites link directly
+to this flow; a link opens setup only. Use the API's reachability state, so an already-public
+instance can enable those features without moving. Show pairing on hosted or connected
+instances, and explain that its one-time code connects the person's own Desktop as that user.
+A reconnecting Desktop retains its trusted local UI and names the remote instance at sign-in.
+The connection dialog starts with one **Instance URL** input, followed by the instance's
+existing sign-in or invitation screen. Accept its public dashboard or API-only address;
+do not ask users to find a proxy path. Keep one-time account pairing behind a separate
+**Use a connection code** action. Connecting never creates a team membership or moves data.
+Team invitations offer **Email** and **Copy link**, using the same invitation and role/grant
+controls. Email uses the instance's configured delivery capability; link delivery needs no
+mail service. Show the link immediately after creation and keep copy/revoke in the pending
+list. Shared links use the active instance's public address, including from Desktop.
+Recipients sign in or create their own invited account, then enter the accepted organization.
+Self-hosted invitation pages offer **Open in Desktop** and a copyable invitation URL. The
+app opens its existing connection dialog with that address; it never switches instances or
+accepts membership on link launch. Show the instance before connecting, then the inviter,
+workspace and offered role on the normal invitation screen. Opening a second invitation on
+the same instance preserves the current sign-in. Keep a manual URL fallback visible if the
+OS handler or clipboard is unavailable, and offer account switching for a mismatched email.
+Desktop queues a later link while a confirmation is open. Its trusted local UI remains loaded;
+an external instance never receives Electron's native bridge.
+The location card leads with the current computer or server and one contextual action:
+move from Desktop, connect a Desktop to an active server, or receive an instance on a retired
+server. Put secondary connection and transfer tools in the shared More options menu. Use
+plain action labels that distinguish connecting a device from moving instance data. Keep
+the summary and actions in one compact row when they fit, stacking them on narrow containers;
+do not repeat the location as a separate control-mode badge or a row of competing buttons.
+When moving back to Desktop, load portability requirements from the authenticated remote
+instance. Reuse the source-host server picker and confirmation; the Desktop's old local
+records must not decide which remote host needs an SSH connection. Keep a failed source
+check retryable before starting the move.
+
 - Use [PageContainer](../apps/dashboard/src/components/ui/PageContainer.tsx) for its existing
   1600px page limit and responsive padding. Avoid a second page-width cap inside it.
 - Project and deployment configuration pages use a 340px action sidebar when there is room,
@@ -275,12 +314,26 @@ Use **Domains & routing** for sections covering domains, published ports, and in
 **Domains** when the section only manages hostnames. Put shared UI copy in the locale dictionaries.
 Keep hints concise and explain choices where they help the user decide.
 
+Routing retries keep their logs inline and reconnect to the same server operation after a
+refresh. Refresh domain status and the routing warning from the canonical project response;
+do not clear one optimistically. A domain card has one primary repair action, including when
+its diagnosis is expanded. Hostnames owned by another service display that service's verified
+certificate state without offering project-owned certificate actions.
+
 Connection failures describe unavailable observations. Use the shared
 [ConnectionNotice](../apps/dashboard/src/components/shared/ConnectionNotice.tsx) with concise warning
 copy and a read-only status retry where available. Keep last-known details, label current health
 unknown, and reserve repair/setup prompts for confirmed states. The root layout owns the browser/API
 connection notice. Monitoring groups explicit network failures across affected servers and keeps
 raw diagnostics in a closed Technical details disclosure.
+
+Service terminals distinguish a pending status read from a confirmed stopped service. Keep the
+terminal mounted when a status check becomes unavailable; offer a manual terminal connection
+while status is unverified, using the same authenticated PTY transport. Use the shared terminal
+shell and connection notice for checking, unavailable and stopped states, with a status retry
+and a relevant next action. Connection attempts can be cancelled. After a session has connected,
+show reconnect feedback above its retained output instead of covering or replacing it.
+When a shell opens, refresh the canonical service status; do not mark it running optimistically.
 
 Catalog category filters match the Library's tabs: compact `text-sm` labels with `px-4 py-2`,
 `rounded-lg`, and a filled `bg-foreground text-background` selected state. Inactive choices use

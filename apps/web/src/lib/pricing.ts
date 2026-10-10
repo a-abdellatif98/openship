@@ -1,3 +1,4 @@
+import { reportCaughtError } from "@repo/core/diagnostics";
 import { cache } from "react";
 import { CLOUD_API_URL, pricingUi, resolveStandard } from "@repo/core";
 import { BillingPlansSchema, parseInput, type BillingPlans } from "@repo/contracts";
@@ -37,7 +38,8 @@ export const getCloudPricing = cache(async (): Promise<CloudPricing> => {
       tiers,
       customTiers: data.plans.filter((plan) => plan.price.monthly === null),
     };
-  } catch {
+  } catch (error) {
+    reportCaughtError(error, "web/lib/pricing");
     return { available: false, tiers: [], customTiers: [] };
   }
 });

@@ -21,6 +21,7 @@
  * The UI converts to/from GB.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { sshManager } from "../../../lib/ssh-manager";
 import { execute, queryOne, queryRows, q, qInt, transaction } from "./psql-runner";
 import { hashPassword } from "./password";
@@ -259,6 +260,7 @@ export async function createMailbox(
     try {
       await createMaildirOnDisk(exec, layout);
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/mail/admin/mailboxes.service");
       // Best-effort rollback. If THIS also fails we're in trouble - but the
       // most likely cause is "no write access to /var/vmail" which means
       // the install is broken regardless, and the DB rollback should still
@@ -413,7 +415,8 @@ export async function hardDeleteMailbox(serverId: string, email: string): Promis
         storagenode: existing.storagenode || STORAGE_NODE,
         maildir: existing.maildir,
       });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/mailboxes.service");
       // Disk cleanup failure is non-fatal - the auth rows are gone, the
       // mailbox can't be logged into. Leftover bytes are an operator
       // cleanup task, not a user-facing error.

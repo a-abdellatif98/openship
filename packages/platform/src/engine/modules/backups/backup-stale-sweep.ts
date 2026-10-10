@@ -19,6 +19,7 @@
  * row that has genuinely gone nowhere. See `sweepRunsWithStaleHeartbeat`.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 
 /** Matches `DEFAULT_HELPER_IDLE_MS` in the docker backup executor. */
@@ -37,7 +38,7 @@ export async function runBackupStaleSweep(): Promise<{ swept: number }> {
     reason: STALE_REASON,
   });
   if (swept > 0) {
-    console.warn(`[backup-stale-sweep] reconciled ${swept} stale backup run(s)`);
+    errorDiagnostics.warn("platform/engine/modules/backups/backup-stale-sweep", `[backup-stale-sweep] reconciled ${swept} stale backup run(s)`);
   }
   return { swept };
 }

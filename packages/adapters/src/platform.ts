@@ -32,6 +32,7 @@
  *   if (system) await system.requireFeature("deploy");
  */
 
+import { observedAllSettled, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { RuntimeAdapter } from "./runtime/types";
 import type { RoutingProvider, SslProvider } from "./infra/types";
 import type { CommandExecutor, SshConfig, ProvisionLock } from "./types";
@@ -348,7 +349,7 @@ async function createCloudPlatform(config: PlatformConfig): Promise<Platform> {
       await dispose();
     } finally {
       try {
-        await (await routingRuntime?.catch(() => undefined))?.dispose();
+        await (await routingRuntime?.catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/platform"); return undefined; }))?.dispose();
       } finally {
         await connection.dispose();
       }
@@ -411,7 +412,7 @@ async function createInfraProvider(
   // REMOTE box already running our edge container — same edge, reached over the
   // pooled SSH executor rather than a socket.
   const { resolveOurEdgeContainer } = await import("./system/proxy/detect");
-  const remoteEdge = await resolveOurEdgeContainer(executor).catch(() => null);
+  const remoteEdge = await resolveOurEdgeContainer(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/platform"); return null; });
   if (remoteEdge) {
     const nginx = await containerEdgeProvider(executor, remoteEdge, config.nginx);
     return { routing: nginx, ssl: nginx };
@@ -453,9 +454,9 @@ async function createInfraProvider(
   try {
     paths = await detectOpenRestyPaths(executor);
   } catch (err) {
-    console.error(
+    errorDiagnostics.error("adapters/platform",
       `[openresty] cannot reach the edge host (deploy continues without routing): ` +
-        `${err instanceof Error ? err.message : String(err)}`,
+        `${err instanceof Error ? err.message : String(err)}`, err,
     );
     const { NoopInfraProvider } = await import("./infra/noop");
     const noop = new NoopInfraProvider();
@@ -477,7 +478,7 @@ async function createInfraProvider(
   const edgeExecutor = await rootOrDegrade(executor, {
     purpose: "Configuring routing and TLS",
     consequence: "Routing may be incomplete (deploy continues; the app still runs on its port).",
-    report: (message) => console.error(`[openresty] ${message}`),
+    report: (message) => errorDiagnostics.error("adapters/platform", `[openresty] ${message}`),
   });
 
   // Idempotent, but writes the SHARED nginx.conf (grep||sed). Concurrent deploys
@@ -491,9 +492,9 @@ async function createInfraProvider(
     // step, so the invariant never got a chance to apply (that's what turned a
     // macOS `mkdir /var/www` EACCES into "Deployment Failed").
     await ensureOpenRestyConfig(edgeExecutor, paths).catch((err: unknown) => {
-      console.error(
+      errorDiagnostics.error("adapters/platform",
         `[openresty] ensureOpenRestyConfig failed (deploy continues, routing may be ` +
-          `incomplete): ${err instanceof Error ? err.message : String(err)}`,
+          `incomplete): ${err instanceof Error ? err.message : String(err)}`, err,
       );
     });
     // Self-heal the edge Lua on EVERY deploy — a box that lost rules_guard.lua
@@ -576,10 +577,10 @@ async function createSelfHostedPlatform(config: PlatformConfig): Promise<Platfor
   } catch (error) {
     // Construction may fail after opening a runtime transport. Release the
     // resources created here; an injected executor still belongs to its caller.
-    await Promise.allSettled([
+    await observedAllSettled([
       Promise.resolve().then(() => runtime?.dispose?.()),
       Promise.resolve().then(() => (config.executor ? undefined : executor.dispose())),
-    ]);
+    ], "adapters/platform");
     throw error;
   }
 }

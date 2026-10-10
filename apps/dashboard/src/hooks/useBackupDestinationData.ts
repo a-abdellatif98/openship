@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 
@@ -31,6 +32,7 @@ export function useBackupDestinationData<T>(read: Read<T>, hasActiveRuns: (data:
         if (request.current === token && reader.current === read)
           setState({ read, data: result.data, error: null, refreshing: false });
       } catch (error) {
+        observeCaughtError(error, "dashboard/hooks/useBackupDestinationData");
         if (request.current === token && reader.current === read) {
           const unavailable = error instanceof ApiError && [401, 403, 404].includes(error.status);
           setState((previous) => ({

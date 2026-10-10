@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import { useI18n } from "@/components/i18n-provider";
@@ -50,7 +51,8 @@ function relTime(iso?: string | null): string {
   if (!iso) return "";
   try {
     return new Date(iso).toLocaleString();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/components/migration/MigrationRunList");
     return "";
   }
 }

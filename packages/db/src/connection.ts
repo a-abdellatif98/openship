@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { mkdirSync, existsSync, readFileSync, unlinkSync } from "fs";
 import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
@@ -76,6 +77,7 @@ export async function createDatabase(input: DatabaseOptions): Promise<DatabaseCo
       if (last?.hash !== expected.hash || Number(last?.created_at) !== expected.folderMillis)
         throw new Error("The database schema does not match this Openship build");
     } catch (cause) {
+      observeCaughtError(cause, "db/connection");
       throw new Error("Database schema verification failed. Use a compatible build or explicitly apply migrations with the database owner.", { cause });
     }
   }
@@ -110,7 +112,7 @@ export async function createDatabase(input: DatabaseOptions): Promise<DatabaseCo
     // own; all this has to do is exist. Attached before the first connect so no window
     // is uncovered.
     pool.on("error", (err) => {
-      console.warn("[db] idle postgres client error (connection retired):", err.message);
+      errorDiagnostics.warn("db/connection", "[db] idle postgres client error (connection retired):", err);
     });
     _pgPool = pool;
 
@@ -154,9 +156,9 @@ export async function createDatabase(input: DatabaseOptions): Promise<DatabaseCo
     try {
       unlinkSync(controlPath);
     } catch (err) {
-      console.warn(
+      errorDiagnostics.warn("db/connection",
         `[db] failed to remove stale pglite postmaster.pid at ${controlPath}:`,
-        err instanceof Error ? err.message : err,
+        err instanceof Error ? err.message : err, err,
       );
     }
   }
@@ -233,7 +235,8 @@ export async function createDatabase(input: DatabaseOptions): Promise<DatabaseCo
     return Object.freeze({ db, driver: _driver, get pool() { return _pgPool; }, close });
   } catch (error) {
     try { await close(); }
-    catch (cleanupError) { throw new AggregateError([error, cleanupError], "Database initialization and cleanup failed"); }
+    catch (cleanupError) {
+      observeCaughtError(cleanupError, "db/connection"); throw new AggregateError([error, cleanupError], "Database initialization and cleanup failed"); }
     throw error;
   }
 }

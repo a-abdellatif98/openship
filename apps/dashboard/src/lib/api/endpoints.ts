@@ -6,6 +6,10 @@
  */
 
 export const endpoints = {
+  instance: {
+    status: "system/instance",
+    action: (action: "preflight" | "offer" | "move" | "provision" | "resume" | "cancel" | "pair" | "connect" | "disconnect" | "return") => `system/instance/${action}`,
+  },
   /* ---------------------------------------------------------------- */
   /*  Projects                                                        */
   /* ---------------------------------------------------------------- */

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { Suspense, useEffect, useState } from "react";
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import OTPInput from "@/components/shared/OTPInput";
 import { isNetworkError } from "@/lib/api";
+import { buildAuthPageHref } from "@/lib/cloud-auth";
 
 export default function VerifyEmailPage() {
   return (
@@ -33,6 +35,7 @@ function VerifyEmailContent() {
   const emailParam = searchParams.get("email") ?? "";
   const { toast } = useToast();
   const { t } = useI18n();
+  const loginHref = buildAuthPageHref("/login", searchParams);
 
   const [status, setStatus] = useState<"pending" | "verifying" | "verified" | "error">(
     token ? "verifying" : "pending",
@@ -61,6 +64,7 @@ function VerifyEmailContent() {
           setStatus("verified");
         }
       } catch (err) {
+        observeCaughtError(err, "dashboard/app/(auth)/verify-email/page");
         if (cancelled) return;
         setStatus("error");
         setErrorMessage(
@@ -110,6 +114,7 @@ function VerifyEmailContent() {
         setCode("");
       }
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(auth)/verify-email/page");
       setErrorMessage(
         isNetworkError(err) ? t.auth.errors.serverUnreachable : t.auth.errors.verificationFailed,
       );
@@ -140,6 +145,7 @@ function VerifyEmailContent() {
         toast("success", t.auth.errors.verificationSent);
       }
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(auth)/verify-email/page");
       const msg = isNetworkError(err)
         ? t.auth.errors.serverUnreachable
         : t.auth.errors.resendFailed;
@@ -173,7 +179,7 @@ function VerifyEmailContent() {
         description={t.auth.verifyEmail.verifiedDescription}
         email={verifiedEmail}
         actionLabel={t.auth.verifyEmail.verifiedAction}
-        actionHref="/login"
+        actionHref={loginHref}
       />
     );
   }
@@ -199,7 +205,7 @@ function VerifyEmailContent() {
               </Button>
             )}
             <Button asChild>
-              <Link href="/login">{t.auth.verifyEmail.signIn}</Link>
+              <Link href={loginHref}>{t.auth.verifyEmail.signIn}</Link>
             </Button>
           </div>
         </div>
@@ -258,7 +264,7 @@ function VerifyEmailContent() {
         </p>
 
         <p className="mt-6 text-sm text-muted-foreground">
-          <Link href="/login" className="font-medium text-foreground transition-colors hover:underline">
+          <Link href={loginHref} className="font-medium text-foreground transition-colors hover:underline">
             {t.auth.verifyEmail.backToSignIn}
           </Link>
         </p>

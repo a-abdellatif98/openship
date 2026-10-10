@@ -9,6 +9,7 @@
  * adapter's own client for destinations (keeping heavy transfers off the shared
  * connection — the #34 isolation).
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   createExecutor,
   isSshAuthError,
@@ -43,6 +44,7 @@ registerConnectivityCheck<SshConfig>("ssh", async (config) => {
   try {
     return await sshEcho(executor);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/connectivity-checks");
     return sshError(err);
   } finally {
     await executor.dispose();
@@ -51,11 +53,12 @@ registerConnectivityCheck<SshConfig>("ssh", async (config) => {
 
 /** A saved server by id — cheap TCP probe first, then an authenticated echo. */
 registerConnectivityCheck<string>("ssh-server", async (serverId) => {
-  const reachable = await sshManager.probeReachable(serverId).catch(() => false);
+  const reachable = await sshManager.probeReachable(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/connectivity-checks"); return false; });
   if (!reachable) return connFail("unreachable", "Host is not reachable");
   try {
     return await sshManager.withExecutor(serverId, (e) => sshEcho(e));
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/connectivity-checks");
     return sshError(err);
   }
 });

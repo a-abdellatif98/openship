@@ -1,4 +1,5 @@
 /** Shared PAT inspection for personal and instance credentials. No auth or database setup. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { ghSend } from "./github.http";
 
 /**
@@ -56,7 +57,7 @@ export interface PatScopeReport {
 export async function inspectPatScope(token: string): Promise<PatScopeReport> {
   const res = await ghSend(token, { url: "https://api.github.com/user" });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
+    const body = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.pat"); return ""; });
     throw new Error(
       `Could not validate PAT (GitHub returned ${res.status}). ${body.slice(0, 200)}`,
     );

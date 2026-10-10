@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getSession, getDeploymentInfoOrNull, needsOrgSelection } from "@/lib/server/session";
@@ -9,6 +10,8 @@ import {
   DESKTOP_CLOUD_FLOW,
 } from "@/lib/cloud-auth";
 import { AuthProviders } from "./providers";
+import { serverApi } from "@/lib/server/api";
+import type { InstanceStatus } from "@/lib/api/instance";
 
 /**
  * Auth layout - minimal shell, no sidebar. Sends already-authenticated
@@ -98,13 +101,19 @@ export default async function AuthLayout({
 
   const deploymentInfo = await getDeploymentInfoOrNull();
   if (!deploymentInfo) return <ApiUnavailable />;
+  const controller = deploymentInfo.selfHosted
+    ? await serverApi.get<InstanceStatus>("system/instance", { cache: "no-store" }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(auth)/layout"); return null; })
+    : null;
+  const remoteInstance = controller?.desktop && ["connected", "retired"].includes(controller.role)
+    ? controller.connection?.origin : undefined;
 
   return (
     <AuthProviders
       authMode={deploymentInfo.authMode}
       cloudAuthUrl={deploymentInfo.cloudAuthUrl}
       selfHosted={deploymentInfo.selfHosted}
-      authProviders={deploymentInfo.authProviders ?? []}
+      authProviders={remoteInstance ? [] : deploymentInfo.authProviders ?? []}
+      remoteInstance={remoteInstance}
     >
       <div className="th-page">{children}</div>
     </AuthProviders>

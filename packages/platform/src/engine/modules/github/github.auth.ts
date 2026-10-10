@@ -15,6 +15,7 @@
  * GitHub's token endpoint on every request.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { assertCloudTenantScope } from "../../lib/cloud/scope";
 import { mayUseInstanceGitIdentity } from "./github-instance-access";
 import crypto from "crypto";
@@ -242,7 +243,7 @@ export async function getInstallationId(
   // For an owner not covered by a custom source, preserve the pre-source auth
   // mode. In cloud-app mode api.openship.io remains authoritative; a legacy
   // local snapshot must never shadow it.
-  const mode = await resolveGitHubFallbackAuthMode(ctx).catch(() => "none" as const);
+  const mode = await resolveGitHubFallbackAuthMode(ctx).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return "none" as const; });
   if (mode === "cloud-app") {
     await assertCloudTenantScope(ctx);
     // ctx.organizationId is the canonical answer — permission.assert
@@ -251,7 +252,7 @@ export async function getInstallationId(
     const { cloudClient } = await import("../../lib/cloud/client");
     const list = await cloudClient({ organizationId })
       .github.installations()
-      .catch(() => null);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return null; });
     if (!list) return null;
     const match = list.find((entry) => entry.login.toLowerCase() === owner.toLowerCase());
     if (!match) return null;
@@ -304,14 +305,14 @@ export async function getInstallationIdByOrg(
   // billing webhooks) that don't carry a per-request context. The
   // org owner's cloud-session is the right scope: if the owner is
   // cloud-connected the team's installs live on SaaS.
-  const ownerMember = await resolveOrgOwner(organizationId).catch(() => null);
+  const ownerMember = await resolveOrgOwner(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return null; });
   const mode = await resolveAuthModeForOrgOwner(ownerMember?.userId);
 
   if (mode === "cloud-app") {
     const { cloudClient } = await import("../../lib/cloud/client");
     const list = await cloudClient({ organizationId })
       .github.installations()
-      .catch(() => null);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return null; });
     if (!list) return null;
     const match = list.find((entry) => entry.login.toLowerCase() === owner.toLowerCase());
     if (!match) return null;
@@ -510,7 +511,8 @@ export async function getInstallationToken(
     // forever.
     const message = (err as Error).message ?? "";
     if (/\(404\)/.test(message) || /Not Found/i.test(message)) {
-      await dropStaleInstallationRows(owner, installationId, installation.sourceId).catch(() => {
+      await dropStaleInstallationRows(owner, installationId, installation.sourceId).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth");
         /* best-effort */
       });
     }
@@ -532,7 +534,7 @@ async function dropStaleInstallationRows(
 ): Promise<void> {
   const rows = await repos.gitInstallation
     .findByInstallationIdForProvider(installationId, sourceId)
-    .catch(() => []);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return []; });
   const matching = rows.filter((row) => row.owner.toLowerCase() === owner.toLowerCase());
   if (matching.length === 0) return;
   // A GitHub installation id is global for this App. A 404 means every local
@@ -546,7 +548,7 @@ async function dropStaleInstallationRows(
       invalidateOrgGitHubCache(id),
     ),
   );
-  console.warn(
+  errorDiagnostics.warn("platform/engine/modules/github/github.auth",
     `[GitHub] dropped stale gitInstallation row for ${owner} (installationId=${installationId}) — GitHub returned 404`,
   );
 }
@@ -653,7 +655,7 @@ export async function githubFetch<T = unknown>(opts: GitHubFetchOptions): Promis
     error instanceof Error && "credentialRejected" in error && error.credentialRejected === true;
   const customApiBase = opts.owner
     ? await resolveGitHubApiBaseUrl(opts.ctx.organizationId, opts.owner, opts.installationId).catch(
-        () => null,
+        (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return null; },
       )
     : null;
 
@@ -846,7 +848,7 @@ export async function getUserStatusWithDiagnostics(
         .where(and(eq(schema.account.userId, userId), eq(schema.account.providerId, "github")));
       githubRowCount = rows.length;
     } catch (err) {
-      console.log(`[cloud-saas:githubUserStatus] account lookup failed: ${safeErrorMessage(err)}`);
+      observeCaughtError(err, "platform/engine/modules/github/github.auth");
     }
     return { connected: false, githubAccountRowsForUser: githubRowCount };
   }
@@ -911,11 +913,13 @@ export async function getGitHubConnectionState(
       try {
         const installs = await getUserInstallations(ctx, status);
         hasInstallations = installs.length > 0;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth");
         hasInstallations = undefined;
       }
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth");
     // Cloud unreachable / OAuth fetch failed / network blip. App side
     // is "not connected"; gh CLI fallback below still runs.
     appConnected = false;
@@ -997,7 +1001,7 @@ export async function getUserInstallations(
   const userId = ctx.userId;
   const organizationId = ctx.organizationId;
   const customConfigured =
-    !env.CLOUD_MODE && (await hasActiveGitHubSource(organizationId).catch(() => false));
+    !env.CLOUD_MODE && (await hasActiveGitHubSource(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return false; }));
   const customInstallations = customConfigured
     ? await getStoredInstallationsForOrganization(organizationId, true)
     : [];
@@ -1078,7 +1082,7 @@ export async function getUserInstallations(
       );
       await invalidateUserGitHubCache(userId);
     } catch (err) {
-      console.warn("[GitHub] Failed to sync installations:", (err as Error).message);
+      errorDiagnostics.warn("platform/engine/modules/github/github.auth", "[GitHub] Failed to sync installations:", (err as Error).message, err);
     }
 
     return mergeInstallations(customInstallations, installations);
@@ -1088,9 +1092,9 @@ export async function getUserInstallations(
     // behind a silent fallback to stale DB cache. The fallback itself is
     // intentional — a stale list is better than an empty UI — but the
     // warn makes the failure mode visible the next time it fires.
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/github/github.auth",
       "[GitHub] /user/installations failed, falling back to stored installations:",
-      (err as Error).message,
+      (err as Error).message, err,
     );
     return getStoredInstallationsForOrganization(organizationId);
   }
@@ -1102,7 +1106,7 @@ async function getStoredInstallationsForOrganization(
 ): Promise<GitHubInstallation[]> {
   const [installations, sources] = await Promise.all([
     repos.gitInstallation.listByOrganization(organizationId),
-    repos.gitSource.listActiveByOrganization(organizationId).catch(() => []),
+    repos.gitSource.listActiveByOrganization(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return []; }),
   ]);
   const sourceById = new Map(sources.map((source) => [source.id, source]));
   return installations
@@ -1219,7 +1223,7 @@ export async function resolveGitHubAuthMode(ctx: RequestContext): Promise<GitHub
   // configuration. It takes precedence over the legacy process-wide mode: an
   // operator must not be able to save a valid App and then have every runtime
   // path silently keep using `gh` because GITHUB_AUTH_MODE was left at `cli`.
-  if (await hasActiveGitHubSource(ctx.organizationId).catch(() => false)) return "app";
+  if (await hasActiveGitHubSource(ctx.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return false; })) return "app";
 
   return resolveGitHubFallbackAuthMode(ctx);
 }
@@ -1245,7 +1249,8 @@ async function resolveGitHubFallbackAuthMode(ctx: RequestContext): Promise<GitHu
       ? await isCloudConnectedForOrg(ctx.organizationId)
       : await isCloudConnected(ctx.userId);
     if (connected) return "cloud-app";
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth");
     // cloud-client import / DB read failed → fall through to cli.
   }
   return "cli";
@@ -1272,7 +1277,8 @@ async function resolveAuthModeForUserId(userId: string): Promise<GitHubAuthMode>
   try {
     const { isCloudConnected } = await import("../../lib/cloud/session");
     if (await isCloudConnected(userId)) return "cloud-app";
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth");
     // If the cloud-client import / DB read fails, fall through to cli.
   }
   return "cli";
@@ -1289,7 +1295,7 @@ async function resolveAuthModeForOrgOwner(
   ownerUserId: string | undefined,
 ): Promise<GitHubAuthMode | "none"> {
   if (!ownerUserId) return "none";
-  return resolveAuthModeForUserId(ownerUserId).catch(() => "none" as const);
+  return resolveAuthModeForUserId(ownerUserId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return "none" as const; });
 }
 
 /**
@@ -1324,8 +1330,8 @@ export async function resolveInstallUrl(
     return createSourceInstallUrl(ctx, sourceId);
   }
   const preferredSource =
-    (await repos.gitSource.findDefault(organizationId).catch(() => undefined)) ??
-    (await repos.gitSource.listActiveByOrganization(organizationId).catch(() => []))[0];
+    (await repos.gitSource.findDefault(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return undefined; })) ??
+    (await repos.gitSource.listActiveByOrganization(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return []; }))[0];
   if (preferredSource) {
     return ctx.role === "owner"
       ? createSourceInstallUrl(ctx, preferredSource.id)
@@ -1354,14 +1360,14 @@ export async function resolveInstallUrl(
     // open the install screen but silently orphan the install (HIGH #6).
     // Signal unreachable so the caller tells the user the truth instead
     // of handing them a dead link.
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/github/github.auth",
       "[GitHub] install URL unavailable — Openship Cloud unreachable (cloud-app mode); refusing stateless local fallback",
     );
     return { url: "", state: "", cloudUnreachable: true };
   }
   if (mode === "app" && !env.CLOUD_MODE) {
     const state = crypto.randomBytes(24).toString("base64url");
-    await repos.githubInstallState.purgeExpired().catch(() => 0);
+    await repos.githubInstallState.purgeExpired().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return 0; });
     await repos.githubInstallState.create({
       state,
       userId,
@@ -1402,7 +1408,7 @@ export async function consumeInstallState(
   expectedOrganizationId?: string,
 ): Promise<{ userId: string; organizationId: string | null } | null> {
   if (!state) return null;
-  const binding = await repos.githubInstallState.find(state).catch(() => null);
+  const binding = await repos.githubInstallState.find(state).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return null; });
   if (!binding) return null;
   if (
     binding.userId !== expectedUserId ||
@@ -1414,7 +1420,7 @@ export async function consumeInstallState(
     return null;
   }
   // Atomic delete-and-return so a second concurrent attempt can't ride.
-  const consumed = await repos.githubInstallState.consume(state).catch(() => null);
+  const consumed = await repos.githubInstallState.consume(state).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return null; });
   if (!consumed) return null;
   return {
     userId: consumed.userId,
@@ -1491,13 +1497,13 @@ export async function disconnectUser(
   // and continue to use the SaaS bridge after the user disconnected.
   // Sweep each membership so the disconnect actually closes the gate.
   try {
-    const memberships = await repos.member.listByUser(userId).catch(() => []);
+    const memberships = await repos.member.listByUser(userId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.auth"); return []; });
     for (const m of memberships) {
       if (m.organizationId) {
         await invalidateOrgGitHubCache(m.organizationId);
       }
     }
   } catch (err) {
-    console.warn(`[GitHub] disconnect cache sweep failed for ${userId}: ${(err as Error).message}`);
+    errorDiagnostics.warn("platform/engine/modules/github/github.auth", `[GitHub] disconnect cache sweep failed for ${userId}: ${(err as Error).message}`, err);
   }
 }

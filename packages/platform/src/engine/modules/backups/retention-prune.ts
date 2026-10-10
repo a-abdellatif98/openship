@@ -25,6 +25,7 @@
  * process backends.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos, type BackupPolicy, type BackupRun } from "@repo/db";
 import { resolveDestination } from "@repo/adapters";
 import { toAdapterRow } from "@repo/platform/engine/modules/backup-destinations/hydrate-server";
@@ -62,13 +63,13 @@ export async function runRetentionSweep(): Promise<{
         // Every skip is logged. Silence here is what let "retention is on" and
         // "retention runs" diverge for a whole release.
         stats.policiesSkipped += 1;
-        console.warn(`[retention-prune] policy ${policy.id} skipped: ${result.skipped}`);
+        errorDiagnostics.warn("platform/engine/modules/backups/retention-prune", `[retention-prune] policy ${policy.id} skipped: ${result.skipped}`);
       } else {
         stats.policiesProcessed += 1;
       }
     } catch (err) {
       stats.errors += 1;
-      console.warn(`[retention-prune] policy ${policy.id} failed: ${safeErrorMessage(err)}`);
+      errorDiagnostics.warn("platform/engine/modules/backups/retention-prune", `[retention-prune] policy ${policy.id} failed: ${safeErrorMessage(err)}`, err);
     }
   }
   return stats;
@@ -268,7 +269,7 @@ async function pruneCurrentPolicy(policy: BackupPolicy): Promise<PruneOutcome> {
           const { failed } = await destination.deleteMany(artifactKeys);
           if (failed.length > 0) {
             deferred += 1;
-            console.warn(
+            errorDiagnostics.warn("platform/engine/modules/backups/retention-prune",
               `[retention-prune] run ${run.id} kept: ${failed.length}/${artifactKeys.length} ` +
                 `object(s) could not be deleted, will retry next sweep — ` +
                 failed.map((f) => `${f.key}: ${f.error}`).join("; "),
@@ -285,7 +286,7 @@ async function pruneCurrentPolicy(policy: BackupPolicy): Promise<PruneOutcome> {
       });
     } catch (err) {
       deferred += 1;
-      console.warn(`[retention-prune] failed to drop run ${run.id}: ${safeErrorMessage(err)}`);
+      errorDiagnostics.warn("platform/engine/modules/backups/retention-prune", `[retention-prune] failed to drop run ${run.id}: ${safeErrorMessage(err)}`, err);
     }
   }
   return { dropped, deferred, skipped: dropped === 0 ? unavailable : null };

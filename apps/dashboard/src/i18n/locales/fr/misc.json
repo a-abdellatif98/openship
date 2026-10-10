@@ -129,7 +129,15 @@
     "acceptedTitle": "Vous y êtes",
     "acceptedRedirect": "Redirection vers le tableau de bord...",
     "errorTitle": "Impossible d'accepter cette invitation",
-    "backToDashboard": "Retour au tableau de bord"
+    "backToDashboard": "Retour au tableau de bord",
+    "invitedBy": "Invitation de {name}",
+    "roleLabel": "Rôle :",
+    "desktopOpen": "Ouvrir dans Desktop",
+    "desktopCopy": "Copier le lien d’invitation",
+    "desktopCopied": "Lien copié",
+    "desktopFallback": "Desktop ne s’ouvre pas ? Collez ce lien dans Paramètres → Instance → Se connecter à une instance.",
+    "desktopDescription": "Utilisez Desktop ou continuez ici dans votre navigateur.",
+    "switchAccount": "Se connecter avec le compte invité"
   },
   "cloudAuthorize": {
     "missingRedirect": "Paramètre de redirection manquant.",

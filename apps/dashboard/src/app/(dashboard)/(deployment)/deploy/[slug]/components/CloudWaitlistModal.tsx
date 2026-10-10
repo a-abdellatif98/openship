@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 // TODO: removed — temporary SaaS "Cloud is almost here" waitlist gate.
@@ -32,13 +33,14 @@ export function CloudWaitlistModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ email: email.trim() }),
       });
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        const data = (await res.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/(deployment)/deploy/[slug]/components/CloudWaitlistModal"); return ({}); })) as { error?: string };
         setError(data.error || "Something went wrong. Try again.");
         setStatus("error");
         return;
       }
       setStatus("done");
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/(deployment)/deploy/[slug]/components/CloudWaitlistModal");
       setError("Couldn't reach the waitlist. Try again.");
       setStatus("error");
     }

@@ -1,3 +1,4 @@
+import { reportCaughtError } from "@repo/core/diagnostics";
 import { parseChangelog } from "@repo/core";
 import { cache } from "react";
 import { marked } from "marked";
@@ -303,7 +304,8 @@ export const getChangelog = cache(async (): Promise<ChangelogEntry[]> => {
     }
     entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return entries;
-  } catch {
+  } catch (error) {
+    reportCaughtError(error, "web/lib/changelog");
     return [];
   }
 });

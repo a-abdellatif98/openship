@@ -36,6 +36,7 @@
  *     read can't tie up the SSH session.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { AppError, safeErrorMessage } from "@repo/core";
 
 import { MAIL_COMPONENTS } from "@repo/platform/engine/modules/mail/mail-health.service";
@@ -200,7 +201,8 @@ async function settledState(
     if (state.status === "activating" || state.status === "deactivating") return undefined;
     if (state.status === "unknown") return undefined;
     return state;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/modules/mail/admin/components.service");
     return undefined;
   }
 }
@@ -304,6 +306,7 @@ export async function restartAllComponents(
         });
       }
     } catch (err) {
+      observeCaughtError(err, "api/modules/mail/admin/components.service");
       const msg = safeErrorMessage(err);
       results.push({
         key: comp.key,

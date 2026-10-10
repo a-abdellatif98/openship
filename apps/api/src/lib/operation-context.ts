@@ -1,3 +1,4 @@
+import { enrichErrorContext } from "@repo/core/diagnostics/node";
 import type { Context } from "hono";
 import { freezeContext, type ExecutionContext, type OperationResult } from "@repo/platform";
 import { getRequestContext } from "./request-context";
@@ -8,6 +9,7 @@ export function operationContext(c: Context): ExecutionContext {
 }
 
 export function applyOperationContext(c: Context, context: ExecutionContext): void {
+  enrichErrorContext({ organizationId: context.organizationId, userId: context.userId });
   c.set("scopedOrganizationId", context.organizationId);
   c.set("ctx", { ...context, hono: c });
   c.set("operationAuditRecorded", true);

@@ -30,6 +30,7 @@
  * itself, so the only project that can hold the link is one deploying onto that box.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { mailHostBaseDomain } from "@repo/core";
 import { repos } from "@repo/db";
 import type { Domain } from "@repo/db";
@@ -77,7 +78,8 @@ export async function mailHostRoutableByProject(
     ]);
     if (!server?.organizationId || !project) return false;
     return server.organizationId === project.organizationId;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/mail-host-claim");
     return false;
   }
 }

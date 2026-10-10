@@ -11,6 +11,7 @@ interface AuthContextValue {
   /** Social logins the API advertises as configured (GET /health/env). The
    *  login/register pages render exactly these; empty means password only. */
   authProviders: AdvertisedAuthProvider[];
+  remoteInstance?: string;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -32,6 +33,7 @@ interface AuthProvidersProps {
   cloudAuthUrl: string;
   selfHosted: boolean;
   authProviders?: AdvertisedAuthProvider[];
+  remoteInstance?: string;
 }
 
 export function AuthProviders({
@@ -40,9 +42,10 @@ export function AuthProviders({
   cloudAuthUrl,
   selfHosted,
   authProviders = [],
+  remoteInstance,
 }: AuthProvidersProps) {
   return (
-    <AuthContext.Provider value={{ authMode, cloudAuthUrl, selfHosted, authProviders }}>
+    <AuthContext.Provider value={{ authMode, cloudAuthUrl, selfHosted, authProviders, remoteInstance }}>
       {children}
     </AuthContext.Provider>
   );

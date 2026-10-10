@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import dynamic from "next/dynamic";
@@ -246,6 +247,7 @@ export default function ScaleEditor({ storageKey }: { storageKey: string }) {
           setFitRequest((current) => ({ revision: current.revision + 1 }));
         return next;
       } catch (error) {
+        observeCaughtError(error, "dashboard/components/scale/ScaleEditor");
         toast("error", error instanceof Error ? error.message : "Could not update this cluster.");
       }
     },
@@ -269,6 +271,7 @@ export default function ScaleEditor({ storageKey }: { storageKey: string }) {
         if (activeClusterId === resource.id && instanceCount(next) !== instanceCount(previous))
           setFitRequest((current) => ({ revision: current.revision + 1 }));
       } catch (error) {
+        observeCaughtError(error, "dashboard/components/scale/ScaleEditor");
         toast("error", error instanceof Error ? error.message : "Could not update this resource.");
       }
     },
@@ -284,6 +287,7 @@ export default function ScaleEditor({ storageKey }: { storageKey: string }) {
         if (next.nodes.length !== draft.nodes.length)
           setFitRequest((current) => ({ revision: current.revision + 1 }));
       } catch (error) {
+        observeCaughtError(error, "dashboard/components/scale/ScaleEditor");
         toast(
           "error",
           error instanceof Error ? error.message : "Could not update the application.",
@@ -330,6 +334,7 @@ export default function ScaleEditor({ storageKey }: { storageKey: string }) {
       try {
         dispatch({ type: "change", draft: connectResources(draft, source, target) });
       } catch (error) {
+        observeCaughtError(error, "dashboard/components/scale/ScaleEditor");
         toast(
           "error",
           error instanceof Error ? error.message : "Could not connect these resources.",
@@ -343,6 +348,7 @@ export default function ScaleEditor({ storageKey }: { storageKey: string }) {
       try {
         dispatch({ type: "change", draft: configureConnection(draft, id, options) });
       } catch (error) {
+        observeCaughtError(error, "dashboard/components/scale/ScaleEditor");
         toast(
           "error",
           error instanceof Error ? error.message : "Could not update this connection.",
@@ -448,6 +454,7 @@ export default function ScaleEditor({ storageKey }: { storageKey: string }) {
         setInspectorOpen(true);
         setFitRequest((current) => ({ revision: current.revision + 1 }));
       } catch (error) {
+        observeCaughtError(error, "dashboard/components/scale/ScaleEditor");
         toast("error", error instanceof Error ? error.message : "Could not add this resource.");
       }
     },

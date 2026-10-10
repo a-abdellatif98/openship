@@ -14,6 +14,7 @@
  * separate step so the user reviews before anything on the server changes.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos, restoreSubgraph, PkCollisionError, type Service } from "@repo/db";
 import { slugify, safeErrorMessage, mergeAdvanced, looksLikeSecretKey } from "@repo/core";
@@ -93,7 +94,8 @@ export async function parseRepoCompose(
     try {
       const res = await getFileContent(ctx, owner, repo, file, { branch });
       content = res?.content ?? null;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service");
       continue; // not found at this name → try the next
     }
     if (!content) continue;
@@ -115,6 +117,7 @@ export async function parseRepoCompose(
         ({ environmentMeta: _meta, ...service }) => service,
       );
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/migration/migrate.service");
       // RETHROWN, not swallowed. Returning [] showed the wizard's mapping step an empty
       // repo-service list with no reason why — issue #339's symptom, which the native path
       // fixed the same way. A blocking key (above) surfaces through here too: the file is
@@ -764,7 +767,7 @@ async function readAttachPlacements(
       let hostPort: number | undefined;
       let hostPorts: Record<string, number> | null | undefined;
       if (disc?.containerId) {
-        const info = await rt.getContainerInfo(disc.containerId).catch(() => null);
+        const info = await rt.getContainerInfo(disc.containerId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service"); return null; });
         if (info) {
           ({ status, ip, hostPort } = info);
           hostPorts = durableHostPorts(info.hostPortByContainerPort);
@@ -776,7 +779,7 @@ async function readAttachPlacements(
       // from an unchanged one, an adopted stack reported "up to date" forever. Best-effort:
       // a locally-built image has no RepoDigests, which is a legitimate undefined.
       const imageDigest = disc?.image
-        ? await rt.resolveImageDigest?.(disc.image).catch(() => undefined)
+        ? await rt.resolveImageDigest?.(disc.image).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service"); return undefined; })
         : undefined;
       return {
         service,
@@ -917,7 +920,9 @@ async function reattachRuntime(opts: {
     });
     return ok ? depId : null;
   } finally {
-    await rt.dispose().catch(() => {});
+    await rt.dispose().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service");
+    });
   }
 }
 
@@ -990,7 +995,9 @@ export async function attachLiveRuntime(opts: {
       extraMeta: { adoptLive: true },
     });
   } finally {
-    await rt.dispose().catch(() => {});
+    await rt.dispose().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service");
+    });
   }
 }
 
@@ -1032,7 +1039,9 @@ export async function joinReusedContainersToGroup(opts: {
       .filter((m) => m.containerId.length > 0);
     await rt.joinServiceGroupContainers(slug, members);
   } finally {
-    await rt.dispose().catch(() => {});
+    await rt.dispose().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service");
+    });
   }
 }
 
@@ -1055,7 +1064,7 @@ async function refreshRestoredRuntime(
   try {
     const states: ContainerStatus[] = [];
     for (const sd of sdeps) {
-      const info = await rt.getContainerInfo(sd.containerId!).catch(() => null);
+      const info = await rt.getContainerInfo(sd.containerId!).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service"); return null; });
       const status: ContainerStatus = info?.status ?? "missing";
       states.push(status);
       // A NARROW write, not the full-row upsert. `upsertServiceDeployment` assigns EVERY
@@ -1077,7 +1086,9 @@ async function refreshRestoredRuntime(
     }
     await repos.deployment.updateStatus(deploymentId, deriveDeploymentStatus(states));
   } finally {
-    await rt.dispose().catch(() => {});
+    await rt.dispose().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service");
+    });
   }
 }
 
@@ -1097,7 +1108,7 @@ async function restoreFromSnapshot(opts: {
   const { serverId, organizationId, projectId } = opts;
   const dump = await sshManager
     .withExecutor(serverId, (exec) => readProjectSnapshot(exec, projectId))
-    .catch(() => null);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service"); return null; });
   // Only restore a snapshot that IS this project's (guards a stale/mismatched file).
   if (!dump || dump.scope.kind !== "project" || dump.scope.projectId !== projectId) return null;
 
@@ -1115,9 +1126,11 @@ async function restoreFromSnapshot(opts: {
   const project = await repos.project.findById(projectId);
   const deploymentId = project ? (await findActiveDeployment(project))?.id ?? null : null;
   if (deploymentId) {
-    await refreshRestoredRuntime(serverId, organizationId, deploymentId).catch(() => {});
+    await refreshRestoredRuntime(serverId, organizationId, deploymentId).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service");
+    });
   }
-  const svcRows = await repos.service.listByProject(projectId).catch(() => []);
+  const svcRows = await repos.service.listByProject(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migrate.service"); return []; });
   return {
     projectId,
     slug: project?.slug ?? "",
@@ -1232,7 +1245,7 @@ export async function reimportOpenshipProject(opts: {
       createdServices,
     });
   } catch (err) {
-    console.warn(`[reimport] live re-attach failed (records-only): ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/modules/migration/migrate.service", `[reimport] live re-attach failed (records-only): ${safeErrorMessage(err)}`, err);
   }
 
   return {

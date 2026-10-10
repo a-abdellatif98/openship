@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { stat, readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { isIgnoredRepoPath, type RepoTreeEntry } from "../../lib/project-root-detector";
@@ -50,21 +51,24 @@ function createLocalReader(dirPath: string): ProjectReader {
           name: entry.name,
           type: entry.isDirectory() ? "dir" : "file",
         }));
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/local-source");
         return [];
       }
     },
     readText: async (path: string) => {
       try {
         return await readFile(absolutePathFor(path), "utf-8");
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/local-source");
         return undefined;
       }
     },
     readJson: async (path: string) => {
       try {
         return JSON.parse(await readFile(absolutePathFor(path), "utf-8"));
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/local-source");
         return undefined;
       }
     },

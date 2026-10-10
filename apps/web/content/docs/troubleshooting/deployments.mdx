@@ -68,6 +68,22 @@ If your project is a static site, its application start command is ignored. A fi
 is served by the edge; a managed Docker deployment serves the built files from its generated web container.
 </Callout>
 
+## A Dockerfile image reports `bun`, `npm`, or another command not found
+
+When the selected project root contains a `Dockerfile`, detection selects the Dockerfile build.
+Its build instructions and image `ENTRYPOINT`/`CMD` are the defaults, even if the repository also
+contains framework configuration, package scripts, or lockfiles. The default port comes from
+`EXPOSE`; a package script that the image does not run does not determine the port.
+
+Leave **Start command** empty to use the image's default command. An explicit start command in
+project settings or `openship.json` overrides `CMD` and must exist in the final runtime image.
+This also applies to Dockerfile apps inside monorepos. An empty override does not make an image
+static: the image still runs its own process.
+
+Existing saved commands and previous deployment snapshots are preserved. If an older import saved
+an inferred package-manager command, clear that override or set the intended command, then deploy
+again. Updating Openship does not recreate existing containers.
+
 ## The static build succeeds, but the output directory is missing
 
 **Output Directory** is relative to **Root Directory**, where the build command runs.

@@ -1,3 +1,4 @@
+import { observedAllSettled, reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { trackBackgroundWork } from "../../lib/background-work";
 /**
  * Visitor geography + daily rollups for a project — the data behind the country
@@ -130,7 +131,7 @@ function bounded<T>(work: Promise<T>, fallback: T): Promise<T> {
   const capped = new Promise<T>((resolve) => {
     timer = setTimeout(() => resolve(fallback), LIVE_READ_TIMEOUT_MS);
   });
-  return Promise.race([trackBackgroundWork(work).catch(() => fallback), capped]).finally(() => {
+  return Promise.race([trackBackgroundWork(work).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/analytics/geo.service"); return fallback; }), capped]).finally(() => {
     if (timer) clearTimeout(timer);
   });
 }
@@ -218,7 +219,9 @@ async function collectSelfHosted(
 
   // Share the scheduled scraper's throttle when a user views the daily rollup.
   for (const serverId of new Set(sources.map((s) => s.serverId))) {
-    void trackBackgroundWork(scrapeServerIfStale(serverId)).catch(() => {});
+    void trackBackgroundWork(scrapeServerIfStale(serverId)).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/analytics/geo.service");
+    });
   }
 
   const probes = new Map<string, Promise<{ geo: boolean; approximate: boolean }>>();
@@ -320,14 +323,14 @@ async function collectCloud(
   fromMs: number,
   toMs: number,
 ): Promise<ProjectGeoResult> {
-  const settled = await Promise.allSettled(
+  const settled = await observedAllSettled(
     sources.map((s) =>
       proxyCloudAnalytics(organizationId, {
         operation: "geo",
         domain: s.domain,
         params: { from: fromMs, to: toMs },
       }),
-    ),
+    ), "platform/engine/modules/analytics/geo.service",
   );
 
   const counts: Record<string, number> = {};

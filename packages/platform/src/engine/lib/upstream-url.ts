@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { RuntimeAdapter } from "@repo/adapters";
 
 /**
@@ -210,7 +211,8 @@ async function readLiveHostPort(
       return { known: true, running };
     }
     return { known: true, running, hostPort: info.hostPort };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/upstream-url");
     return { known: false };
   }
 }
@@ -264,7 +266,7 @@ export async function resolveLiveUpstreamUrl(args: {
     containerId,
     containerPort,
     hostPort,
-  }).catch(() => null);
+  }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/upstream-url"); return null; });
   if (url || requireLiveObservation) return url;
   return buildUpstreamUrl({
     strategy: usesHostLoopback ? "loopback-port" : "container-ip",

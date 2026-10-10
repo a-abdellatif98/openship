@@ -115,7 +115,7 @@ export async function removeManagedArtifact(
   await rm(target, { recursive: true, force: true });
   const stillThere = await access(target).then(
     () => true,
-    () => false,
+    () => { /* diagnostics-ignore: An access probe returning false after removal is the expected absence check. */ return false; },
   );
   if (stillThere) throw new Error(`Failed to remove ${target}: still present after rm.`);
 }

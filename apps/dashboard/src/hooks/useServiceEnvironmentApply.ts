@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useRef, useState } from "react";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/context/ToastContext";
@@ -32,7 +33,9 @@ export function useServiceEnvironmentApply(projectId: string, onApplied: () => v
       showToast(response.warning || copy.applied, response.warning ? "info" : "success", service.name);
       // The apply has already succeeded. A refresh failure must not relabel it
       // as a failed mutation or cause another container replacement.
-      await Promise.resolve().then(onApplied).catch(() => {});
+      await Promise.resolve().then(onApplied).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/hooks/useServiceEnvironmentApply");
+      });
     } catch (error) {
       if (!showCloudPricing(error)) {
         showToast(getApiErrorMessage(error, copy.failed), "error", service.name);

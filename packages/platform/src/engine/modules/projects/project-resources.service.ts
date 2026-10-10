@@ -7,6 +7,7 @@
  * managed servers; the purchased server allocation is independent of this setting.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { ValidationError } from "@repo/core";
 import type { ResourceConfig } from "@repo/adapters";
@@ -36,10 +37,10 @@ type ProjectRow = NonNullable<Awaited<ReturnType<typeof repos.project.findById>>
 async function resolveTargetCapacity(
   project: ProjectRow,
 ): Promise<{ isCloud: boolean; capacity: HostCapacity }> {
-  const target = await resolveSnapshotTarget(project).catch(() => ({
+  const target = await resolveSnapshotTarget(project).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-resources.service"); return ({
     deployTarget: undefined,
     serverId: undefined,
-  }));
+  }); });
   const isCloud = target.deployTarget === "cloud" || !!project.workspaceId;
 
   // Managed host allocation is verified by the deployment's plan gate. This
@@ -48,7 +49,7 @@ async function resolveTargetCapacity(
   if (project.clusterId) return { isCloud: false, capacity: { ...UNKNOWN_CAPACITY } };
 
   const capacity = await getHostCapacity(target.serverId, project.organizationId).catch(
-    () => ({ ...UNKNOWN_CAPACITY }),
+    (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-resources.service"); return ({ ...UNKNOWN_CAPACITY }); },
   );
   return { isCloud: false, capacity };
 }
@@ -115,6 +116,7 @@ export async function updateResources(
       update.buildResources = null;
     }
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/projects/project-resources.service");
     // decodeResources throws plain Errors for out-of-range/over-capacity input;
     // surface them as 400s rather than 500s.
     throw new ValidationError(err instanceof Error ? err.message : "Invalid resource values");

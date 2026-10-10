@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 /**
@@ -117,7 +118,8 @@ function MailServerCard({
       await navigator.clipboard.writeText(mailHost);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/overview-tab");
       /* noop */
     }
   };

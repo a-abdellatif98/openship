@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Value } from "@sinclair/typebox/value";
 import { AppError, safeErrorMessage } from "@repo/core";
 import { repos, type CloudWorkspace, type LinkedCloudServer } from "@repo/db";
@@ -62,6 +63,7 @@ export async function linkedServerSummary(row: CloudWorkspace): Promise<CloudWor
       throw new AppError("Cloud returned an invalid managed server", 502, "INVALID_CLOUD_RESPONSE");
     return await localizeCloudSummary(row, result.managed);
   } catch (error) {
+    observeCaughtError(error, "platform/engine/lib/cloud/server-link");
     // A disconnected account annotates this server, not every other server in
     // the list. Unknown subscription state never grants work or offers checkout.
     const [server, projects] = await Promise.all([

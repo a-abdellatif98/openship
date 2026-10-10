@@ -206,8 +206,8 @@
 			},
 			"environmentApply": {
 				"title": "Appliquer les modifications d’environnement",
-        "applying": "Application des modifications…",
-        "applied": "Modifications d’environnement appliquées",
+				"applying": "Application des modifications…",
+				"applied": "Modifications d’environnement appliquées",
 				"hint": "Appliquez les variables enregistrées à ce service sans recompilation. Le service redémarrera.",
 				"saveFirst": "Enregistrez vos modifications avant de les appliquer à ce service.",
 				"restartBlocked": "{name} a des modifications d’environnement enregistrées qu’un simple redémarrage ne peut pas appliquer. Vérifiez-les et appliquez-les dans l’onglet Environnement.",
@@ -377,6 +377,46 @@
 			},
 			"orBuildFromSource": "ou construire depuis les sources",
 			"imageHint": "Laissez vide pour construire à partir d'un Dockerfile ci-dessous."
+		},
+		"connection": {
+			"terminal": "Terminal",
+			"statusTitle": "État du service indisponible",
+			"statusHint": "Openship n’a pas pu confirmer l’état actuel. Votre service fonctionne peut-être encore.",
+			"checkingTitle": "Vérification du service",
+			"checkingHint": "En attente d’une réponse du serveur. Vous pouvez déjà essayer d’ouvrir le terminal.",
+			"startingTitle": "En attente du service",
+			"startingHint": "Le terminal sera disponible lorsque le service sera en cours d’exécution.",
+			"stoppedTitle": "Aucun service en cours d’exécution",
+			"openTerminal": "Ouvrir le terminal",
+			"serviceSettings": "Paramètres du service",
+			"connectingTitle": "Ouverture du terminal",
+			"connectingHint": "Établissement d’une connexion sécurisée à {name}.",
+			"reconnectingTitle": "Reconnexion",
+			"reconnectingHint": "Tentative de restauration de votre session. La sortie précédente est conservée ici.",
+			"attempt": "Tentative {attempt}",
+			"connected": "Connecté",
+			"cancel": "Annuler",
+			"reconnect": "Reconnecter",
+			"closedTitle": "Session terminée",
+			"closedHint": "Ouvrez une nouvelle session pour continuer.",
+			"exitCode": "Code de sortie {code}",
+			"exitSignal": "Signal reçu : {signal}",
+			"pausedTitle": "Connexion en pause",
+			"pausedHint": "Reconnectez-vous lorsque vous souhaitez ouvrir un shell.",
+			"errorTitle": "Terminal indisponible",
+			"errors": {
+				"auth": "Votre accès n’a pas pu être vérifié. Reconnectez-vous à votre compte ou vérifiez vos autorisations.",
+				"connect": "Openship n’a pas pu atteindre le shell du service. Réessayez lorsque le serveur sera de nouveau accessible.",
+				"notFound": "Ce service est indisponible ou vous n’y avez pas accès.",
+				"notDeployed": "Aucun conteneur en cours d’exécution n’est disponible. Vérifiez l’état du service et réessayez.",
+				"notSupported": "L’environnement d’exécution de ce service ne prend pas en charge de terminal interactif.",
+				"maxSessions": "Fermez une session de terminal inutilisée, puis reconnectez-vous.",
+				"idleTimeout": "Votre session s’est terminée pour cause d’inactivité. Reconnectez-vous pour continuer.",
+				"sessionCap": "Cette session a atteint sa durée maximale. Reconnectez-vous pour continuer.",
+				"server": "Impossible d’ouvrir le terminal. Veuillez réessayer.",
+				"maxReconnects": "La connexion n’a pas pu être rétablie. Vous pouvez réessayer de vous connecter.",
+				"transport": "La connexion a été interrompue. Votre service fonctionne peut-être encore."
+			}
 		}
 	}
 }

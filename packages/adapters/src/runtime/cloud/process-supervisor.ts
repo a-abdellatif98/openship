@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { posix } from "node:path";
 import type { WorkloadInfo } from "oblien";
 import { AppError } from "@repo/core";
@@ -99,9 +100,11 @@ export class CloudProcessSupervisor implements ProcessSupervisor {
       try {
         await workloads.get(saved.id);
       } catch (error) {
+        observeCaughtError(error, "adapters/runtime/cloud/process-supervisor");
         return isMissing(error);
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/process-supervisor");
       // A failed initial read is not proof a just-created process was removed.
     }
     return false;

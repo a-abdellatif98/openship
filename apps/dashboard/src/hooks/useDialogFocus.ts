@@ -7,8 +7,13 @@ export function useDialogFocus(onClose: () => void) {
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
-    dialog.current?.focus();
+    // Focus existing content immediately. Shared Modal can mount its portal
+    // after this effect, so defer only when its content is not mounted yet.
+    let frame: number | undefined;
+    if (dialog.current) dialog.current.focus();
+    else frame = requestAnimationFrame(() => dialog.current?.focus());
     return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
       if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, []);

@@ -129,7 +129,15 @@
     "acceptedTitle": "你已加入",
     "acceptedRedirect": "正在跳转到仪表板……",
     "errorTitle": "无法接受此邀请",
-    "backToDashboard": "返回仪表板"
+    "backToDashboard": "返回仪表板",
+    "invitedBy": "{name} 邀请了你",
+    "roleLabel": "角色：",
+    "desktopOpen": "在 Desktop 中打开",
+    "desktopCopy": "复制邀请链接",
+    "desktopCopied": "链接已复制",
+    "desktopFallback": "Desktop 未打开？请将此邀请链接粘贴到「设置 → 实例 → 连接到实例」。",
+    "desktopDescription": "使用 Desktop，或在当前浏览器中继续。",
+    "switchAccount": "使用受邀账号登录"
   },
   "cloudAuthorize": {
     "missingRedirect": "缺少 redirect 参数。",

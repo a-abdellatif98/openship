@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { assertCloudProxyScope } from "../../lib/cloud/scope";
 import { setTimeout as delay } from "node:timers/promises";
 import { AppError, ValidationError, type DeploymentEvent } from "@repo/contracts";
@@ -42,7 +43,9 @@ function checkedRange(input: { from?: string; to?: string }, days = 1) {
   if (to - from > 366 * DAY_MS) throw new ValidationError("Analytics ranges cannot exceed 366 days");
   return { from: new Date(from).toISOString(), to: new Date(to).toISOString() };
 }
-function refresh(serverId: string) { void trackBackgroundWork(scrapeServerIfStale(serverId)).catch(() => {}); }
+function refresh(serverId: string) { void trackBackgroundWork(scrapeServerIfStale(serverId)).catch((diagnosticFailure) => {
+  observeCaughtError(diagnosticFailure, "platform/engine/modules/analytics/analytics.operations");
+}); }
 
 export const analyticsDependencies: AnalyticsDependencies = {
   projects: {
@@ -67,7 +70,9 @@ export const analyticsDependencies: AnalyticsDependencies = {
       const { enabled } = input;
       await repos.project.update(id, { collectPaths: enabled });
       const target = await resolveProjectPushTarget(id);
-      if (target) await pushProjectAnalyticsConfig(id, target.serverId).catch(() => {});
+      if (target) await pushProjectAnalyticsConfig(id, target.serverId).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/analytics/analytics.operations");
+      });
       audit.recordAsync(operationAuditContext(ctx), { eventType: "project:write", resourceType: "project", resourceId: id, after: { operation: "setPathsCollection", enabled } });
       return { enabled };
     },
@@ -111,7 +116,8 @@ export const analyticsDependencies: AnalyticsDependencies = {
           const value = await sample();
           if (closedSignal.aborted) break;
           yield { event: "usage", data: JSON.stringify(value) };
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/analytics/analytics.operations");
           if (closedSignal.aborted) break;
           yield { event: "error", data: JSON.stringify({ error: "Failed to fetch usage" }) };
         }

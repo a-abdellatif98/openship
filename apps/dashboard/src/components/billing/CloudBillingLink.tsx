@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { setActiveOrganizationId } from "@/lib/api/client";
@@ -55,7 +56,8 @@ export function CloudBillingLink({
         setActiveOrganizationId(organizationId);
         window.location.assign(newServer ? newServerBillingHref(organizationId) : scopedBillingHref(`/billing/${tab}`, { workspaceId, organizationId }));
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/billing/CloudBillingLink");
         if (!disposed) setFailed(true);
       });
     return () => {

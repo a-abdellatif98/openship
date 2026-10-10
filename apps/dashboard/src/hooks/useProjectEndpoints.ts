@@ -18,6 +18,7 @@
  * MonitoringTab fetching the same endpoint share one network request.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { beginFetchState } from "./begin-fetch-state";
 import { api, ApiError, endpoints, projectsApi } from "@/lib/api";
@@ -356,6 +357,7 @@ function useEndpoint<T>(
         setState({ data, isLoading: false, error: null });
       })
       .catch((err: unknown) => {
+        observeCaughtError(err, "dashboard/hooks/useProjectEndpoints");
         // Errors are NOT cached — drop the entry so a future mount /
         // refresh re-fires the request. Otherwise a transient 5xx
         // permanently bricks the page until full reload.
@@ -401,6 +403,7 @@ function useEndpoint<T>(
           setState({ data, isLoading: false, error: null });
         })
         .catch((error: unknown) => {
+          observeCaughtError(error, "dashboard/hooks/useProjectEndpoints");
           if (cancelled || idRef.current !== key ||
             (revKey && getRevision(revKey) !== startedRevision)) return;
           setState((prev) => ({

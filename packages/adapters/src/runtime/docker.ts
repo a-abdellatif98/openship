@@ -29,6 +29,7 @@
 // this file only through import resolution and never scans our src for stray
 // `.d.ts` files (#448).
 /// <reference path="./tar-fs.d.ts" />
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import Dockerode from "dockerode";
 import * as tarFs from "tar-fs";
 import { createHash, randomUUID } from "node:crypto";
@@ -273,7 +274,7 @@ async function boundedBuildContainerCleanup(
 ): Promise<LegacyBuildContainerTermination | null> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   // Handle a late rejection even if the deadline wins the race.
-  const guarded = cleanup.catch(() => null);
+  const guarded = cleanup.catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return null; });
   const deadline = new Promise<null>((resolve) => {
     timer = setTimeout(() => resolve(null), BUILD_CONTAINER_CLEANUP_TIMEOUT_MS);
     timer.unref?.();
@@ -1189,7 +1190,7 @@ export class DockerRuntime implements RuntimeAdapter {
       // Collapsed to a boolean for liveness callers — but LOG the detailed
       // reason so it isn't lost. Paths that must show the user WHY it failed
       // should call assertReachable() and surface the thrown message instead.
-      console.warn(`[docker] daemon unreachable: ${safeErrorMessage(err)}`);
+      errorDiagnostics.warn("adapters/runtime/docker", `[docker] daemon unreachable: ${safeErrorMessage(err)}`, err);
       return false;
     }
   }
@@ -1268,7 +1269,8 @@ export class DockerRuntime implements RuntimeAdapter {
       let entries;
       try {
         entries = await readdir(current, { withFileTypes: true });
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         continue;
       }
       for (const entry of entries) {
@@ -1279,7 +1281,8 @@ export class DockerRuntime implements RuntimeAdapter {
           try {
             const s = await stat(full);
             total += s.size;
-          } catch {
+          } catch (diagnosticFailure) {
+            observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
             /* ignore */
           }
         }
@@ -1551,7 +1554,7 @@ export class DockerRuntime implements RuntimeAdapter {
       // for an unknown subcommand and an SshExecutor rejects on that.
       .exec("docker buildx version >/dev/null 2>&1 && echo OPENSHIP_BUILDKIT_OK || true")
       .then((out) => out.split(/\r?\n/).some((line) => line.trim() === "OPENSHIP_BUILDKIT_OK"))
-      .catch(() => false));
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return false; }));
 
     const available = await probe;
     // Only a POSITIVE answer is memoized. A transient SSH failure that answered
@@ -1737,6 +1740,7 @@ export class DockerRuntime implements RuntimeAdapter {
       );
       code = result.code;
     } catch (error) {
+      observeCaughtError(error, "adapters/runtime/docker");
       execError = error;
     } finally {
       idleMonitor.stop();
@@ -1746,7 +1750,7 @@ export class DockerRuntime implements RuntimeAdapter {
         // Cancellation can terminate the remote shell before its EXIT trap.
         // Retry the same project's worker cleanup without the aborted signal.
         await executor.exec(`${removeBuilder} >/dev/null 2>&1 || ! docker buildx inspect ${sq(builderName!)} >/dev/null 2>&1`)
-          .catch(error => log.log(`Cloud build worker cleanup is pending: ${safeErrorMessage(error)}\n`, "warn"));
+          .catch(error => { observeCaughtError(error, "adapters/runtime/docker"); return log.log(`Cloud build worker cleanup is pending: ${safeErrorMessage(error)}\n`, "warn"); });
       }
     }
 
@@ -1822,16 +1826,19 @@ export class DockerRuntime implements RuntimeAdapter {
             .exec(`test -f ${sq(`${remoteContextDir}/.gitmodules`)}`)
             .then(
               () => true,
-              () => false,
+              () => { /* diagnostics-ignore: A nonzero file/commit presence probe selects the existing fetch fallback; actual fetch failures are reported. */ return false; },
             );
           if (hasSubmodules) {
             throw new Error("Repository contains submodules; tarball download is insufficient");
           }
           // A tarball has no .git, but strip defensively in case a repo tracks one.
-          await executor.exec(`rm -rf ${sq(`${remoteContextDir}/.git`)}`).catch(() => {});
+          await executor.exec(`rm -rf ${sq(`${remoteContextDir}/.git`)}`).catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
+          });
           signal?.throwIfAborted();
           return;
         } catch (err) {
+          observeCaughtError(err, "adapters/runtime/docker");
           // A cancelled download must not start a fresh git clone.
           signal?.throwIfAborted();
           log.log(
@@ -1905,7 +1912,7 @@ export class DockerRuntime implements RuntimeAdapter {
           .exec(`cd ${dir} && git ${CRED} cat-file -e ${sq(`${config.commitSha}^{commit}`)}`)
           .then(
             () => true,
-            () => false,
+            () => { /* diagnostics-ignore: A nonzero file/commit presence probe selects the existing fetch fallback; actual fetch failures are reported. */ return false; },
           );
         if (!commitPresent) {
           log.log(
@@ -1979,11 +1986,11 @@ export class DockerRuntime implements RuntimeAdapter {
       const real = await executor
         .exec(`cd ${sq(remoteBuildDir)} 2>/dev/null && pwd -P || true`)
         .then((out) => out.trim())
-        .catch(() => "");
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return ""; });
       const root = await executor
         .exec(`cd ${sq(remoteContextDir)} && pwd -P`)
         .then((out) => out.trim())
-        .catch(() => "");
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return ""; });
       if (!real) {
         throw new Error(
           `Build context "${contextSubdir}" is not a directory in the cloned source. Check the service's build path.`,
@@ -2001,7 +2008,7 @@ export class DockerRuntime implements RuntimeAdapter {
     for (const candidate of candidates) {
       const out = await executor
         .exec(`test -f ${sq(`${remoteBuildDir}/${candidate}`)} && echo yes || true`)
-        .catch(() => "");
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return ""; });
       if (out.trim() === "yes") {
         // Same non-silent fallback the local resolver makes: the context's plain
         // `Dockerfile` is the LAST candidate, so landing on it after an explicit
@@ -2071,7 +2078,8 @@ export class DockerRuntime implements RuntimeAdapter {
     } finally {
       // Always clean up the remote context - even on failure. Don't await - if
       // cleanup fails we still want the build result.
-      this.connectionOptions?.executor?.exec(`rm -rf ${sq(remoteContextDir)}`).catch(() => {
+      this.connectionOptions?.executor?.exec(`rm -rf ${sq(remoteContextDir)}`).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         /* best effort */
       });
       await buildContext.cleanup();
@@ -2243,6 +2251,7 @@ export class DockerRuntime implements RuntimeAdapter {
       });
       log.log("Docker daemon finished streaming build output. Finalizing image...\n");
     } catch (err) {
+      observeCaughtError(err, "adapters/runtime/docker");
       // A context-pack failure aborts the request, so the rejection here is the
       // abort, not the real cause — prefer the captured pack error.
       const contextErr = takeError();
@@ -2438,6 +2447,7 @@ export class DockerRuntime implements RuntimeAdapter {
         await this.docker.getImage(tag).inspect();
       }
     } catch (cause) {
+      observeCaughtError(cause, "adapters/runtime/docker");
       throw new Error(`Docker build finished but the image ${tag} was not created`, { cause });
     }
   }
@@ -2466,6 +2476,7 @@ export class DockerRuntime implements RuntimeAdapter {
       try {
         await this.ensureDockerFeature(log);
       } catch (featureErr) {
+        observeCaughtError(featureErr, "adapters/runtime/docker");
         throw new Error(this.formatDockerConnectivityError(featureErr));
       }
 
@@ -2492,7 +2503,8 @@ export class DockerRuntime implements RuntimeAdapter {
             signal: abort.signal,
           });
         } finally {
-          await sshExecutor.exec(`rm -rf ${sq(remoteContextDir)}`, { timeout: 10_000 }).catch(() => {
+          await sshExecutor.exec(`rm -rf ${sq(remoteContextDir)}`, { timeout: 10_000 }).catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
             /* best effort */
           });
         }
@@ -2526,7 +2538,8 @@ export class DockerRuntime implements RuntimeAdapter {
         const sizeBytes = await this.estimateContextSize(buildContext.contextDir);
         const sizeMB = (sizeBytes / 1024 / 1024).toFixed(1);
         this.emitDockerStep(log, "clone", "completed", `Docker build context ready (${sizeMB} MB)`);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         this.emitDockerStep(log, "clone", "completed", "Docker build context ready");
       }
 
@@ -2591,6 +2604,7 @@ export class DockerRuntime implements RuntimeAdapter {
       const durationMs = Date.now() - startTime;
       return { sessionId: config.sessionId, status: "deploying", imageRef: tag, durationMs };
     } catch (err) {
+      observeCaughtError(err, "adapters/runtime/docker");
       if (abort.signal.aborted || err instanceof BuildCancelledError) return cancelled();
       const msg = safeErrorMessage(err);
       log.step("build", "failed", `Docker build failed: ${msg}`);
@@ -2638,6 +2652,7 @@ export class DockerRuntime implements RuntimeAdapter {
       try {
         await this.ensureDockerFeature(log);
       } catch (featureErr) {
+        observeCaughtError(featureErr, "adapters/runtime/docker");
         throw new Error(this.formatDockerConnectivityError(featureErr));
       }
       await this.pullImage(requestedRef, { force: config.forcePull });
@@ -2647,7 +2662,7 @@ export class DockerRuntime implements RuntimeAdapter {
       if (abort.signal.aborted) return cancelled();
 
       const deployRef =
-        (await this.resolveImageDigest(requestedRef).catch(() => undefined)) ?? requestedRef;
+        (await this.resolveImageDigest(requestedRef).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return undefined; })) ?? requestedRef;
       log.log(
         deployRef === requestedRef
           ? `Image ${requestedRef} is ready.\n`
@@ -2662,6 +2677,7 @@ export class DockerRuntime implements RuntimeAdapter {
         artifactOwned: false,
       };
     } catch (err) {
+      observeCaughtError(err, "adapters/runtime/docker");
       if (abort.signal.aborted) return cancelled();
       const message = safeErrorMessage(err);
       log.step("build", "failed", `Image pull failed: ${message}`);
@@ -2720,7 +2736,8 @@ export class DockerRuntime implements RuntimeAdapter {
     } finally {
       // Files are on the host now; the builder image is dead weight. Best-effort —
       // a lingering image is harmless, a failed deploy over it is not.
-      await this.removeImage(tag).catch(() => {
+      await this.removeImage(tag).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         /* best effort */
       });
     }
@@ -2783,6 +2800,7 @@ export class DockerRuntime implements RuntimeAdapter {
         durationMs: elapsed(),
       };
     } catch (err) {
+      observeCaughtError(err, "adapters/runtime/docker");
       // cancelBuild force-removes containers carrying this build's label, which is
       // how the extract container dies mid-`cp`. That throw is the cancel, not a
       // static-build failure.
@@ -2868,12 +2886,13 @@ export class DockerRuntime implements RuntimeAdapter {
       // Unquoted globs on purpose (the DIRECTORY is quoted): `Dockerfile.*` has to
       // expand on the remote shell. A glob that matches nothing expands to itself,
       // which `rm -rf` treats as an absent path — exit 0, nothing removed.
-      await sshExecutor.exec(`rm -rf ${globs}`).catch(() => {
+      await sshExecutor.exec(`rm -rf ${globs}`).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         /* best effort */
       });
       log.log(`Excluded build files from the published output (${hostOutDir}).\n`);
       const listing = (
-        await sshExecutor.exec(`ls -A ${sq(hostOutDir)} | head -1`).catch(() => "x")
+        await sshExecutor.exec(`ls -A ${sq(hostOutDir)} | head -1`).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return "x"; })
       ).trim();
       this.assertDocRootServable(!listing, hostOutDir);
       return;
@@ -2881,13 +2900,15 @@ export class DockerRuntime implements RuntimeAdapter {
 
     const { readdir, rm } = await import("node:fs/promises");
     const { join } = await import("node:path");
-    const entries = await readdir(hostOutDir).catch(() => null);
+    const entries = await readdir(hostOutDir).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return null; });
     // Unreadable is INCONCLUSIVE, never "empty" — a probe that cannot look must not
     // fail a deploy (same rule as isEmptyDir).
     if (entries === null) return;
     const doomed = entries.filter((name) => isExcludedDocRootEntry(name));
     for (const name of doomed) {
-      await rm(join(hostOutDir, name), { recursive: true, force: true }).catch(() => {});
+      await rm(join(hostOutDir, name), { recursive: true, force: true }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
+      });
     }
     if (doomed.length > 0) {
       log.log(`Excluded build files from the published output: ${doomed.join(", ")}\n`);
@@ -2933,11 +2954,12 @@ export class DockerRuntime implements RuntimeAdapter {
       await sshExecutor.exec(`docker cp ${sq(`${cid}:${docRoot}/.`)} ${sq(hostOutDir)}`);
       // `docker cp` of an empty dir exits 0, so the contract is checked here.
       const listing = (
-        await sshExecutor.exec(`ls -A ${sq(hostOutDir)} | head -1`).catch(() => "")
+        await sshExecutor.exec(`ls -A ${sq(hostOutDir)} | head -1`).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return ""; })
       ).trim();
       this.assertDocRootFilled(!listing, docRoot);
     } finally {
-      await sshExecutor.exec(`docker rm ${sq(cid)}`).catch(() => {
+      await sshExecutor.exec(`docker rm ${sq(cid)}`).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         /* best effort */
       });
     }
@@ -3010,7 +3032,8 @@ export class DockerRuntime implements RuntimeAdapter {
       // unshared filesystem.
       try {
         await container.start();
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         return false;
       }
       const status = await container.wait();
@@ -3024,24 +3047,26 @@ export class DockerRuntime implements RuntimeAdapter {
           // Strip the 8-byte stream framing so the operator reads text, not control
           // bytes (these logs are multiplexed — Tty is false).
           .then((s) => s.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, " ").trim())
-          .catch(() => "");
+          .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return ""; });
         throw new Error(
           `static extract failed copying ${docRoot} out of the build container ` +
             `(exit ${status.StatusCode})${logs ? `: ${logs.slice(-500)}` : ""}`,
         );
       }
-      const entries = (await readdir(hostOutDir).catch(() => [] as string[])).filter(
+      const entries = (await readdir(hostOutDir).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return [] as string[]; })).filter(
         (e) => e !== probe,
       );
       this.assertDocRootFilled(entries.length === 0, docRoot);
       return true;
     } finally {
-      await container.remove({ force: true }).catch(() => {
+      await container.remove({ force: true }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         /* best effort */
       });
       // The container removes the sentinel on success; clear it on every other path
       // so it can't end up served as part of the site.
-      await rm(join(hostOutDir, probe), { force: true }).catch(() => {
+      await rm(join(hostOutDir, probe), { force: true }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         /* best effort */
       });
     }
@@ -3068,7 +3093,7 @@ export class DockerRuntime implements RuntimeAdapter {
       extract.stderr.on("data", (d) => (errBuf += d.toString()));
       const exited = new Promise<number>((resolve) => {
         extract.on("close", (code) => resolve(code ?? 0));
-        extract.on("error", () => resolve(-1));
+        extract.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/runtime/docker"); return resolve(-1); });
       });
 
       // `pipeline`, NOT `.pipe()`. pipe propagates neither a mid-transfer source
@@ -3078,6 +3103,7 @@ export class DockerRuntime implements RuntimeAdapter {
       // flush, destroys both ends on failure, and rethrows the SOURCE error.
       let streamError: unknown;
       await pipeline(tarStream, extract.stdin).catch((err) => {
+        observeCaughtError(err, "adapters/runtime/docker");
         streamError = err;
       });
       const code = await exited;
@@ -3099,10 +3125,11 @@ export class DockerRuntime implements RuntimeAdapter {
 
       // An archive truncated on a block boundary makes tar exit 0 having written
       // NOTHING (contract above).
-      const entries = await readdir(hostOutDir).catch(() => [] as string[]);
+      const entries = await readdir(hostOutDir).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return [] as string[]; });
       this.assertDocRootFilled(entries.length === 0, docRoot);
     } finally {
-      await container.remove({ force: true }).catch(() => {
+      await container.remove({ force: true }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         /* best effort */
       });
     }
@@ -3134,6 +3161,7 @@ export class DockerRuntime implements RuntimeAdapter {
     try {
       await this.ensureDockerFeature(prepareLogger);
     } catch (featureErr) {
+      observeCaughtError(featureErr, "adapters/runtime/docker");
       throw new Error(this.formatDockerConnectivityError(featureErr));
     }
 
@@ -3215,7 +3243,8 @@ export class DockerRuntime implements RuntimeAdapter {
           perServiceBuildContexts: specs.some((spec) => {
             try {
               return Boolean(dockerBuildContextDirectory(spec.config));
-            } catch {
+            } catch (diagnosticFailure) {
+              observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
               return true;
             }
           }),
@@ -3271,6 +3300,7 @@ export class DockerRuntime implements RuntimeAdapter {
               error: null as string | null,
             };
           } catch (err) {
+            observeCaughtError(err, "adapters/runtime/docker");
             return {
               spec,
               dockerfileName: null as string | null,
@@ -3296,7 +3326,8 @@ export class DockerRuntime implements RuntimeAdapter {
             "completed",
             `Shared build context ready (${(sizeBytes / 1024 / 1024).toFixed(1)} MB)`,
           );
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
           prepareLogger.step("clone", "completed", "Shared build context ready");
         }
         // Don't push megabytes at a host whose build the user already cancelled.
@@ -3412,6 +3443,7 @@ export class DockerRuntime implements RuntimeAdapter {
                 }),
               });
             } catch (err) {
+              observeCaughtError(err, "adapters/runtime/docker");
               const contextErr = takeError();
               throw contextErr
                 ? new Error(
@@ -3473,6 +3505,7 @@ export class DockerRuntime implements RuntimeAdapter {
           spec.onResult?.(result);
           results.push({ serviceName: spec.serviceName, result });
         } catch (err) {
+          observeCaughtError(err, "adapters/runtime/docker");
           // A cancelled build surfaces as an aborted stream or BuildCancelledError;
           // either way it is not a build failure.
           if (isCancelled(spec.config.sessionId) || err instanceof BuildCancelledError) {
@@ -3504,7 +3537,8 @@ export class DockerRuntime implements RuntimeAdapter {
         releaseDockerBuild(sessionId, abort);
       }
       if (isSsh) {
-        await this.connectionOptions?.executor?.exec(`rm -rf ${sq(remoteContextDir)}`, { timeout: 10_000 }).catch(() => {
+        await this.connectionOptions?.executor?.exec(`rm -rf ${sq(remoteContextDir)}`, { timeout: 10_000 }).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
           /* best effort */
         });
       }
@@ -3551,7 +3585,8 @@ export class DockerRuntime implements RuntimeAdapter {
       if (c.Labels?.[OPENSHIP_LABEL.deployment]) continue;
       try {
         await this.docker.getContainer(c.Id).remove({ force: true });
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         /* already removed */
       }
     }
@@ -3680,6 +3715,7 @@ export class DockerRuntime implements RuntimeAdapter {
         // EndpointsConfig + NetworkMode by the id, so mirror it here.
         networkId = await this.ensureNetwork(aliasSlug);
       } catch (err) {
+        observeCaughtError(err, "adapters/runtime/docker");
         log({
           timestamp: new Date().toISOString(),
           message: `Warning: internal network setup failed (app still served via edge): ${
@@ -3798,6 +3834,7 @@ export class DockerRuntime implements RuntimeAdapter {
         await withTimeout(target.remove({ force: true, v: true, abortSignal: AbortSignal.timeout(5_000) }),
           5_000, "Release container cleanup timed out");
       } catch (error) {
+        observeCaughtError(error, "adapters/runtime/docker");
         if (!isDockerNotFoundError(error)) onLog({
           timestamp: new Date().toISOString(), level: "warn",
           message: `Could not confirm cleanup of release container ${name}: ${safeErrorMessage(error)}\n`,
@@ -3871,7 +3908,8 @@ export class DockerRuntime implements RuntimeAdapter {
           const output = new Writable({
             write(chunk: Buffer, _encoding, callback) {
               try { emit(decoder.write(chunk), chunk); callback(); }
-              catch (error) { callback(error as Error); }
+              catch (error) {
+                observeCaughtError(error, "adapters/runtime/docker"); callback(error as Error); }
             },
             final(callback) { emit(decoder.end()); callback(); },
           });
@@ -4062,7 +4100,8 @@ export class DockerRuntime implements RuntimeAdapter {
       await this.docker.pruneImages({
         filters: { dangling: ["true"], label: [`openship.project=${projectId}`] },
       });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
       /* best-effort — a prune failure must never fail a build/deploy */
     }
   }
@@ -4178,7 +4217,8 @@ export class DockerRuntime implements RuntimeAdapter {
     if (!deployment.containerId) return; // already archived (no container) or never deployed
     try {
       await this.stop(deployment.containerId);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
       // already stopped — ignore
     }
   }
@@ -4200,10 +4240,10 @@ export class DockerRuntime implements RuntimeAdapter {
     // not strand the image too.
     const failures: unknown[] = [];
     if (deployment.containerId) {
-      await this.destroy(deployment.containerId).catch((err: unknown) => failures.push(err));
+      await this.destroy(deployment.containerId).catch((err: unknown) => { observeCaughtError(err, "adapters/runtime/docker"); return failures.push(err); });
     }
     if (deployment.imageRef && ownsBuiltImage(deployment.imageRef)) {
-      await this.removeImage(deployment.imageRef).catch((err: unknown) => failures.push(err));
+      await this.removeImage(deployment.imageRef).catch((err: unknown) => { observeCaughtError(err, "adapters/runtime/docker"); return failures.push(err); });
     }
     if (failures.length === 1) throw failures[0];
     if (failures.length > 1) {
@@ -4364,7 +4404,8 @@ export class DockerRuntime implements RuntimeAdapter {
     try {
       const data = await this.docker.getImage(ref).inspect();
       return data.Config?.Cmd ?? [];
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
       return [];
     }
   }
@@ -4385,7 +4426,8 @@ export class DockerRuntime implements RuntimeAdapter {
       try {
         await this.docker.getImage(ref).inspect();
         return; // already present
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         /* missing → pull below */
       }
     }
@@ -4414,6 +4456,7 @@ export class DockerRuntime implements RuntimeAdapter {
         this.docker.modem.followProgress(stream, (err) => (err ? reject(err) : resolve()));
       });
     } catch (err) {
+      observeCaughtError(err, "adapters/runtime/docker");
       // Name the registry and KEEP the daemon's reason. The credential we sent is
       // never echoed back in a pull error, while the reason is the only thing that
       // separates "manifest unknown" from "unauthorized" from "no space left on
@@ -4435,13 +4478,14 @@ export class DockerRuntime implements RuntimeAdapter {
     if (executor) {
       const out = await executor
         .exec(`docker image inspect ${sq(ref)} >/dev/null 2>&1 && echo yes || true`)
-        .catch(() => "");
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return ""; });
       return out.trim() === "yes";
     }
     try {
       await this.docker.getImage(ref).inspect();
       return true;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
       return false;
     }
   }
@@ -4563,7 +4607,9 @@ export class DockerRuntime implements RuntimeAdapter {
         const cleanup = () => executor.exec(`rm -rf ${sq(dir)}`, { timeout: 10_000 });
         await (executor.runWithAbortSignal
           ? executor.runWithAbortSignal(AbortSignal.timeout(10_000), cleanup)
-          : cleanup()).catch(() => {});
+          : cleanup()).catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
+          });
       }
     }
   }
@@ -4780,6 +4826,7 @@ export class DockerRuntime implements RuntimeAdapter {
         abortSignal: opening.signal,
       } as Dockerode.GetEventsOptions)) as unknown as NodeJS.ReadableStream;
     } catch (err) {
+      observeCaughtError(err, "adapters/runtime/docker");
       // The abort surfaces as a generic AbortError; say what actually happened.
       throw openTimedOut
         ? new Error(
@@ -4814,7 +4861,7 @@ export class DockerRuntime implements RuntimeAdapter {
         if (event) handlers.onEvent(event);
       }
     });
-    stream.on("error", (err: Error) => finish(err));
+    stream.on("error", (err: Error) => { observeCaughtError(err, "adapters/runtime/docker"); return finish(err); });
     stream.on("close", () => finish(null));
     stream.on("end", () => finish(null));
 
@@ -4982,7 +5029,7 @@ export class DockerRuntime implements RuntimeAdapter {
     // are safe to invoke as `cmd -c env-prefix exec target-shell` so
     // the chosen shell ends up as PID 1 of the exec (clean exit
     // semantics — closing stdin from the WS terminates the shell).
-    const inspect = await container.inspect().catch(() => null);
+    const inspect = await container.inspect().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return null; });
     if (!inspect?.State.Running) {
       throw new Error(
         `Container ${containerId} is not running (status: ${inspect?.State.Status ?? "unknown"})`,
@@ -5018,7 +5065,8 @@ export class DockerRuntime implements RuntimeAdapter {
     // data flows.
     try {
       await exec.resize({ h: rows, w: cols });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
       // ignore — the shell will still work at its default size
     }
 
@@ -5032,7 +5080,7 @@ export class DockerRuntime implements RuntimeAdapter {
       stdout.end();
       stderr.end();
     });
-    duplex.on("error", () => {
+    duplex.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/runtime/docker");
       stdout.end();
       stderr.end();
     });
@@ -5044,7 +5092,8 @@ export class DockerRuntime implements RuntimeAdapter {
       final(cb) {
         try {
           duplex.end();
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
           // already ended
         }
         cb();
@@ -5059,7 +5108,8 @@ export class DockerRuntime implements RuntimeAdapter {
       for (const cb of closeListeners) {
         try {
           cb(code, signal);
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
           /* listener bug shouldn't kill cleanup */
         }
       }
@@ -5072,7 +5122,7 @@ export class DockerRuntime implements RuntimeAdapter {
       exec
         .inspect()
         .then((info) => fireClose(info.ExitCode ?? null))
-        .catch(() => fireClose(null));
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return fireClose(null); });
     });
 
     return {
@@ -5086,17 +5136,19 @@ export class DockerRuntime implements RuntimeAdapter {
         // bridge calls this on every resize event, swallowing the
         // promise prevents an unhandled rejection if the exec has
         // already exited.
-        void exec.resize({ h: sr, w: sc }).catch(() => undefined);
+        void exec.resize({ h: sr, w: sc }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return undefined; });
       },
       close: (_signal?: string) => {
         try {
           duplex.end();
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
           /* already ended */
         }
         try {
           duplex.destroy();
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
           /* already destroyed */
         }
       },
@@ -5118,7 +5170,7 @@ export class DockerRuntime implements RuntimeAdapter {
     opts?: { timeout?: number },
   ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
     const container = this.docker.getContainer(containerId);
-    const inspect = await container.inspect().catch(() => null);
+    const inspect = await container.inspect().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return null; });
     if (!inspect?.State.Running) {
       throw new Error(
         `Container ${containerId} is not running (status: ${inspect?.State.Status ?? "unknown"})`,
@@ -5168,7 +5220,7 @@ export class DockerRuntime implements RuntimeAdapter {
       stream.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
       stream.on("end", () => settle());
       stream.on("close", () => settle());
-      stream.on("error", (err: Error) => settle(err));
+      stream.on("error", (err: Error) => { observeCaughtError(err, "adapters/runtime/docker"); return settle(err); });
     });
 
     let stdout = "";
@@ -5296,8 +5348,8 @@ export class DockerRuntime implements RuntimeAdapter {
         const msg = (err as { message?: string })?.message ?? "";
         if (!/already exists|already connected/i.test(msg)) {
           if (options?.strict) throw err;
-          console.warn(
-            `[docker] group join failed for ${m.containerId.slice(0, 12)} (${aliases.join(", ")}): ${msg}`,
+          errorDiagnostics.warn("adapters/runtime/docker",
+            `[docker] group join failed for ${m.containerId.slice(0, 12)} (${aliases.join(", ")}): ${msg}`, err,
           );
         }
       }
@@ -5360,7 +5412,8 @@ export class DockerRuntime implements RuntimeAdapter {
     let containers: Awaited<ReturnType<typeof this.docker.listContainers>>;
     try {
       containers = await this.docker.listContainers({ all: true });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
       return; // never block a deploy on a docker list hiccup
     }
 
@@ -5419,7 +5472,8 @@ export class DockerRuntime implements RuntimeAdapter {
         all: true,
         filters: { label: [`openship.project=${projectId}`] },
       });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
       return;
     }
     const network = this.docker.getNetwork(networkId);
@@ -5442,8 +5496,8 @@ export class DockerRuntime implements RuntimeAdapter {
         const msg = (err as { message?: string })?.message ?? "";
         if (!/already exists|already connected/i.test(msg)) {
           // best-effort: leave a breadcrumb, don't throw
-          console.warn(
-            `[docker] reconcile connect failed for ${c.Id.slice(0, 12)} → ${networkId.slice(0, 12)}: ${msg}`,
+          errorDiagnostics.warn("adapters/runtime/docker",
+            `[docker] reconcile connect failed for ${c.Id.slice(0, 12)} → ${networkId.slice(0, 12)}: ${msg}`, err,
           );
         }
       }
@@ -5540,7 +5594,7 @@ export class DockerRuntime implements RuntimeAdapter {
           const msg = (err as { message?: string })?.message ?? "";
           if (!/already exists|already connected/i.test(msg)) {
             if (options?.strict) throw err;
-            console.warn(`[docker] link-connect failed for ${c.Id.slice(0, 12)} → ${name}: ${msg}`);
+            errorDiagnostics.warn("adapters/runtime/docker", `[docker] link-connect failed for ${c.Id.slice(0, 12)} → ${name}: ${msg}`, err);
           }
         }
       }
@@ -5743,7 +5797,8 @@ export class DockerRuntime implements RuntimeAdapter {
       // Clean up the created container so it doesn't become orphaned
       try {
         await container.remove({ force: true });
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/docker");
         /* best effort */
       }
       throw startErr;
@@ -5756,7 +5811,7 @@ export class DockerRuntime implements RuntimeAdapter {
     // Record the content-addressable digest actually running so the update
     // scanner can later detect a moved mutable tag. Best-effort: a locally-built
     // image has no RepoDigests, and any inspect failure must not fail the deploy.
-    const imageDigest = await this.resolveImageDigest(config.image).catch(() => undefined);
+    const imageDigest = await this.resolveImageDigest(config.image).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker"); return undefined; });
 
     log({
       timestamp: new Date().toISOString(),

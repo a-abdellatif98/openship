@@ -1,5 +1,6 @@
 "use client";
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { useEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import type { ITheme, Terminal } from "@xterm/xterm";
@@ -129,7 +130,7 @@ const TerminalSurface: React.FC<TerminalSurfaceProps> = ({
           fitAddon.fit();
           terminal.scrollToBottom();
         } catch (error) {
-          console.error("Error fitting terminal:", error);
+          errorDiagnostics.error("dashboard/components/import-project/TerminalSurface", "Error fitting terminal:", error);
         }
       };
 

@@ -17,6 +17,7 @@
  *   "local"  → clone + build on the API host, then transfer output to target
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { randomUUID } from "node:crypto";
 import type {
   BuildConfig,
@@ -225,7 +226,7 @@ export class BareRuntime implements RuntimeAdapter {
   async retainedReleaseArtifact(deploymentId: string): Promise<string | null> {
     if (!deploymentId || deploymentId.includes("/") || deploymentId.includes("\\")) return null;
     const path = this.releaseDir(deploymentId);
-    return (await this.executor.exists(path).catch(() => false)) ? path : null;
+    return (await this.executor.exists(path).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/bare"); return false; })) ? path : null;
   }
 
   /** Get or lazily initialise the process supervisor. */
@@ -357,6 +358,7 @@ export class BareRuntime implements RuntimeAdapter {
           level: "info",
         });
       } catch (err) {
+        observeCaughtError(err, "adapters/runtime/bare");
         signal?.throwIfAborted();
         if (strict || this.options.projectId) throw new Error(`Could not persist ${relative}: ${safeErrorMessage(err)}`);
         log?.({
@@ -430,14 +432,19 @@ export class BareRuntime implements RuntimeAdapter {
           `deploy:${deploymentId}:promote-rsync`,
           `rsync -a --delete --link-dest=${sq(previousReleaseDir)} ${sq(artifactPath)}/ ${sq(releaseDir)}/`,
         );
-        if (consumeSource) await this.executor.rm(artifactPath).catch(() => {});
+        if (consumeSource) await this.executor.rm(artifactPath).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/bare");
+        });
         return releaseDir;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/bare");
         // rsync missing or failed (older minimal images) — fall back to
         // plain move below. We log nothing because either the move
         // succeeds (no user impact) or the move fails and the outer
         // deploy() reports it.
-        await this.executor.rm(releaseDir).catch(() => {});
+        await this.executor.rm(releaseDir).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/bare");
+        });
       }
     }
 
@@ -622,6 +629,7 @@ export class BareRuntime implements RuntimeAdapter {
         },
       });
     } catch (err) {
+      observeCaughtError(err, "adapters/runtime/bare");
       const msg = safeErrorMessage(err);
       log.log(`Failed to transfer local build output: ${msg}`, "error");
       return {
@@ -833,8 +841,12 @@ export class BareRuntime implements RuntimeAdapter {
       });
     } catch (err) {
       if (workDir !== stagedDir) {
-        await sv.destroy(config.deploymentId).catch(() => {});
-        await this.executor.rm(workDir).catch(() => {});
+        await sv.destroy(config.deploymentId).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/bare");
+        });
+        await this.executor.rm(workDir).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/bare");
+        });
       }
       throw err;
     }
@@ -941,15 +953,15 @@ export class BareRuntime implements RuntimeAdapter {
           ? execution
           : Promise.all([killProcessesUnderDir(this.executor, workDir), execution]);
         await withTimeout(cleanup, 5_000,
-          "Release command cleanup could not be confirmed").catch(error => onLog({
+          "Release command cleanup could not be confirmed").catch(error => { observeCaughtError(error, "adapters/runtime/bare"); return onLog({
           timestamp: new Date().toISOString(), level: "warn", message: `${safeErrorMessage(error)}\n`,
-        }));
+        }); });
       }
       if (temporaryCopy) {
         await withTimeout(removeManagedArtifact(this.executor, workDir, this.workDir), 5_000,
-          "Release scratch directory cleanup could not be confirmed").catch(error => onLog({
+          "Release scratch directory cleanup could not be confirmed").catch(error => { observeCaughtError(error, "adapters/runtime/bare"); return onLog({
           timestamp: new Date().toISOString(), level: "warn", message: `${safeErrorMessage(error)}\n`,
-        }));
+        }); });
       }
     }
   }
@@ -1008,7 +1020,9 @@ export class BareRuntime implements RuntimeAdapter {
 
     const abort = async (message: string): Promise<never> => {
       if (workDir !== stagedDir) {
-        await this.executor.rm(workDir).catch(() => {});
+        await this.executor.rm(workDir).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/bare");
+        });
       }
       throw new Error(message);
     };
@@ -1074,7 +1088,7 @@ export class BareRuntime implements RuntimeAdapter {
   private async pruneBuildFilesFromDocRoot(root: string): Promise<string[]> {
     const listed = await this.executor
       .exec(`ls -A ${sq(root)} 2>/dev/null; true`)
-      .catch(() => null);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/bare"); return null; });
     if (listed === null) return [];
     const doomed = listed
       .split("\n")
@@ -1084,7 +1098,9 @@ export class BareRuntime implements RuntimeAdapter {
     if (doomed.length === 0) return [];
     await this.executor
       .exec(`rm -rf ${doomed.map((n) => sq(`${root}/${n}`)).join(" ")}`)
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/bare");
+      });
     // Verify rather than trust the exit status: this is the difference between a
     // pruned doc root and a published access token.
     const survivors: string[] = [];
@@ -1106,7 +1122,7 @@ export class BareRuntime implements RuntimeAdapter {
     const p = sq(path);
     const out = await this.executor
       .exec(`if [ -d ${p} ]; then echo DIR; ls -A ${p} 2>/dev/null | head -1; fi; true`)
-      .catch(() => null);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/bare"); return null; });
     if (out === null) return false; // inconclusive → never fail the deploy
     const lines = out.split("\n").map((l) => l.trim()).filter(Boolean);
     return lines.length === 1 && lines[0] === "DIR";
@@ -1193,8 +1209,8 @@ export class BareRuntime implements RuntimeAdapter {
       const failures: unknown[] = [error];
       // A start can fail after spawning the process. Free its port before
       // restoring the current release, and keep both failures observable.
-      if (activationStarted) await this.stop(targetId).catch(failure => failures.push(failure));
-      if (restorePrevious) await this.start(previousId!).catch(failure => failures.push(failure));
+      if (activationStarted) await this.stop(targetId).catch(failure => { observeCaughtError(failure, "adapters/runtime/bare"); return failures.push(failure); });
+      if (restorePrevious) await this.start(previousId!).catch(failure => { observeCaughtError(failure, "adapters/runtime/bare"); return failures.push(failure); });
       if (failures.length > 1)
         throw new AggregateError(failures, "Rollback failed and the previous process could not be fully restored", { cause: error });
       throw error;
@@ -1226,7 +1242,7 @@ export class BareRuntime implements RuntimeAdapter {
     // must not keep the disk from being reclaimed.
     const failures: unknown[] = [];
     if (deployment.containerId) {
-      await this.destroy(deployment.containerId).catch((err: unknown) => failures.push(err));
+      await this.destroy(deployment.containerId).catch((err: unknown) => { observeCaughtError(err, "adapters/runtime/bare"); return failures.push(err); });
     }
     // For a static release the two are the SAME directory — `containerId` is the
     // doc-root — and `destroy` above already removed it, and already reported its
@@ -1234,7 +1250,7 @@ export class BareRuntime implements RuntimeAdapter {
     const releaseDir = this.releaseDir(deployment.id);
     if (releaseDir !== deployment.containerId) {
       await removeManagedArtifact(this.executor, releaseDir, this.workDir).catch((err: unknown) =>
-        failures.push(err),
+        { observeCaughtError(err, "adapters/runtime/bare"); return failures.push(err); },
       );
     }
     if (failures.length === 1) throw failures[0];

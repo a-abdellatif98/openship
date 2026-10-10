@@ -66,6 +66,7 @@
  * so DMARC still passes on DKIM alignment through the relay.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "@repo/adapters";
 import {
   hasRelaySelection,
@@ -446,7 +447,7 @@ async function readParam(
   engine: (cmd: string) => string,
   param: string,
 ): Promise<string> {
-  const out = await exec.exec(engine(`postconf -h ${param}`)).catch(() => "");
+  const out = await exec.exec(engine(`postconf -h ${param}`)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/outbound-relay.service"); return ""; });
   return (out ?? "").trim();
 }
 
@@ -495,8 +496,8 @@ async function dropRelayTlsPolicy(
   }
   // Keep one SSH channel at a time. A channel failure resets the pooled
   // connection, which would tear down a concurrent sibling operation too.
-  await hostFiles.rm(tlsPolicy.write).catch(() => undefined);
-  await hostFiles.rm(`${tlsPolicy.write}.db`).catch(() => undefined);
+  await hostFiles.rm(tlsPolicy.write).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/outbound-relay.service"); return undefined; });
+  await hostFiles.rm(`${tlsPolicy.write}.db`).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/outbound-relay.service"); return undefined; });
 }
 
 /**
@@ -575,7 +576,9 @@ export async function configureOutboundRelay(
       exec,
       `DELETE FROM sender_relayhost WHERE relayhost = ${q(nexthop)}` +
         (priorNexthop ? ` OR relayhost = ${q(priorNexthop)}` : ""),
-    ).catch(() => {});
+    ).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/outbound-relay.service");
+    });
   } else {
     await engineExec.exec(engine("postconf -X relayhost") + " 2>/dev/null || true");
     // Opportunistic globally (the engine default) so non-relayed domains still
@@ -604,7 +607,9 @@ export async function configureOutboundRelay(
       exec,
       `DELETE FROM sender_relayhost WHERE (relayhost = ${q(nexthop)}${notIn})` +
         (priorNexthop ? ` OR relayhost = ${q(priorNexthop)}` : ""),
-    ).catch(() => {});
+    ).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/outbound-relay.service");
+    });
   }
 
   // 4) Reload Postfix (inside the engine).
@@ -668,7 +673,9 @@ export async function disableOutboundRelay(exec: CommandExecutor): Promise<MailS
   const staleInclude = relay ? relaySpfInclude(relay) : undefined;
   if (relay?.host) {
     const nexthop = `[${relay.host}]:${relay.port}`;
-    await execute(exec, `DELETE FROM sender_relayhost WHERE relayhost = ${q(nexthop)}`).catch(() => {});
+    await execute(exec, `DELETE FROM sender_relayhost WHERE relayhost = ${q(nexthop)}`).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/outbound-relay.service");
+    });
   }
 
   await engineExec.exec(engine("postfix reload"));

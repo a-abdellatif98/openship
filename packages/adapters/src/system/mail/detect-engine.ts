@@ -23,6 +23,7 @@
  * Pure read. Never mutates the box.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "../../types";
 import { MAIL_CONTAINER } from "../../infra/mail-container";
 import { detectMailContainer, verifyMailEngine } from "./ensure-container-mail";
@@ -154,7 +155,7 @@ export async function startHostMail(
   for (const unit of HOST_MAIL_UNITS) {
     // Best-effort per unit: report the outcome from the port check below, not from
     // systemctl's exit code (a unit already running exits non-zero on some builds).
-    await executor.exec(`systemctl start ${unit} 2>&1 || true`).catch(() => "");
+    await executor.exec(`systemctl start ${unit} 2>&1 || true`).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/mail/detect-engine"); return ""; });
   }
 
   const verified = await verifyMailEngine(executor, opts);
@@ -163,7 +164,7 @@ export async function startHostMail(
     log(`Could not start the host mail engine: ${reason}`, "error");
     const status = await executor
       .exec(`systemctl status ${HOST_MAIL_UNITS.join(" ")} --no-pager -l 2>&1 | tail -40 || true`)
-      .catch(() => "");
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/mail/detect-engine"); return ""; });
     if (status.trim()) log(`Host mail unit status:\n${status}`, "error");
     return { started: false, reason };
   }

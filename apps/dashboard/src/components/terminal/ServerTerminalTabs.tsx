@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -93,7 +94,8 @@ function saveShells(serverId: string, shells: ShellEntry[], counter: number): vo
       storageKey(serverId),
       JSON.stringify({ shells, counter }),
     );
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/components/terminal/ServerTerminalTabs");
     // localStorage can throw on quota / private mode — silently skip.
   }
 }

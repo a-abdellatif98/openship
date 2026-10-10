@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -208,7 +209,8 @@ export function IssuesView() {
             }),
           );
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/issues/IssuesView");
         toast("error", t.servers.list.infra.applyFailed);
       }
     },

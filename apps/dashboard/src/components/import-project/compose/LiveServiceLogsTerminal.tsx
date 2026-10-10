@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useLogStream } from "@/hooks/useSSEConnection";
 import { endpoints } from "@/lib/api/endpoints";
@@ -120,7 +121,7 @@ export const LiveServiceLogsTerminal: React.FC<LiveServiceLogsTerminalProps> = (
     clearRetryTimer();
     retryTimerRef.current = setTimeout(() => {
       retryTimerRef.current = null;
-      connect().catch(() => scheduleReconnectRef.current());
+      connect().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/import-project/compose/LiveServiceLogsTerminal"); return scheduleReconnectRef.current(); });
     }, RECONNECT_DELAY_MS);
   }, [active, connect, clearRetryTimer]);
 
@@ -135,7 +136,7 @@ export const LiveServiceLogsTerminal: React.FC<LiveServiceLogsTerminalProps> = (
     stoppingRef.current = false;
     exitedRef.current = false;
     attemptsRef.current = 0;
-    connect().catch(() => scheduleReconnectRef.current());
+    connect().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/import-project/compose/LiveServiceLogsTerminal"); return scheduleReconnectRef.current(); });
     return () => {
       stoppingRef.current = true;
       clearRetryTimer();

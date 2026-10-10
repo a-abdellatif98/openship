@@ -14,6 +14,7 @@
  * This is scheduling + history for the code-defined system sweeps.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
 import { getJobRunner } from "@repo/platform/engine/lib/job-runner/index";
@@ -99,7 +100,7 @@ export async function scheduleSystemJob(opts: {
       try {
         await recordJobRun(opts.jobId, { trigger: "schedule" }, opts.run);
       } catch (err) {
-        console.error(`[system-job] ${opts.jobId} failed:`, safeErrorMessage(err));
+        errorDiagnostics.error("platform/engine/lib/system-jobs", `[system-job] ${opts.jobId} failed:`, safeErrorMessage(err), err);
       }
     },
   });

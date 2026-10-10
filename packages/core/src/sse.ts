@@ -22,7 +22,9 @@ export async function* parseSSE(
       },
     });
   } finally {
-    if (!ended) await reader.cancel().catch(() => {});
+    if (!ended) await reader.cancel().catch(() => {
+      /* diagnostics-ignore: Reader cancellation during cleanup is expected; the stream verdict is reported by its caller. */
+});
     reader.releaseLock();
   }
 }

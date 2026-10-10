@@ -28,6 +28,7 @@
  * machine its own organization's project deploys to.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { UNKNOWN_CAPACITY, type HostCapacity } from "@repo/core";
 import { env } from "../config/env";
 import { cacheStore } from "./cache-store/index";
@@ -71,7 +72,8 @@ async function fromLocalOs(): Promise<HostCapacity> {
     const memMb = Math.floor(os.totalmem() / (1024 * 1024));
     if (cores <= 0 && memMb <= 0) return { ...UNKNOWN_CAPACITY };
     return { cpuCores: cores, memoryMb: memMb, source: "local" };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/host-capacity");
     return { ...UNKNOWN_CAPACITY };
   }
 }
@@ -87,12 +89,15 @@ async function probe(
     const info = await runtime.info();
     const capacity = fromDockerInfo(info);
     if (capacity) return capacity;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/host-capacity");
     // Unreachable box, no daemon, no server row yet — all non-fatal.
   } finally {
     // MUST dispose: createServerDockerRuntime opens a loopback SSH bridge for
     // remote targets and leaks the listener otherwise.
-    await runtime?.dispose?.().catch(() => {});
+    await runtime?.dispose?.().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/host-capacity");
+    });
   }
   return opts.localFallback ? await fromLocalOs() : { ...UNKNOWN_CAPACITY };
 }
@@ -130,7 +135,9 @@ export async function getHostCapacity(
       // Only cache a real answer. Caching "unknown" for the full TTL would keep
       // enforcing no-ceiling long after the box came back.
       if (value.source !== "unknown") {
-        await store.set(key, value, TTL_SECONDS).catch(() => {});
+        await store.set(key, value, TTL_SECONDS).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/lib/host-capacity");
+        });
       }
       return value;
     })
@@ -163,7 +170,7 @@ export async function getTrustedHostCapacity(
 ): Promise<HostCapacity> {
   const capacity = await getHostCapacity(serverId, organizationId, {
     localFallback: opts.isLocalTarget,
-  }).catch(() => ({ ...UNKNOWN_CAPACITY }));
+  }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/host-capacity"); return ({ ...UNKNOWN_CAPACITY }); });
   if (capacity.source === "docker") return capacity;
   if (capacity.source === "local" && opts.isLocalTarget) return capacity;
   return { ...UNKNOWN_CAPACITY };

@@ -1236,12 +1236,7 @@ describe("discoverMonorepoApps - formal workspace monorepo with per-app Dockerfi
     expect(worker!.startCommand).toBe("");
   });
 
-  it("keeps real commands on a framework sub-app that merely ships a Dockerfile", () => {
-    // The inverse guard. A Vite/Next app shipping an OPTIONAL Dockerfile still
-    // detects as its framework, so the pipeline takes the buildpack branch
-    // (`stack === "docker" || dockerfilePath`, see cloud.ts) - keying the blanking
-    // on "a Dockerfile exists" instead of on the stack leaves it with nothing to
-    // install, build, or start.
+  it("uses a framework sub-app's Dockerfile instead of synthesizing buildpack commands", () => {
     const viteWithDockerfile = {
       rootDirectory: "frontend",
       source: "discovered" as const,
@@ -1279,9 +1274,10 @@ describe("discoverMonorepoApps - formal workspace monorepo with per-app Dockerfi
     expect(result).not.toBeNull();
     const frontend = result!.apps.find((app) => app.rootDirectory === "frontend");
     expect(frontend).toBeDefined();
-    expect(frontend!.stack).toBe("vite");
-    expect(frontend!.installCommand).not.toBe("");
-    expect(frontend!.buildCommand).toBe("npm run build");
+    expect(frontend!.stack).toBe("docker");
+    expect(frontend!.installCommand).toBe("");
+    expect(frontend!.buildCommand).toBe("");
+    expect(frontend!.startCommand).toBe("");
   });
 
   it("sanitizes an npm-scoped package.json name into a Docker-safe service name", () => {

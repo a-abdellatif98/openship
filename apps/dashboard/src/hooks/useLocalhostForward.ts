@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback } from "react";
 import { systemApi } from "@/lib/api";
 import { usePlatform } from "@/context/PlatformContext";
@@ -51,11 +52,14 @@ export function useLocalhostForward({
           window.open(url, "_blank", "noopener");
           showToast(`Forwarding remote port ${remotePort} → ${localLabel}`, "success");
         } else {
-          await navigator.clipboard.writeText(url).catch(() => {});
+          await navigator.clipboard.writeText(url).catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "dashboard/hooks/useLocalhostForward");
+          });
           showToast(`Copied ${localLabel} (forwarding remote port ${remotePort})`, "success");
         }
         return url;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/hooks/useLocalhostForward");
         showToast("Could not open the tunnel to localhost.", "error");
         return null;
       }

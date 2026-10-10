@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useState, useRef, useCallback } from "react";
@@ -71,7 +72,8 @@ export function FolderUpload() {
       try {
         const pkg = JSON.parse(await pkgEntry.file.text());
         if (typeof pkg?.name === "string") name = pkg.name;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/library/components/FolderUpload");
         /* ignore malformed package.json */
       }
     }
@@ -102,6 +104,7 @@ export function FolderUpload() {
       const params = new URLSearchParams({ stack: stack.id, name: picked.name });
       router.push(`/deploy/${encodeUploadSlug(session.sessionId)}?${params.toString()}`);
     } catch (err: unknown) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/library/components/FolderUpload");
       setPhase("idle");
       if (!showCloudPricing(err)) {
         setError(err instanceof Error ? err.message : t.library.folderUpload.uploadError);

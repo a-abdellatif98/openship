@@ -13,6 +13,7 @@
  * is the one special case (a sidecar container vs the host's `postgresql` unit).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "@repo/adapters";
 import { safeErrorMessage } from "@repo/core";
 import { mapWithLimit } from "../../lib/map-with-limit";
@@ -193,6 +194,7 @@ export async function checkMailHealth(
   try {
     probe = await resolveMailEngine(exec);
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/mail/mail-health.service");
     return MAIL_COMPONENTS.map((comp) => ({
       ...describe(comp), status: "unknown" as const, detail: firstLine(safeErrorMessage(error)),
     }));
@@ -267,6 +269,7 @@ async function probeUnit(
     const raw = await exec.exec(mailUnitProbeCommand(flavor, comp.key, comp.unit));
     return { ...base, ...parseMailUnitProbe(flavor, comp.key, comp.unit, raw) };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/mail/mail-health.service");
     return { ...base, status: "unknown", detail: firstLine(safeErrorMessage(err)) };
   }
 }

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import tls from "node:tls";
 import net from "node:net";
 import { PassThrough, type Duplex } from "node:stream";
@@ -104,7 +105,7 @@ export function createKubernetesApi(options: {
         channelError = undefined;
         upstream = socket;
         sockets.add(socket);
-        socket.on("error", (error) => {
+        socket.on("error", (error) => { observeCaughtError(error, "adapters/cluster/kubernetes-api");
           channelError = error;
           close();
         });
@@ -113,12 +114,13 @@ export function createKubernetesApi(options: {
         pending.pipe(socket);
       },
       (error) => {
+        observeCaughtError(error, "adapters/cluster/kubernetes-api");
         channelError = error instanceof Error ? error : new Error(String(error));
         close();
       },
     );
   });
-  bridge.on("error", (error) => {
+  bridge.on("error", (error) => { observeCaughtError(error, "adapters/cluster/kubernetes-api");
     channelError = error;
   });
   let address: Promise<number> | undefined;
@@ -228,6 +230,7 @@ export function createKubernetesApi(options: {
         idempotent: false,
       })
       .catch((error) => {
+        observeCaughtError(error, "adapters/cluster/kubernetes-api");
         combined.throwIfAborted();
         throw channelError ?? error;
       });

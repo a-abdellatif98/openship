@@ -26,6 +26,7 @@
  * a "public" signal into them.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos, type Project, type Deployment } from "@repo/db";
 import { BareRuntime } from "@repo/adapters";
@@ -158,7 +159,7 @@ export async function ensureAdoptDeployment(
     });
     containerId = result.containerId ?? dep.id;
   } catch (err) {
-    console.warn(`[self-deploy] adopt probe failed (continuing): ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("api/lib/startup/self-deploy", `[self-deploy] adopt probe failed (continuing): ${safeErrorMessage(err)}`, err);
   }
 
   await onSuccess(
@@ -171,7 +172,7 @@ export async function ensureAdoptDeployment(
   // the real thing instead of "No apps or services yet". Best-effort + idempotent
   // — a bare install has nothing to link and this no-ops.
   await linkSelfAppServices(projectId, dep.id).catch((err) =>
-    console.warn(`[self-deploy] service linking skipped: ${safeErrorMessage(err)}`),
+    errorDiagnostics.warn("api/lib/startup/self-deploy", `[self-deploy] service linking skipped: ${safeErrorMessage(err)}`, err),
   );
 
   return dep;
@@ -216,7 +217,8 @@ async function foreignProxyBlocksEdge(
       `an ACME challenge would hit it, not us. Re-run setup (or Domains → migrate) to take over.`;
     log?.(detail, "error");
     return { blocked: true, owner, detail };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/lib/startup/self-deploy");
     return { blocked: false };
   }
 }
@@ -300,6 +302,7 @@ export async function provisionSelfAppEdge(
       managedEdgeSyncedByCaller: options?.managedEdgeSyncedByCaller,
     });
   } catch (err) {
+    observeCaughtError(err, "api/lib/startup/self-deploy");
     const detail = safeErrorMessage(err);
     log?.(detail, "error");
     return edgeStepFailed(progress, "route", "route_failed", detail);
@@ -317,7 +320,7 @@ export async function provisionSelfAppEdge(
   // `manageDomainSsl` refuses the same domains on its own (see tlsIssuedElsewhere).
   // Without it we'd announce an "Issue SSL certificate" step that is never going to
   // issue one.
-  const domainRow = await repos.domain.findByHostname(hostname).catch(() => null);
+  const domainRow = await repos.domain.findByHostname(hostname).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/lib/startup/self-deploy"); return null; });
   const elsewhere = domainRow ? tlsIssuedElsewhere(domainRow) : null;
   if (elsewhere) {
     log?.(describeTlsIssuedElsewhere(elsewhere, hostname));
@@ -346,6 +349,7 @@ export async function provisionSelfAppEdge(
         "warn",
       );
     } catch (err) {
+      observeCaughtError(err, "api/lib/startup/self-deploy");
       lastError = safeErrorMessage(err);
       log?.(`cert error: ${lastError}`, "error");
     }
@@ -363,7 +367,7 @@ export async function provisionSelfAppEdge(
 /** Locate the self-app project across the cloud-linked / founding-admin org.
  *  Returns null before setup has run (no admin / no self-app yet). */
 async function findSelfAppProject(): Promise<Project | null> {
-  const linked = await repos.settings.listCloudLinkedOrgIds().catch(() => [] as string[]);
+  const linked = await repos.settings.listCloudLinkedOrgIds().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/lib/startup/self-deploy"); return [] as string[]; });
   for (const org of linked) {
     const p = await repos.project.findBySlugInOrg(org, APP_SLUG);
     if (p && p.appTemplateId === APP_TEMPLATE_ID) return p;
@@ -454,6 +458,10 @@ export function registerSelfAdoptReconcile(): void {
     id: "self-app:reconcile",
     modes: ["desktop", "selfhosted"],
     run: async () => {
+      // A provisioned controller already has normal deployment/service records
+      // on its connected server. CLI adoption would replace that ownership
+      // with local host ports and the old reserved openship project.
+      if (process.env.OPENSHIP_INSTANCE_PROJECT_ID) return;
       const project = await findSelfAppProject();
       if (!project) return;
 
@@ -467,14 +475,16 @@ export function registerSelfAdoptReconcile(): void {
           await sshManager.withHostExecutor((exec) =>
             recoverInterruptedTakeover(exec, (e) => console.log(`[self-deploy] ${e.message}`)),
           );
-        } catch {}
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "api/lib/startup/self-deploy");
+        }
       }
 
       const dashPort = env.OPENSHIP_DASHBOARD_PORT || 3001;
 
       // (a) Backfill / ensure the adopt deployment (existing installs predate it).
       await ensureAdoptDeployment(project.id, dashPort).catch((err) =>
-        console.warn(`[self-deploy] ensureAdoptDeployment failed: ${safeErrorMessage(err)}`),
+        errorDiagnostics.warn("api/lib/startup/self-deploy", `[self-deploy] ensureAdoptDeployment failed: ${safeErrorMessage(err)}`, err),
       );
 
       // (a2) Link the stack's own containers as this project's services. Runs on
@@ -486,7 +496,7 @@ export function registerSelfAdoptReconcile(): void {
       //      image tags current after an upgrade.
       const activeDeploymentId = (await repos.project.findById(project.id))?.activeDeploymentId ?? null;
       await linkSelfAppServices(project.id, activeDeploymentId).catch((err) =>
-        console.warn(`[self-deploy] service linking failed: ${safeErrorMessage(err)}`),
+        errorDiagnostics.warn("api/lib/startup/self-deploy", `[self-deploy] service linking failed: ${safeErrorMessage(err)}`, err),
       );
 
       // (a3) Make the domain the operator actually reaches this box on the PRIMARY
@@ -497,7 +507,7 @@ export function registerSelfAdoptReconcile(): void {
       //      public URL is the unambiguous signal (it's what the CLI configured
       //      the box with), so trust it over insertion order.
       await reconcileSelfAppPrimaryDomain(project.id).catch((err) =>
-        console.warn(`[self-deploy] primary-domain reconcile failed: ${safeErrorMessage(err)}`),
+        errorDiagnostics.warn("api/lib/startup/self-deploy", `[self-deploy] primary-domain reconcile failed: ${safeErrorMessage(err)}`, err),
       );
 
       // (b) Sync project.port to the live dashboard port (it can change across
@@ -505,7 +515,7 @@ export function registerSelfAdoptReconcile(): void {
       if (project.port !== dashPort) {
         await repos.project
           .update(project.id, { port: dashPort })
-          .catch((err) => console.warn(`[self-deploy] port sync failed: ${safeErrorMessage(err)}`));
+          .catch((err) => errorDiagnostics.warn("api/lib/startup/self-deploy", `[self-deploy] port sync failed: ${safeErrorMessage(err)}`, err));
       }
 
       // (c) Self-heal the local-edge route + cert (Linux + root only).
@@ -525,12 +535,12 @@ export function registerSelfAdoptReconcile(): void {
         const fresh = await repos.project.findById(project.id);
         // Don't retry the route+cert against a foreign proxy on every boot — that's
         // the loop that spun forever on a box where the takeover never completed.
-        const blocked = (await foreignProxyBlocksEdge((m) => console.warn(`[self-deploy] ${m}`))).blocked;
+        const blocked = (await foreignProxyBlocksEdge((m) => errorDiagnostics.warn("api/lib/startup/self-deploy", `[self-deploy] ${m}`))).blocked;
         if (fresh && !blocked) {
           try {
             await reapplyProjectLiveRoutes(fresh, [], { isSelfApp: true });
           } catch (err) {
-            console.warn(`[self-deploy] route reapply failed: ${safeErrorMessage(err)}`);
+            errorDiagnostics.warn("api/lib/startup/self-deploy", `[self-deploy] route reapply failed: ${safeErrorMessage(err)}`, err);
           }
           // Same question as everywhere else, same answer: free (Cloud terminates),
           // external ingress, and uploaded certs are not certbot's to re-issue.
@@ -538,14 +548,16 @@ export function registerSelfAdoptReconcile(): void {
             try {
               await manageDomainSsl(primary.hostname, { action: "provision", projectId: project.id });
             } catch (err) {
-              console.warn(`[self-deploy] cert re-issue failed: ${safeErrorMessage(err)}`);
+              errorDiagnostics.warn("api/lib/startup/self-deploy", `[self-deploy] cert re-issue failed: ${safeErrorMessage(err)}`, err);
             }
           }
         }
       }
 
       // (d) Warm the public-URL cache from the (now verified) primary domain.
-      await refreshSelfAppPublicUrl().catch(() => {});
+      await refreshSelfAppPublicUrl().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "api/lib/startup/self-deploy");
+      });
     },
   });
 }

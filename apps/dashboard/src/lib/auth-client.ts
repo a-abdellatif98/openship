@@ -2,6 +2,7 @@ import { createAuthClient } from "better-auth/react";
 import { organizationClient, emailOTPClient, twoFactorClient } from "better-auth/client/plugins";
 import { passkeyClient } from "@better-auth/passkey/client";
 import { getAuthBaseUrl } from "@/lib/api/urls";
+import { reportClientError } from "./error-reporting";
 
 /**
  * API base URL - auth requests go directly to the selected API origin.
@@ -14,6 +15,9 @@ const AUTH_BASE_URL = getAuthBaseUrl();
 export const authClient = createAuthClient({
   baseURL: AUTH_BASE_URL,
   fetchOptions: {
+    onError: (context) => {
+      if (!context.response?.headers.get("X-Request-ID")) reportClientError(context.error, { component: "auth-client" });
+    },
     credentials: "include",
     // Disable retry to prevent infinite loops on 429
     retry: {

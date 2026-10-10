@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -24,7 +25,7 @@ import { serviceDisplayUrl } from "@/utils/route-display";
 import { backupsApi, getApiErrorCode, getApiErrorMessage, type BackupPolicy } from "@/lib/api";
 import { PolicyEditor } from "@/components/backup/PolicyEditor";
 import { BackupRunCard } from "@/components/backup/BackupRunCard";
-import { ServiceTerminal } from "@/components/terminal/ServiceTerminal";
+import { ConnectionNotice } from "@/components/shared/ConnectionNotice";
 import { useTheme } from "@/components/theme-provider";
 import { Tabs, type TabDef } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ import { useI18n, interpolate } from "@/components/i18n-provider";
 import { useLocalhostForward } from "@/hooks/useLocalhostForward";
 import { UseInProjectModal } from "../UseInProjectModal";
 import { ServiceOverview } from "./ServiceOverview";
+import { ServiceTerminalPanel } from "./ServiceTerminalPanel";
 import { ServiceVolumesPanel } from "./ServiceVolumesPanel";
 import { ServiceDomainsPanel } from "./ServiceDomainsPanel";
 import type { ServiceDomainIntent } from "./ServicePortsCard";
@@ -61,6 +63,7 @@ interface ServiceDetailPanelProps {
   container?: ServiceContainer;
   /** An outstanding runtime read, distinct from a confirmed stopped service. */
   containerChecking?: boolean;
+  containerError?: string | null;
   projectId: string;
   workspaceId?: string | null;
   projectSlugBase: string;
@@ -93,6 +96,7 @@ export function ServiceDetailPanel({
   service,
   container,
   containerChecking,
+  containerError,
   projectId,
   workspaceId,
   projectSlugBase,
@@ -527,6 +531,7 @@ export function ServiceDetailPanel({
       onDeleted?.();
       await onRefresh();
     } catch (error) {
+      observeCaughtError(error, "dashboard/app/(dashboard)/projects/[id]/components/services/ServiceDetailPanel");
       showToast(
         error instanceof Error ? error.message : t.projectDetail.services.detail.toast.deleteFailed,
         "error",
@@ -674,6 +679,16 @@ export function ServiceDetailPanel({
         onChange={changeTab}
       />
 
+      {status === "unknown" && activeTab !== "terminal" && (
+        <ConnectionNotice
+          title={t.projectDetail.services.connection.statusTitle}
+          message={t.projectDetail.services.connection.statusHint}
+          detail={containerError || undefined}
+          onRetry={onRefresh}
+          retrying={containerChecking}
+        />
+      )}
+
       {/* ── Overview ───────────────────────────────────────────── */}
       {activeTab === "overview" && (
         <ServiceOverview
@@ -710,27 +725,20 @@ export function ServiceDetailPanel({
       )}
 
       {/* ── Terminal ───────────────────────────────────────────── */}
-      {activeTab === "terminal" &&
-        (status === "running" ? (
-          <div className="min-h-[460px]">
-            <ServiceTerminal
-              serviceId={service.id}
-              enabled={true}
-              name={service.name}
-              theme={resolvedTheme === "light" ? "light" : "dark"}
-              resumeToken={terminalResumeToken}
-              onResumeTokenChange={persistResumeToken}
-            />
-          </div>
-        ) : (
-          <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/10 text-xs text-muted-foreground">
-            {status === "checking" || status === "unknown" ? (
-              <ServiceStatusBadge status={status} />
-            ) : (
-              t.projectDetail.services.detail.startShellHint
-            )}
-          </div>
-        ))}
+      {activeTab === "terminal" && (
+        <ServiceTerminalPanel
+          serviceId={service.id}
+          name={service.name}
+          status={status}
+          checking={containerChecking}
+          error={containerError}
+          onRefresh={onRefresh}
+          onSettings={() => changeTab("settings")}
+          theme={resolvedTheme === "light" ? "light" : "dark"}
+          resumeToken={terminalResumeToken}
+          onResumeTokenChange={persistResumeToken}
+        />
+      )}
 
       {/* ── Logs ───────────────────────────────────────────────── */}
       {activeTab === "logs" && (

@@ -1,3 +1,5 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
+import { enrichErrorContext } from "@repo/core/diagnostics/node";
 import { randomUUID } from "node:crypto";
 import {
   AppError,
@@ -148,7 +150,7 @@ export function createAuthorization(deps: AuthorizationDependencies) {
         return (await repos.project.findById(id))?.organizationId ?? null;
       case "server":
       case "mail_server":
-        return (await repos.server.get(id).catch(() => null))?.organizationId ?? null;
+        return (await repos.server.get(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/authorization"); return null; }))?.organizationId ?? null;
       case "backup_destination":
         return (await repos.backupDestination.findById(id))?.organizationId ?? null;
       case "billing":
@@ -178,22 +180,22 @@ export function createAuthorization(deps: AuthorizationDependencies) {
         rootId = (await repos.service.findById(id))?.projectId;
         break;
       case "env_var":
-        rootId = (await repos.project.findEnvVarById(id).catch(() => null))?.projectId;
+        rootId = (await repos.project.findEnvVarById(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/authorization"); return null; }))?.projectId;
         break;
       case "backup_policy":
         rootType = "backup_destination";
-        rootId = (await repos.backupPolicy.findById(id).catch(() => null))?.destinationId;
+        rootId = (await repos.backupPolicy.findById(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/authorization"); return null; }))?.destinationId;
         break;
       case "backup_run":
         rootType = "backup_destination";
-        rootId = (await repos.backupRun.findById(id).catch(() => null))?.destinationId;
+        rootId = (await repos.backupRun.findById(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/authorization"); return null; }))?.destinationId;
         break;
       case "backup_restore":
         rootType = "backup_destination";
-        rootId = (await repos.backupRestore.findById(id).catch(() => null))?.destinationId;
+        rootId = (await repos.backupRestore.findById(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/authorization"); return null; }))?.destinationId;
         break;
       case "build_session": {
-        const session = await repos.deployment.findBuildSession(id).catch(() => null);
+        const session = await repos.deployment.findBuildSession(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/authorization"); return null; });
         rootId = session?.deploymentId
           ? (await repos.deployment.findById(session.deploymentId))?.projectId
           : null;
@@ -215,7 +217,7 @@ export function createAuthorization(deps: AuthorizationDependencies) {
     const resource = await resolveResourceOrg(input.resourceType, input.resourceId);
     if (resource) return resource.orgId;
     if (!canForward() || (!PROJECT_ROOTED.has(input.resourceType) && input.resourceType !== "server") || !scopeOrg) return null;
-    return (await deps.cloud!.isLinked(scopeOrg).catch(() => false)) ? scopeOrg : null;
+    return (await deps.cloud!.isLinked(scopeOrg).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/authorization"); return false; })) ? scopeOrg : null;
   }
 
   async function allowsMember(
@@ -327,6 +329,9 @@ export function createAuthorization(deps: AuthorizationDependencies) {
     }
     const resolved = await decision(ctx, input, scopeOrg);
     if (!resolved) throw new NotFoundError(input.resourceType, input.resourceId);
+    // Diagnostics only: authorization still returns its explicit immutable scope.
+    enrichErrorContext({ organizationId: resolved.org, userId: ctx.userId,
+      resourceType: input.resourceType, resourceId: input.resourceId });
     const base = freezeContext(ctx);
     return freezeContext({
       ...base,

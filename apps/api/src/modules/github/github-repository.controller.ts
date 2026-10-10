@@ -1,4 +1,5 @@
 /** Browser/cookie adapter for shared Cloud repository authorization. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import { getCookie, deleteCookie } from "hono/cookie";
 import { repos } from "@repo/db";
@@ -53,6 +54,7 @@ export async function startRepositoryAuthorization(c: Context) {
     c.header("Set-Cookie", repositoryOAuthStateCookie(result.state, result.browserNonce));
     return c.redirect(result.url);
   } catch (error) {
+    observeCaughtError(error, "api/modules/github/github-repository.controller");
     return failed(c, error);
   }
 }
@@ -76,6 +78,7 @@ export async function finishRepositoryAuthorization(c: Context) {
       `${resolveDashboardPublicUrl()}/auth/callback/install?${new URLSearchParams({ state: result.state })}`,
     );
   } catch (error) {
+    observeCaughtError(error, "api/modules/github/github-repository.controller");
     deleteCookie(c, cookieName, { path: REPOSITORY_OAUTH_CALLBACK_PATH });
     return failed(c, error);
   }

@@ -1,15 +1,14 @@
 /**
- * Whole-instance remote cutover is not implemented. The former orchestration
- * created a project row and attempted a destructive restore without deploying
- * or identifying a running target. Keep the boundary explicit until the shared
- * deployment engine owns provisioning, quiescence, restore and verified cutover.
+ * Keep the earlier migration endpoint disabled. Whole-instance cutover uses
+ * /system/instance with an explicit confirmation and durable handoff; an old
+ * client must not start that operation without reviewing the new requirements.
  */
 import type { Context } from "hono";
 import type { DomainChoice } from "./preflight.service";
 
 export const SERVER_MIGRATION_UNAVAILABLE =
-  "Moving this installation to another server is unavailable in this version. " +
-  "Use Settings → Data transfer to export, then import on a running target installation.";
+  "This earlier server-migration endpoint is unavailable. " +
+  "Use Settings → Instance → Instance location to review and move this installation.";
 
 export class ServerMigrationUnavailableError extends Error {
   readonly code = "SERVER_MIGRATION_UNAVAILABLE";

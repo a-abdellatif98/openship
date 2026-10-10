@@ -439,12 +439,12 @@
     "rowType": "Type"
   },
   "configDiagnostics": {
-    "title": "Une partie du openship.json de ce dépôt n'a pas été appliquée",
-    "description": "Les champs listés ci-dessous ont été ignorés ; le reste du fichier a été appliqué. Le déploiement se poursuivra.",
+    "title": "Certains paramètres de déploiement du dépôt n’ont pas été appliqués",
+    "description": "Vérifiez les paramètres ignorés ci-dessous avant le déploiement.",
     "titleWholeFile": "Le openship.json de ce dépôt a été ignoré",
     "descriptionWholeFile": "Rien n'en a été appliqué. Le déploiement se poursuivra avec les réglages détectés par Openship.",
     "refused": "Refusé",
     "unrecognized": "Non reconnu",
-    "hint": "Lancez `openship config validate` dans le dépôt pour vérifier le fichier avant le prochain déploiement."
+    "hint": "Vérifiez les fichiers de configuration indiqués et mettez à jour les paramètres non pris en charge avant le prochain déploiement."
   }
 }

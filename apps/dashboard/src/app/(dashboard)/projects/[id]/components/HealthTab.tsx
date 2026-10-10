@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 /**
@@ -79,7 +80,8 @@ export function HealthTab() {
       setServerUnreachable(res.serverUnreachable ?? null);
       setWatching(res.watching);
       setFailed(false);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/HealthTab");
       setFailed(true);
     } finally {
       setLoading(false);

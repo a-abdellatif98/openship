@@ -21,6 +21,7 @@
  * outcomes warrant the same user-facing "DNS isn't ready" message.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import dns from "node:dns/promises";
 import { dnsTxtValue } from "./dns-txt";
 
@@ -96,14 +97,16 @@ export async function resolveRecords(
       return (json.Answer ?? []).filter((answer) => answer.type === RRTYPE[type])
         .map((answer) => type === "TXT" ? dnsTxtValue(answer.data) : answer.data);
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/dns-resolver");
     // DoH unreachable / blocked — fall through to node:dns.
   }
 
   // 2) node:dns fallback with bounded timeout
   try {
     return await withTimeout(resolveViaLocal(name, type), timeoutMs, type);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/dns-resolver");
     return [];
   }
 }
@@ -125,7 +128,8 @@ export async function lookupAddresses(
       "lookup",
     );
     return result.map((entry) => entry.address);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/dns-resolver");
     return [];
   }
 }

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Runtime } from "oblien";
 import { AppError, type ManagedCommandRef } from "@repo/core";
 import { CLOUD_EXEC_CANCEL } from "./exec-framing";
@@ -30,6 +31,7 @@ export async function stopCommand(runtime: Runtime, marker: string, taskId?: str
     // Keep the cancellation tombstone: a lost/late creation request must also
     // observe it before spawning. Completed wrappers remove their own marker.
   } catch (cause) {
+    observeCaughtError(cause, "adapters/runtime/cloud/command-recovery");
     throw Object.assign(new AppError("Could not confirm the server command stopped. Retry the interrupted operation to recover it before changing this server.",
       503, "CLOUD_COMMAND_EXIT_UNCONFIRMED"), { cause });
   }

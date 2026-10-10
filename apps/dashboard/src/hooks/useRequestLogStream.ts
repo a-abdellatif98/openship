@@ -17,6 +17,7 @@
  * `bw_in` vs `requestSize`). Every consumer needs the same shape, so it is produced once.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useRef } from "react";
 import { getApiBaseUrl, api } from "@/lib/api";
 import { endpoints } from "@/lib/api/endpoints";
@@ -263,7 +264,8 @@ export function useRequestLogStream({ projectId, domain, domains, enabled, onEnt
             return;
           }
           sources.push(es);
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/hooks/useRequestLogStream");
           set("error", "connect-failed");
         }
       })();

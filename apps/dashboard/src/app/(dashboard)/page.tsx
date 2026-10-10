@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Suspense } from "react";
 import { MailConsole } from "./emails/_components/mail-console";
 import { serverApi } from "@/lib/server/api";
@@ -47,7 +48,7 @@ export default async function DashboardHome() {
       cache: "no-store",
     });
   } catch (error) {
-    console.error("Failed to fetch initial dashboard data", error);
+    errorDiagnostics.error("dashboard/app/(dashboard)/page", "Failed to fetch initial dashboard data", error);
   }
 
   const hostedCloud = deploymentInfo?.selfHosted === false && deploymentInfo.deployMode !== "desktop";

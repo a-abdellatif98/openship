@@ -9,6 +9,7 @@
  * which re-pushes (so a reloaded/reinstalled edge with an empty dict repopulates).
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos } from "@repo/db";
 import type { RouteRuleSpec } from "@repo/core";
@@ -87,7 +88,7 @@ export async function pushProjectRules(
   const [map, domains, project] = await Promise.all([
     serializeProjectRules(projectId),
     repos.domain.listByProject(projectId),
-    repos.project.findById(projectId).catch(() => null),
+    repos.project.findById(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/route-rules/route-rule.service"); return null; }),
   ]);
   // Push EVERY current hostname (empty ruleset = clear), so a deleted/disabled
   // rule stops enforcing without the caller tracking prior state. priorHostnames
@@ -100,7 +101,7 @@ export async function pushProjectRules(
   await Promise.all(
     Array.from(hosts).map((host) =>
       pushHost(serverId, host, map.get(host) ?? [], project?.organizationId).catch((err) =>
-        console.warn(`[route-rules] push failed for ${host}: ${safeErrorMessage(err)}`),
+        errorDiagnostics.warn("platform/engine/modules/route-rules/route-rule.service", `[route-rules] push failed for ${host}: ${safeErrorMessage(err)}`, err),
       ),
     ),
   );

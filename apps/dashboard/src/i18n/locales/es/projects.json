@@ -352,7 +352,7 @@
     "failed": "Fallido",
     "starting": "Iniciando",
     "restarting": "Reiniciando",
-    "unknown": "Desconocido"
+    "unknown": "Estado no disponible"
   },
   "routingRetry": {
     "title": "El enrutamiento del dominio necesita atención",

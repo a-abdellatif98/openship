@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useState } from "react";
 import { Icon } from "@repo/ui/icons";
 import { authClient } from "@/lib/auth-client";
@@ -35,6 +36,7 @@ export function PasskeysSetting() {
       setName("");
       showToast(copy.passkeyAdded, "success", copy.passkeysTitle);
     } catch (error) {
+      observeCaughtError(error, "dashboard/app/(dashboard)/settings/_components/PasskeysSetting");
       showToast(
         error instanceof Error ? error.message : copy.passkeyFailed,
         "error",
@@ -54,6 +56,7 @@ export function PasskeysSetting() {
       setRemoving(null);
       showToast(copy.passkeyRemoved, "success", copy.passkeysTitle);
     } catch (error) {
+      observeCaughtError(error, "dashboard/app/(dashboard)/settings/_components/PasskeysSetting");
       showToast(
         error instanceof Error ? error.message : copy.passkeyFailed,
         "error",

@@ -2,15 +2,20 @@
 
 import { Icon as UiIcon } from "@repo/ui/icons";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient, useSession } from "@/lib/auth-client";
 import { needsTwoFactor } from "@/lib/account-security";
 import { buildAuthPageHref } from "@/lib/cloud-auth";
 import { api } from "@/lib/api";
-import { getApiErrorMessage } from "@/lib/api/client";
+import { getApiErrorMessage, setActiveOrganizationId } from "@/lib/api/client";
 import { useI18n, interpolate } from "@/components/i18n-provider";
+import { InvitationDesktopLink } from "@/components/instance/InvitationDesktopLink";
+import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useDialogFocus } from "@/hooks/useDialogFocus";
 import {
   invitationEmailMatches,
   invitationLoginHref,
@@ -25,12 +30,14 @@ type InviteState =
       kind: "needs-login";
       email: string;
       organizationName: string;
+      role: string;
+      inviterName?: string | null;
       accountCreation: InvitationAccountCreation;
     }
-  | { kind: "ready"; email: string; organizationName: string; role: string }
+  | { kind: "ready"; email: string; organizationName: string; role: string; inviterName?: string | null }
   | { kind: "accepting" }
   | { kind: "accepted"; organizationId: string; organizationName: string }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; wrongAccount?: boolean };
 
 /**
  * Module-level singleton — see TeamTab for the proxy-ref explanation.
@@ -48,6 +55,8 @@ export default function AcceptInvitePage() {
   const { data: session, isPending: sessionLoading } = useSession();
   const { t } = useI18n();
   const m = t.misc.acceptInvite;
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => setDesktop(!!window.desktop?.isDesktop), []);
   const [state, setState] = useState<InviteState>({ kind: "loading" });
   // Inline "create account" form (self-host invite-only). We do NOT send people
   // to a public /register page — the account is created token-bound via
@@ -89,13 +98,15 @@ export default function AcceptInvitePage() {
         const res = await api.get<InvitationPreviewResponse>(
           `auth/invitation-preview/${encodeURIComponent(inviteId)}`,
         );
-        const { invitation, organization, accountCreation } = res.data;
+        const { invitation, organization, inviter, accountCreation } = res.data;
         if (!current()) return;
         if (!session?.user) {
           setState({
             kind: "needs-login",
             email: invitation.email,
             organizationName: organization.name,
+            role: invitation.role,
+            inviterName: inviter?.name,
             accountCreation,
           });
           return;
@@ -103,6 +114,7 @@ export default function AcceptInvitePage() {
         if (!invitationEmailMatches(session.user.email, invitation.email)) {
           setState({
             kind: "error",
+            wrongAccount: true,
             message: interpolate(m.wrongAccount, {
               email: invitation.email,
               currentEmail: session.user.email,
@@ -115,6 +127,7 @@ export default function AcceptInvitePage() {
           email: invitation.email,
           organizationName: organization.name,
           role: invitation.role,
+          inviterName: inviter?.name,
         });
       } catch (err) {
         if (current()) {
@@ -148,18 +161,9 @@ export default function AcceptInvitePage() {
         return;
       }
 
-      // Materialize any pending grants attached to this invitation. The
-      // membership itself remains successful if this best-effort enrichment
-      // fails; an admin can still add grants from the member row.
-      try {
-        await api.post(
-          `permissions/invitations/${encodeURIComponent(inviteId)}/materialize`,
-        );
-      } catch (err) {
-        console.warn("[accept-invite] materialize failed (continuing):", err);
-      }
-
-      if (claimRef.current !== claim) return;
+      // Acceptance commits membership and resource grants together, and selects
+      // the remote session's organization. Keep the API header in the same scope.
+      setActiveOrganizationId(res.data.invitation.organizationId);
       claim.phase = "accepted";
       setState({
         kind: "accepted",
@@ -230,9 +234,8 @@ export default function AcceptInvitePage() {
     await handleAccept(organizationName);
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-6">
-      <div className="w-full max-w-md rounded-2xl border border-border/50 bg-card p-6 space-y-5">
+  const content = (
+      <div className="w-full rounded-2xl bg-card p-6 space-y-5">
         {state.kind === "loading" || sessionLoading ? (
           <div className="flex items-center justify-center py-8">
             <UiIcon name="spinner" className="size-6 animate-spin text-muted-foreground" />
@@ -241,6 +244,7 @@ export default function AcceptInvitePage() {
           <>
             <div>
               <h1 className="text-xl font-semibold text-foreground">{m.invitedTitle}</h1>
+              {state.inviterName && <p className="mt-1 text-sm text-muted-foreground">{interpolate(m.invitedBy, { name: state.inviterName })}</p>}
               <p className="text-sm text-muted-foreground mt-2">
                 {state.accountCreation === "invited" || state.accountCreation === "public"
                   ? <>
@@ -255,7 +259,9 @@ export default function AcceptInvitePage() {
                       email: state.email,
                     })}
               </p>
+              <p className="mt-3 text-sm"><span className="text-muted-foreground">{m.roleLabel}</span> <span className="font-medium">{state.role}</span></p>
             </div>
+            {!showSignup && <InvitationDesktopLink invitationId={inviteId} />}
             {state.accountCreation === "disabled" && (
               <p className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-muted-foreground">
                 {m.accountCreationDisabled}
@@ -273,13 +279,14 @@ export default function AcceptInvitePage() {
                   <label htmlFor="invite-name" className="text-xs font-medium text-muted-foreground">
                     {m.nameLabel}
                   </label>
-                  <input
+                  <Input
                     id="invite-name"
                     type="text"
                     autoComplete="name"
                     value={signupName}
                     onChange={(e) => setSignupName(e.target.value)}
-                    className="w-full rounded-xl border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                    variant="filled"
+                    className="bg-background"
                     required
                   />
                 </div>
@@ -287,13 +294,14 @@ export default function AcceptInvitePage() {
                   <label htmlFor="invite-password" className="text-xs font-medium text-muted-foreground">
                     {m.passwordLabel}
                   </label>
-                  <input
+                  <Input
                     id="invite-password"
                     type="password"
                     autoComplete="new-password"
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
-                    className="w-full rounded-xl border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                    variant="filled"
+                    className="bg-background"
                     minLength={8}
                     required
                   />
@@ -352,6 +360,7 @@ export default function AcceptInvitePage() {
               <h1 className="text-xl font-semibold text-foreground">
                 {interpolate(m.joinTitle, { org: state.organizationName })}
               </h1>
+              {state.inviterName && <p className="mt-1 text-sm text-muted-foreground">{interpolate(m.invitedBy, { name: state.inviterName })}</p>}
               <p className="text-sm text-muted-foreground mt-2">
                 {m.readyPre}
                 <strong>{state.organizationName}</strong>
@@ -360,21 +369,23 @@ export default function AcceptInvitePage() {
                 {m.readyPost}
               </p>
             </div>
+            <InvitationDesktopLink invitationId={inviteId} />
             <div className="flex gap-2">
-              <button
+              <Button
                 type="button"
                 onClick={() => void handleReject()}
-                className="flex-1 py-2.5 border border-border/50 rounded-xl text-sm font-medium hover:bg-muted/40 transition-colors"
+                variant="secondary"
+                className="flex-1"
               >
                 {m.decline}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => void handleAccept(state.organizationName)}
-                className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"
+                className="flex-1"
               >
                 {m.accept}
-              </button>
+              </Button>
             </div>
           </>
         ) : state.kind === "accepting" ? (
@@ -397,6 +408,14 @@ export default function AcceptInvitePage() {
             </div>
             <p className="text-base font-medium text-foreground">{m.errorTitle}</p>
             <p className="text-sm text-muted-foreground">{state.message}</p>
+            {state.wrongAccount && (
+              <Button onClick={() => {
+                void authClient.signOut().then((result) => {
+                  if (result.error) throw new Error(result.error.message ?? m.signInFailed);
+                  window.location.assign(invitationLoginHref(inviteId));
+                }).catch((err) => setState({ kind: "error", wrongAccount: true, message: getApiErrorMessage(err, m.signInFailed) }));
+              }}>{m.switchAccount}</Button>
+            )}
             <Link
               href="/"
               className="mt-2 text-sm font-medium text-primary hover:underline"
@@ -406,6 +425,41 @@ export default function AcceptInvitePage() {
           </div>
         )}
       </div>
+  );
+  return desktop ? (
+    <DesktopInvitationDialog
+      busy={state.kind === "accepting" || signupBusy}
+      onClose={() => {
+        if (claimRef.current.phase !== "accepting" && !signupBusy) router.push("/");
+      }}
+    >
+      {content}
+    </DesktopInvitationDialog>
+  ) : (
+    <div className="min-h-screen flex items-center justify-center bg-background p-6">
+      <div className="w-full max-w-md">{content}</div>
     </div>
+  );
+}
+
+function DesktopInvitationDialog({ children, busy, onClose }: {
+  children: ReactNode;
+  busy: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const { dialog, onKeyDown } = useDialogFocus(onClose);
+  return (
+    <Modal isOpen onClose={onClose} closable={!busy} showCloseButton={false}
+      maxWidth="min(480px, calc(100vw - 32px))" width="100%" maxHeight="90dvh" overflow="auto">
+      <div ref={dialog} role="dialog" aria-modal="true" aria-label={t.misc.acceptInvite.invitedTitle}
+        tabIndex={-1} onKeyDown={onKeyDown} className="relative outline-none [&_h1]:pe-8">
+        <Button type="button" variant="ghost" size="icon" className="absolute end-3 top-3"
+          aria-label={t.settings.common.close} disabled={busy} onClick={onClose}>
+          <UiIcon name="close" />
+        </Button>
+        {children}
+      </div>
+    </Modal>
   );
 }

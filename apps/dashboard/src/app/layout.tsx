@@ -14,6 +14,7 @@ import { getDeploymentInfoOrNull } from "@/lib/server/session";
 import { NetworkErrorHandler } from "@/components/network-error-handler";
 import { ModalProvider } from "@/context/ModalContext";
 import { DesktopChrome } from "@/components/desktop-chrome";
+import { DesktopInstanceLinks } from "@/components/instance/DesktopInstanceLinks";
 import {
   baseDictionary,
   defaultLocale,
@@ -122,6 +123,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={locale} dir={dir} suppressHydrationWarning>
       <head>
         <ThemeScript />
+        {/* Fail closed until the serving API positively identifies Cloud SaaS.
+            Cloud-connected self-hosted and Desktop instances remain disabled. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__OPENSHIP_ERROR_REPORTING__=${!localApiOrigin && deploymentInfo?.selfHosted === false && deploymentInfo.deployMode !== "desktop"};`,
+          }}
+        />
         {/* Set <html lang/dir> from the locale cookie BEFORE paint, so a reload
             in Arabic mirrors immediately even if SSR fell back to default —
             mirrors ThemeScript's no-flash approach. React reconciles the text. */}
@@ -156,6 +164,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <ToastProvider>
                   <ModalProvider>
                     <DesktopChrome />
+                    <DesktopInstanceLinks />
                     <NetworkErrorHandler />
                     {children}
                   </ModalProvider>

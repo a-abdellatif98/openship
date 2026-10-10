@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@repo/ui/icons";
@@ -112,15 +113,21 @@ export function ClusterVolumePanel({
     } catch (reason) {
       setError(getApiErrorMessage(reason));
       // Read after a lost response; never replay a create/delete automatically.
-      await onRefresh().catch(() => {});
+      await onRefresh().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/topology/ClusterVolumePanel");
+      });
       await projectClusterApi
         .get(projectId)
         .then(setProject)
-        .catch(() => {});
+        .catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/components/topology/ClusterVolumePanel");
+        });
       await clusterStorageApi
         .get(clusterId)
         .then(setStorage)
-        .catch(() => {});
+        .catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/components/topology/ClusterVolumePanel");
+        });
     } finally {
       lock.current = false;
       setBusy(false);

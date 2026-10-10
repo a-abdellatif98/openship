@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 import React, { useCallback, useEffect, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
@@ -81,7 +82,7 @@ export function EnvVarsEditor({
       setRows(loaded);
       setBaseline(envState.baseline);
       // Best-effort: which of these keys are managed by a service connection?
-      const conns = await connectionsApi.list(projectId).catch(() => ({ data: [] }));
+      const conns = await connectionsApi.list(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/EnvVarsEditor"); return ({ data: [] }); });
       const map: Record<string, ProjectConnection> = {};
       for (const cn of conns?.data ?? []) map[cn.envKey] = cn;
       setLinked(map);

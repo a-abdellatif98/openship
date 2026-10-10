@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useState } from "react";
@@ -57,7 +58,7 @@ export function AddCustomAppModal({
 
   const onFile = async (f: File | undefined) => {
     if (!f) return;
-    evaluate(await f.text().catch(() => ""));
+    evaluate(await f.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/apps/AddCustomAppModal"); return ""; }));
   };
 
   const submit = async () => {

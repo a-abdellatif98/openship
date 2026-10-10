@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import {
@@ -151,7 +152,8 @@ export function CloudProvider({ children }: { children: ReactNode }) {
       if (contextRef.current !== contextKey || statusRequest.current !== request) return false;
       setStatus({ contextKey, connected: res?.connected ?? false, user: res?.user ?? null });
       return res?.connected === true;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/context/CloudContext");
       if (contextRef.current === contextKey && statusRequest.current === request)
         setStatus({ contextKey, connected: false, user: null });
       return false;
@@ -307,7 +309,8 @@ export function CloudProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       try {
         window.localStorage.setItem(CONNECT_PKCE_STORAGE_PREFIX + flowId, verifier);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/context/CloudContext");
         /* localStorage disabled — fall back to non-PKCE flow */
       }
     }
@@ -356,7 +359,8 @@ export function CloudProvider({ children }: { children: ReactNode }) {
               setConnecting(false);
             }
           }
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/context/CloudContext");
           if (contextRef.current !== contextKey) return;
           errorCount++;
           if (errorCount >= 5) {
@@ -366,7 +370,8 @@ export function CloudProvider({ children }: { children: ReactNode }) {
           }
         }
       }, 2000);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/context/CloudContext");
       if (contextRef.current === contextKey) setConnecting(false);
     }
   }, [checkStatus, contextKey]);
@@ -385,7 +390,7 @@ export function CloudProvider({ children }: { children: ReactNode }) {
         // served over private-LAN HTTP, where browser security APIs differ
         // from HTTPS. Keep the window open with an actionable local error if
         // setup still fails after the PKCE fallback.
-        console.error("Unable to prepare Openship Cloud sign-in", error);
+        errorDiagnostics.error("dashboard/context/CloudContext", "Unable to prepare Openship Cloud sign-in", error);
         handle.navigate(`${window.location.origin}/cloud-connect-callback?setup_error=pkce`);
       });
     handle.onClose(() => checkStatus());

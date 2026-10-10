@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { DeployError, shellQuote } from "@repo/core";
 import type { CommandExecutor } from "../types";
 import type { BuildLogger } from "./build-pipeline";
@@ -398,7 +399,7 @@ export async function probeListeningPortOwners(
   }
 
   const described = await Promise.all(
-    evidence.pids.map((pid) => describeProcess(executor, pid).catch(() => null)),
+    evidence.pids.map((pid) => describeProcess(executor, pid).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/port-conflict"); return null; })),
   );
   const occupants = described.filter((row): row is PortOccupant => row !== null);
   return {
@@ -424,7 +425,8 @@ export async function probeListeningPortState(
       return { occupant: { pid: null, command: "unknown listener" }, checked: true };
     }
     return { occupant: await describeProcess(executor, pid), checked: true };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/runtime/port-conflict");
     return { occupant: null, checked: false };
   }
 }

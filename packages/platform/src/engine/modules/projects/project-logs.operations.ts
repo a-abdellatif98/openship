@@ -1,3 +1,4 @@
+import { observedAllSettled, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { assertCloudProxyScope } from "../../lib/cloud/scope";
 import { repos } from "@repo/db";
 import { AppError, safeErrorMessage } from "@repo/core";
@@ -92,8 +93,8 @@ async function serverLogStreamToken(ctx: ExecutionContext, id: string, input?: S
       // Token mint failed. This is a CLOUD project — do NOT claim "self-hosted"
       // (that sends the client to /server-logs/stream, which 400s for cloud).
       // Report "unavailable" so the client shows recent logs without erroring.
-      console.warn(
-        `[server-logs] cloud stream-token mint failed for ${source.domain}: ${safeErrorMessage(err)}`,
+      errorDiagnostics.warn("platform/engine/modules/projects/project-logs.operations",
+        `[server-logs] cloud stream-token mint failed for ${source.domain}: ${safeErrorMessage(err)}`, err,
       );
       return { kind: "unavailable" as const };
     }
@@ -104,7 +105,7 @@ async function serverLogStreamToken(ctx: ExecutionContext, id: string, input?: S
       // SaaS response-shape change is diagnosable instead of silently degrading.
       const rt = (tokenResult ?? {}) as Record<string, unknown>;
       const inner = (rt.data ?? rt.result ?? rt) as Record<string, unknown> | null;
-      console.warn(
+      errorDiagnostics.warn("platform/engine/modules/projects/project-logs.operations",
         `[server-logs] cloud stream-token unparseable for ${source.domain}; ` +
           `top keys=[${Object.keys(rt).join(",")}] ` +
           `inner keys=[${inner && typeof inner === "object" ? Object.keys(inner).join(",") : ""}]`,
@@ -166,13 +167,13 @@ async function recentServerLogs(ctx: ExecutionContext, id: string, input?: Serve
   if (cloudSources.length) {
     const client = getAdminOblienClient();
     // Settle per-domain: one domain's upstream failure must not blank the others'.
-    const settled = await Promise.allSettled(
+    const settled = await observedAllSettled(
       cloudSources.map(async (s) => {
         const result = client
           ? await client.analytics.requests(s.domain, { limit })
           : await cloudClient({ organizationId }).analytics.requests(s.domain, { limit });
         return tagHost(extractCloudRequestLogs(result), s.domain);
-      }),
+      }), "platform/engine/modules/projects/project-logs.operations",
     );
     for (const r of settled) if (r.status === "fulfilled") collected.push(r.value);
   }
@@ -245,17 +246,19 @@ export const openProjectServerLogs: NonNullable<ProjectDependencies["openServerL
           const paths = await getOpenRestyPaths(serverId, executor);
           await deployLuaScripts(executor, paths);
           luaDeployedServers.add(serverId);
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-logs.operations");
           // Non-fatal: scripts may already be up to date.
         }
       }
       signal?.throwIfAborted();
       let failure = "";
       try { conn = await mgmtStream(serverId, `/logs/stream?domain=${encodeURIComponent(domain)}`); }
-      catch (error) { failure = safeErrorMessage(error); }
+      catch (error) {
+        observeCaughtError(error, "platform/engine/modules/projects/project-logs.operations"); failure = safeErrorMessage(error); }
       signal?.throwIfAborted();
       if (!conn) {
-        const edgeUp = !failure && (await probeMgmt(serverId).catch(() => false));
+        const edgeUp = !failure && (await probeMgmt(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-logs.operations"); return false; }));
         const error = edgeUp
           ? `The Openship edge is running but refused the log stream for ${domain}. Check that this domain is routed through the edge, then retry.`
           : `Couldn't reach the Openship edge's log service on this server${failure ? `: ${failure}` : ""}. Make sure the edge is running (\`docker ps\` should show openship-edge) and redeploy the routing if it isn't.`;
@@ -270,6 +273,7 @@ export const openProjectServerLogs: NonNullable<ProjectDependencies["openServerL
         }
         signal?.throwIfAborted();
       } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/projects/project-logs.operations");
         signal?.throwIfAborted();
         // The existing relay ends on an upstream close/error; it does not invent a frame.
       }

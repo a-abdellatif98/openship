@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { net } from "electron";
 import { Readable } from "node:stream";
 import { isAllowedUpdateAssetUrl } from "./security";
@@ -50,6 +51,7 @@ export async function fetchUpdateAsset(url: string, signal: AbortSignal): Promis
         if (empty) incoming.resume();
         resolve(new Response(body, { status: response.statusCode, headers }));
       } catch (error) {
+        observeCaughtError(error, "desktop/main/update-download");
         stop(error as Error);
       }
     });

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   Oblien as OblienSdk, OblienError, AuthenticationError, ConflictError,
   NotFoundError, PaymentRequiredError, RateLimitError, ValidationError,
@@ -215,8 +216,9 @@ export class Oblien extends OblienSdk {
           ...(request.body === undefined ? {} : { body: JSON.stringify(request.body) }),
           redirect: "error", signal: request.signal ? AbortSignal.any([request.signal, timeout]) : timeout,
         });
-        body = response.status === 204 ? { success: true } : await response.json().catch(() => null);
-      } catch {
+        body = response.status === 204 ? { success: true } : await response.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/oblien"); return null; });
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/oblien");
         request.signal?.throwIfAborted();
         throw new OblienError("Oblien is temporarily unreachable. Retry the operation.", 503, "OBLIEN_UNAVAILABLE");
       }

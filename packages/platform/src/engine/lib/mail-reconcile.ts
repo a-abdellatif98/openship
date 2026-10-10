@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   dockerAvailable,
   detectMailContainer,
@@ -45,12 +46,12 @@ export async function reconcileServerMail(
     domain: string;
   },
 ): Promise<{ updated: boolean; mailDown: boolean; ran: boolean; error?: string }> {
-  if (!(await dockerAvailable(executor).catch(() => false))) {
+  if (!(await dockerAvailable(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/mail-reconcile"); return false; }))) {
     return { updated: false, mailDown: false, ran: false };
   }
 
   // Only reconcile a LIVE engine — see the swap-only rationale above.
-  const detected = await detectMailContainer(executor).catch(() => null);
+  const detected = await detectMailContainer(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/mail-reconcile"); return null; });
   if (!detected?.running) {
     return { updated: false, mailDown: false, ran: false };
   }
@@ -73,6 +74,7 @@ export async function reconcileServerMail(
       ran: true,
     };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/mail-reconcile");
     const error = safeErrorMessage(err);
     opts.onLog({
       timestamp: new Date().toISOString(),
@@ -114,12 +116,12 @@ export async function repairServerMail(
   const warn = (message: string) =>
     opts.onLog({ timestamp: new Date().toISOString(), level: "warn", message });
 
-  const probe = await detectMailEngine(executor).catch(() => null);
+  const probe = await detectMailEngine(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/mail-reconcile"); return null; });
 
   if (!probe || probe.flavor === "none") {
     // Separate "no engine here" from "we couldn't look": with Docker unreachable
     // the container probe can't conclude, and blaming mail setup would be wrong.
-    const docker = await dockerAvailable(executor).catch(() => false);
+    const docker = await dockerAvailable(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/mail-reconcile"); return false; });
     const reason = docker
       ? "There is no mail engine on this server — run mail setup on it first."
       : "Docker isn't available on this server, so the mail engine can't be started.";
@@ -147,6 +149,7 @@ export async function repairServerMail(
     }
     return { started: true, mailDown: false };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/mail-reconcile");
     const reason = safeErrorMessage(err);
     warn(`Could not start the mail engine (${reason}).`);
     return { started: false, mailDown: true, reason };

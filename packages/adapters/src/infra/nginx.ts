@@ -15,6 +15,7 @@
  * ```
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   access as fsAccess,
   writeFile as fsWriteFile,
@@ -533,7 +534,7 @@ function headerEntries(
     rule.headers.map((header) => ({
       rule,
       header,
-      variable: rule.path === "/" ? null : `${prefix}_${n++}`,
+      variable: rule.path === "/" && !rule.exact ? null : `${prefix}_${n++}`,
     })),
   );
 }
@@ -562,7 +563,7 @@ function renderHeaderMaps(route: RouteConfig, slug: string): string {
     assertValidHeader(e.header.key, e.header.value);
     return `map $request_uri $${e.variable} {
     default "";
-    ~^${escapeLiteralPath(e.rule.path)} "${e.header.value.replace(/"/g, '\\"')}";
+    ~^${escapeLiteralPath(e.rule.path)}${e.rule.exact ? "(?:\\?|$)" : ""} "${e.header.value.replace(/"/g, '\\"')}";
 }`;
   });
   return `${blocks.join("\n")}\n`;
@@ -849,7 +850,8 @@ function assertValidAcmeOptions(opts: NginxProviderOptions): void {
     let directory: URL;
     try {
       directory = new URL(opts.acmeDirectoryUrl);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/infra/nginx");
       throw new Error("ACME directory must be a valid http(s) URL");
     }
     if (directory.protocol !== "https:" && directory.protocol !== "http:") {
@@ -1350,7 +1352,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
           await this.executor.exec(`mv ${sq(tmpPath)} ${sq(path)}`);
         }
       } catch (err) {
-        await this.executor.rm(tmpPath).catch(() => undefined);
+        await this.executor.rm(tmpPath).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
         throw err;
       }
     } else {
@@ -1361,7 +1363,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
         await fsWriteFile(tmpPath, content, { encoding: "utf-8", mode });
         await fsRename(tmpPath, path);
       } catch (err) {
-        await fsRm(tmpPath).catch(() => undefined);
+        await fsRm(tmpPath).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
         throw err;
       }
     }
@@ -1455,7 +1457,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
   private async _readlink(path: string): Promise<string | null> {
     const link = await (
       this.executor ? this.executor.exec(`readlink ${sq(path)} 2>/dev/null`) : fsReadlink(path)
-    ).catch(() => "");
+    ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return ""; });
     return link.trim() || null;
   }
 
@@ -1513,7 +1515,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
         for (const name of names) await fsRename(join(staging, name), join(dir, name));
       }
     } finally {
-      await this._rm(staging).catch(() => undefined);
+      await this._rm(staging).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
     }
   }
 
@@ -1572,7 +1574,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
     // default cert dir is under /etc/letsencrypt, which qualifies; this guards the
     // configuration, and HTTP-only is the honest answer when it doesn't.
     if (!this._sharesHostNamespace(dir)) {
-      console.warn(
+      errorDiagnostics.warn("adapters/infra/nginx",
         `[SSL] not creating a temporary certificate for ${domain}: ${dir} is not the same path ` +
           `inside the edge container as on the host, so OpenResty could not read the key — ` +
           `serving HTTP only until a real certificate is issued.`,
@@ -1584,7 +1586,8 @@ export class NginxProvider implements RoutingProvider, SslProvider {
       if ((await this._exists(certPath)) && (await this._exists(keyPath))) {
         return { certPath, keyPath };
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/infra/nginx");
       return null;
     }
 
@@ -1629,13 +1632,13 @@ export class NginxProvider implements RoutingProvider, SslProvider {
       }
       return { certPath, keyPath };
     } catch (err) {
-      console.warn(
+      errorDiagnostics.warn("adapters/infra/nginx",
         `[SSL] could not create a temporary certificate for ${domain} — serving HTTP only until ` +
-          `a real certificate is issued (is openssl installed on the edge?): ${safeErrorMessage(err)}`,
+          `a real certificate is issued (is openssl installed on the edge?): ${safeErrorMessage(err)}`, err,
       );
       return null;
     } finally {
-      await this._rm(staging).catch(() => undefined);
+      await this._rm(staging).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
     }
   }
 
@@ -1652,6 +1655,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
       const { stdout } = await execFileAsync(command, args);
       return stdout;
     } catch (err) {
+      observeCaughtError(err, "adapters/infra/nginx");
       // execFile's error carries stdout/stderr as props but NOT in .message
       // ("Command failed: certbot …"). Fold them in so the caller (and the
       // certbot summarizer) sees the real output, not just the exit boilerplate.
@@ -1699,7 +1703,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
     // A file IS its own index; a directory needs index.html to serve at that path.
     const isFile = await fsStat(servedPath)
       .then((s) => s.isFile())
-      .catch(() => false);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return false; });
     const hasIndex = isFile || (await this._exists(join(servedPath, "index.html")));
     return { found: true, hasIndex, checked: true };
   }
@@ -1775,7 +1779,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
       );
     } catch (err) {
       // A partial write must not leave key material behind (git-ssh-material rule).
-      await this._rm(dir).catch(() => undefined);
+      await this._rm(dir).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
       throw err;
     }
     return path;
@@ -1798,7 +1802,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
         await this._writeFile(cleanupPath, opts.dnsCleanupHookScript, 0o700);
       }
     } catch (err) {
-      await this._rm(dir).catch(() => undefined);
+      await this._rm(dir).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
       throw err;
     }
     const recordEnv = `OPENSHIP_DNS_RECORD_FILE=${sq(recordPath)}`;
@@ -1848,12 +1852,13 @@ export class NginxProvider implements RoutingProvider, SslProvider {
       // One failed restore must not prevent restoration of the other files.
       for (const { path, snapshot } of snapshots) {
         await this._restoreFile(path, snapshot).catch((err) => {
+          observeCaughtError(err, "adapters/infra/nginx");
           failures.push(`${path}: ${safeErrorMessage(err)}`);
         });
       }
       // Never reload a partially restored configuration.
       if (!failures.length) {
-        await this.reload().catch((err) => failures.push(safeErrorMessage(err)));
+        await this.reload().catch((err) => { observeCaughtError(err, "adapters/infra/nginx"); return failures.push(safeErrorMessage(err)); });
       }
       if (failures.length) {
         throw new Error(`${safeErrorMessage(error)}; rollback failed: ${failures.join("; ")}`, {
@@ -2168,7 +2173,7 @@ ${serveLocation}
     // OpenResty is still reading the bootstrap paths, and removing them first would
     // break TLS for the domain on the next unrelated reload.
     if (!bootstrapServed) {
-      await this._rm(this.bootstrapCertDir(route.domain)).catch(() => undefined);
+      await this._rm(this.bootstrapCertDir(route.domain)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
     }
 
     // The full RouteConfig sidecar was committed with the vhost above, so TLS
@@ -2224,6 +2229,7 @@ ${serveLocation}
     try {
       entries = await this._lsSites();
     } catch (err) {
+      observeCaughtError(err, "adapters/infra/nginx");
       return { scanned: 0, repaired, failed: [{ slug: "*", reason: safeErrorMessage(err) }] };
     }
 
@@ -2234,14 +2240,14 @@ ${serveLocation}
     // Which confs are behind, asked in ONE command rather than one read per route: on a
     // remote box every read is a round trip, and this runs on the deploy path, so reading
     // 50 vhosts to discover that all 50 are current would put seconds on every deploy.
-    const stale = await this._staleVhostSlugs().catch(() => null);
+    const stale = await this._staleVhostSlugs().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return null; });
 
     for (const slug of slugs) {
       if (stale && !stale.has(slug)) continue;
       try {
         // A sidecar whose conf is gone is not a route: removeRoute deletes both, and
         // writing one back would resurrect a vhost an operator removed.
-        const conf = await this._readFile(join(this.sitesDir, `${slug}.conf`)).catch(() => null);
+        const conf = await this._readFile(join(this.sitesDir, `${slug}.conf`)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return null; });
         if (conf === null) continue;
         const gen = readVhostGeneration(conf);
         if (gen !== null && gen >= VHOST_GENERATION) continue;
@@ -2254,6 +2260,7 @@ ${serveLocation}
         await this.registerRoute(saved);
         repaired.push(saved.domain);
       } catch (err) {
+        observeCaughtError(err, "adapters/infra/nginx");
         failed.push({ slug, reason: safeErrorMessage(err) });
       }
     }
@@ -2371,12 +2378,12 @@ ${serveLocation}
         if (!opts?.signal?.aborted) await this._restoreFile(configPath, confSnapshot);
         if (!opts?.signal?.aborted) await this._restoreFile(statePath, stateSnapshot);
         if (!opts?.signal?.aborted) {
-          await this.reload({ allowStopped: true }).catch(() => undefined);
+          await this.reload({ allowStopped: true }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
         }
       } finally {
         if (opts?.signal?.aborted) {
-          await this._rm(configPath).catch(() => undefined);
-          await this._rm(statePath).catch(() => undefined);
+          await this._rm(configPath).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
+          await this._rm(statePath).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
         }
       }
       throw err;
@@ -2385,7 +2392,7 @@ ${serveLocation}
     // Nothing references the placeholder cert once the vhost is gone. Real certs
     // in certbot's tree are deliberately left alone (a re-add reuses them); this
     // material is disposable by construction.
-    await this._rm(this.bootstrapCertDir(domain)).catch(() => undefined);
+    await this._rm(this.bootstrapCertDir(domain)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
   }
 
   // ── Edge-target challenge ────────────────────────────────────────────
@@ -2661,7 +2668,7 @@ ${serveLocation}
       // is an optional embellishment — no executor simply means no name to add.
       if (isAcmePortBindFailure(raw) && this.executor) {
         const occupant = await probeListeningPort(this.executor, ACME_HTTP01_PORT).catch(
-          () => null,
+          (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return null; },
         );
         if (occupant) {
           summary +=
@@ -2675,8 +2682,8 @@ ${serveLocation}
     } finally {
       // Remove the whole 0700 directory, not just the ini — one unit, like
       // git-ssh-material's cleanup.
-      if (eabConfig) await this._rm(dirname(eabConfig)).catch(() => undefined);
-      if (generatedDnsHooks) await this._rm(generatedDnsHooks.dir).catch(() => undefined);
+      if (eabConfig) await this._rm(dirname(eabConfig)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
+      if (generatedDnsHooks) await this._rm(generatedDnsHooks.dir).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return undefined; });
     }
 
     // An imported pair keeps its served path while Certbot issues into a free
@@ -2870,7 +2877,7 @@ ${serveLocation}
 
   private async hasCertbotLineage(domain: string): Promise<boolean> {
     const record = parseCertbotRenewalConfig(
-      await this._readFile(this.renewalConfPath(domain)).catch(() => ""),
+      await this._readFile(this.renewalConfPath(domain)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/infra/nginx"); return ""; }),
     );
     if (!record) return false;
     const archive = record.archiveDir ?? join(dirname(this.certDir), "archive", domain);
@@ -2943,7 +2950,8 @@ ${serveLocation}
         if (candidate.cert && (!best || candidate.cert.expiresAt > best.expiresAt)) {
           best = { name, expiresAt: candidate.cert.expiresAt };
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/infra/nginx");
         /* An unreadable sibling is not an adoptable certificate. */
       }
     }
@@ -2964,6 +2972,7 @@ ${serveLocation}
         keyPem: await this._readFile(join(dir, "privkey.pem")),
       };
     } catch (error) {
+      observeCaughtError(error, "adapters/infra/nginx");
       throw new Error(
         `Cannot read the issued certificate for ${domain} at ${dir}: ${safeErrorMessage(error)}`,
       );
@@ -2985,7 +2994,8 @@ ${serveLocation}
     let conf: string;
     try {
       conf = await this._readFile(this.renewalConfPath(domain));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/infra/nginx");
       return true;
     }
     const recorded = parseCertbotRenewalConfig(conf)?.server;
@@ -3150,7 +3160,8 @@ ${serveLocation}
           // re-gate a directive the box already supports.
           this.nginxVersion = freshPaths.nginxVersion ?? this.nginxVersion;
           this.reloadCommand = buildReloadCommand(freshPaths);
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/infra/nginx");
           // Detection failed - fall through with current cached paths
         }
       }
@@ -3190,7 +3201,8 @@ ${serveLocation}
     try {
       await fsReadFile(certPath);
       return true;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/infra/nginx");
       return false;
     }
   }
@@ -3211,7 +3223,8 @@ ${serveLocation}
     try {
       certPem = await this._readFile(join(this.certDir, domain, "fullchain.pem"));
       keyPem = await this._readFile(join(this.certDir, domain, "privkey.pem"));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/infra/nginx");
       // The file exists but couldn't be read (SSH blip, permissions, partial
       // write). Transient — the caller must NOT treat this as "no cert".
       return { domain, expiresAt: "", issuer: "certbot", verified: false, reason: "read_error" };
@@ -3228,7 +3241,7 @@ ${serveLocation}
       // Logged because `reason` is a fixed enum: without this line the operator sees
       // "provisioning" with no way to learn the cert on disk is expired vs. for the
       // wrong name — two problems with very different fixes.
-      console.warn(`[SSL] unusable cert on disk for ${domain}: ${candidate.reason}`);
+      errorDiagnostics.warn("adapters/infra/nginx", `[SSL] unusable cert on disk for ${domain}: ${candidate.reason}`);
       return { domain, expiresAt: "", issuer: "certbot", verified: false, reason: "invalid" };
     }
     return {
@@ -3321,6 +3334,7 @@ ${geoEntries.join("\n")}
         await this._restoreFile(nginxConfPath, snapshots.nginx);
         await this.reload();
       } catch (restoreErr) {
+        observeCaughtError(restoreErr, "adapters/infra/nginx");
         rollbackError = safeErrorMessage(restoreErr);
       }
 
@@ -3369,7 +3383,8 @@ ${geoEntries.join("\n")}
       }
 
       return { rps, burst, whitelist };
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/infra/nginx");
       return null;
     }
   }

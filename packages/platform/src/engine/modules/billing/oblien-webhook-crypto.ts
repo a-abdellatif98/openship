@@ -13,6 +13,7 @@
  * payload so distinct updates in the same period are not lost.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHmac, createHash, timingSafeEqual } from "node:crypto";
 
 export interface SignatureCheck {
@@ -68,7 +69,8 @@ export function verifyOblienSignature(
       Buffer.from(provided, "hex"),
     );
     return equal ? { ok: true } : { ok: false, reason: "bad_signature" };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/billing/oblien-webhook-crypto");
     // Buffer.from on a non-hex string throws lazily on some inputs —
     // treat as a mismatch rather than a 500.
     return { ok: false, reason: "bad_signature" };

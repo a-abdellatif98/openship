@@ -16,6 +16,7 @@
  * corruption path (API crash-looping) is handled entirely by the CLI.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { db, getDriver, sql, count, eq, schema } from "@repo/db";
 import { hostChannelHealth, type HostChannelHealth } from "@repo/adapters";
 import {
@@ -90,6 +91,7 @@ export async function inspectSystemHealth() {
     dbOk = true;
     latencyMs = Math.round(performance.now() - started);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/system/system-health");
     dbError = safeErrorMessage(err);
   }
 
@@ -105,7 +107,8 @@ export async function inspectSystemHealth() {
       const rows = (Array.isArray(res) ? res : (res as { rows?: unknown[] }).rows) ?? [];
       const n = (rows[0] as { n?: number } | undefined)?.n;
       if (typeof n === "number") migrationsApplied = n;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/system-health");
       /* migrations table absent / driver shape mismatch — leave null */
     }
   }
@@ -123,13 +126,15 @@ export async function inspectSystemHealth() {
         .from(schema.project)
         .where(eq(schema.project.isApp, true));
       projects = { total: Number(total), apps: Number(apps) };
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/system-health");
       /* best-effort */
     }
     try {
       const [{ total }] = await db.select({ total: count() }).from(schema.service);
       servicesConfigured = Number(total);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/system-health");
       /* best-effort */
     }
   }
@@ -149,7 +154,8 @@ export async function inspectSystemHealth() {
   } else if (!env.CLOUD_MODE) {
     try {
       hostChannel = reportHostChannel(await hostChannelHealth());
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/system-health");
       /* diagnostic failed — say nothing rather than blame the host */
     }
   }

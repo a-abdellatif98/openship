@@ -14,6 +14,7 @@
  * in the SSL status pill on the next read.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos, normalizeRoutingFields, type Domain, type Project } from "@repo/db";
 import {
@@ -209,7 +210,7 @@ export async function addDomain(
   const redirect = normalizeRedirect(data);
   if (redirect.redirectTo) {
     assertRedirectSupported({ isCloudProject: !!(project?.workspaceId), hostname });
-    const peers = await repos.domain.listByProject(data.projectId).catch(() => []);
+    const peers = await repos.domain.listByProject(data.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return []; });
     assertRedirectTargets([
       ...peers
         .filter((peer) => peer.hostname.toLowerCase() !== hostname)
@@ -401,7 +402,7 @@ async function addWwwSibling(
     return { www: { id: result.domain.id, hostname: result.domain.hostname } };
   } catch (err) {
     const message = safeErrorMessage(err);
-    console.warn(`[domains] ${www} not added: ${message}`);
+    errorDiagnostics.warn("platform/engine/modules/domains/domain.service", `[domains] ${www} not added: ${message}`, err);
     return { wwwError: `${www} couldn't be added: ${message}` };
   }
 }
@@ -675,21 +676,21 @@ async function edgeHostUnreachable(ctx: RequestContext, project: Project): Promi
   if (!serverId) return false;
   const server = await repos.server
     .getInOrganization(serverId, ctx.organizationId)
-    .catch(() => null);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return null; });
   if (!server?.isLocal) return false;
   return (
     sshManager
       .withHostExecutor(
         async (exec) =>
-          (await exec.exists("/.dockerenv").catch(() => false)) ||
-          (await exec.exists("/run/.containerenv").catch(() => false)),
+          (await exec.exists("/.dockerenv").catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return false; })) ||
+          (await exec.exists("/run/.containerenv").catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return false; })),
       )
       // Acquiring the host channel THROWS when the API is containerized with no
       // channel provisioned — which is precisely this function's "unreachable" case,
       // so it must answer TRUE. Answering false would let verify march on to a
       // certbot attempt that fails far from the cause, instead of surfacing
       // HOST_CHANNEL_HINT below.
-      .catch(() => true)
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return true; })
   );
 }
 
@@ -741,7 +742,7 @@ export async function reuseServerCertForDomain(
     // Can't reach the host from inside the container → nothing to reuse here; the
     // manual Verify surfaces the actionable host-channel hint.
     if (await edgeHostUnreachable(ctx, project)) {
-      console.warn(`[DOMAIN] cert reuse skipped for ${domain.hostname}: ${HOST_CHANNEL_HINT}`);
+      errorDiagnostics.warn("platform/engine/modules/domains/domain.service", `[DOMAIN] cert reuse skipped for ${domain.hostname}: ${HOST_CHANNEL_HINT}`);
       return false;
     }
 
@@ -776,7 +777,7 @@ export async function reuseServerCertForDomain(
     //    provider (host-anchored for the local server-host).
     const existing = await verifyExistingCert(domain.hostname, {
       projectId: domain.projectId ?? undefined,
-    }).catch(() => null);
+    }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return null; });
     if (existing?.verified) {
       await markDomainVerifiedActive(domain, domainId, {
         issuer: existing.issuer,
@@ -803,7 +804,7 @@ export async function reuseServerCertForDomain(
           rejections.push(candidate.reason);
         }
         return null;
-      }).catch(() => null);
+      }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return null; });
       if (hostCert) {
         await installReused(hostCert);
         return true;
@@ -820,7 +821,7 @@ export async function reuseServerCertForDomain(
       if (candidate.cert) return candidate.cert;
       rejections.push(candidate.reason);
       return null;
-    }).catch(() => null);
+    }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return null; });
     if (fromProxy) {
       await installReused(fromProxy);
       return true;
@@ -830,11 +831,11 @@ export async function reuseServerCertForDomain(
     // silent fallthrough to ACME looks identical to "there was no cert", and these
     // are the two cases an operator debugging a pending domain needs to tell apart.
     if (rejections.length > 0) {
-      console.warn(`[DOMAIN] no reusable cert for ${domain.hostname}: ${rejections.join("; ")}`);
+      errorDiagnostics.warn("platform/engine/modules/domains/domain.service", `[DOMAIN] no reusable cert for ${domain.hostname}: ${rejections.join("; ")}`);
     }
     return false;
   } catch (err) {
-    console.error(`[DOMAIN] cert reuse failed for ${domainId}:`, safeErrorMessage(err));
+    errorDiagnostics.error("platform/engine/modules/domains/domain.service", `[DOMAIN] cert reuse failed for ${domainId}:`, safeErrorMessage(err), err);
     return false;
   }
 }
@@ -966,10 +967,10 @@ async function checkDomain(
     if (serverId) {
       const server = await repos.server
         .getInOrganization(serverId, ctx.organizationId)
-        .catch(() => null);
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return null; });
       if (server && !server.isLocal) {
         log(`Connecting to ${server.name || server.sshHost || "the server"}…`);
-        const reachable = await sshManager.probeReachable(serverId).catch(() => false);
+        const reachable = await sshManager.probeReachable(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return false; });
         if (!reachable) {
           const message = `Can't reach ${server.sshHost || "the server"} over SSH — check it's online and reachable, then Verify again.`;
           log(message);
@@ -997,7 +998,7 @@ async function checkDomain(
       const existing = await verifyExistingCert(domain.hostname, {
         projectId: domain.projectId ?? undefined,
         activate: true,
-      }).catch(() => null);
+      }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return null; });
       const daysLeft = existing?.expiresAt
         ? (new Date(existing.expiresAt).getTime() - Date.now()) / 86_400_000
         : -1;
@@ -1067,6 +1068,7 @@ async function checkDomain(
         message,
       };
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/domains/domain.service");
       // summarizeCertbotFailure (adapters) already mapped this to the real cause
       // — DNS not resolving, :80 firewalled, or a proxy 404. Surface it verbatim.
       const message = safeErrorMessage(err);
@@ -1137,15 +1139,15 @@ async function checkDomain(
             `[DOMAIN] HTTPS certificate issued for ${domain.hostname}${result.expiresAt ? ` (expires ${new Date(result.expiresAt).toISOString().slice(0, 10)})` : ""}`,
           );
         } else {
-          console.warn(
+          errorDiagnostics.warn("platform/engine/modules/domains/domain.service",
             `[DOMAIN] HTTPS provisioning completed but cert not verified for ${domain.hostname}`,
           );
         }
       })
       .catch((err) => {
-        console.error(
+        errorDiagnostics.error("platform/engine/modules/domains/domain.service",
           `[DOMAIN] Background SSL provisioning failed for ${domain.hostname}:`,
-          safeErrorMessage(err),
+          safeErrorMessage(err), err,
         );
       }));
 
@@ -1196,14 +1198,14 @@ async function removeLiveDomain(ctx: RequestContext, domain: Domain, project: Pr
     // local orchestrator's OpenResty — reconcileProjectRoutes resolves the
     // deployment's own runtime and handles the cloud case.
     const deployment = project.activeDeploymentId
-      ? await findActiveDeployment(project).catch(() => null)
+      ? await findActiveDeployment(project).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return null; })
       : null;
     await reconcileProjectRoutes(project, {
       deployment,
       removes: [{ hostname: domain.hostname, isCustomDomain: domain.domainType === "custom" }],
     });
   } catch (err) {
-    console.error(`[DOMAIN] Failed to remove route for ${domain.hostname}:`, err);
+    errorDiagnostics.error("platform/engine/modules/domains/domain.service", `[DOMAIN] Failed to remove route for ${domain.hostname}:`, err);
     if (project.workspaceId) {
       throw new AppError("Could not remove the cloud route. The domain was kept so you can retry.", 502, "CLOUD_ROUTE_REMOVAL_FAILED");
     }
@@ -1221,11 +1223,11 @@ async function removeLiveDomain(ctx: RequestContext, domain: Domain, project: Pr
   const released = await releaseRecords(ctx.organizationId, domain.hostname, [
     domain.hostname,
     `_openship-challenge.${domain.hostname}`,
-  ]).catch((err: unknown) => ({ deleted: 0, reason: safeErrorMessage(err) }));
+  ]).catch((err: unknown) => { observeCaughtError(err, "platform/engine/modules/domains/domain.service"); return ({ deleted: 0, reason: safeErrorMessage(err) }); });
   if (released.reason) {
     // Not fatal: a domain must stay removable from Openship when the provider is
     // unreachable. An orphan record is visible in the zone; a blocked delete isn't.
-    console.warn(`[dns] could not fully clean up records for ${domain.hostname}:`, released.reason);
+    errorDiagnostics.warn("platform/engine/modules/domains/domain.service", `[dns] could not fully clean up records for ${domain.hostname}:`, released.reason);
   }
 
   // ── Release the Cloud edge route BEFORE dropping the row ─────────────────────
@@ -1465,7 +1467,7 @@ async function issuePendingSsl(
   organizationId?: string,
   contextFor?: DomainBatchContext,
 ): Promise<{ issued: number; retrying: number }> {
-  const rows = await repos.domain.findPendingSsl(limit, organizationId).catch(() => []);
+  const rows = await repos.domain.findPendingSsl(limit, organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return []; });
   let issued = 0;
   let retrying = 0;
 
@@ -1483,13 +1485,14 @@ async function issuePendingSsl(
             action: "provision",
             projectId: project.id,
           });
-          const after = await repos.domain.findById(domain.id).catch(() => null);
+          const after = await repos.domain.findById(domain.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return null; });
           if (result.verified && result.expiresAt && after?.sslStatus === "active") {
             issued++;
           } else {
             retrying++;
           }
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service");
           retrying++;
         }
       },
@@ -1564,6 +1567,7 @@ export async function verifyPendingDomains(opts?: {
             });
           }
         } catch (err) {
+          observeCaughtError(err, "platform/engine/modules/domains/domain.service");
           result.failed++;
           const message = safeErrorMessage(err);
           result.details.push({
@@ -1578,7 +1582,7 @@ export async function verifyPendingDomains(opts?: {
 
   // Phase 2, same sweep: verified domains whose cert never landed.
   const ssl = await issuePendingSsl(limit, opts?.organizationId, contextFor)
-    .catch(() => ({ issued: 0, retrying: 0 }));
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return ({ issued: 0, retrying: 0 }); });
   result.sslIssued = ssl.issued;
   result.sslRetrying = ssl.retrying;
 
@@ -1604,6 +1608,7 @@ export async function renewOrgCerts(ctx: RequestContext, contextFor?: DomainBatc
           await renewDomainSsl(context, d.id);
           results.push({ domain: d.hostname, status: "renewed" });
         } catch (err) {
+          observeCaughtError(err, "platform/engine/modules/domains/domain.service");
           results.push({ domain: d.hostname, status: "failed", error: safeErrorMessage(err) });
         }
       }
@@ -1649,7 +1654,8 @@ async function verifyCname(hostname: string): Promise<boolean> {
     const cloud = platform().routing as CloudInfraProvider;
     const result = await cloud.verifyDomain(hostname);
     return result.cname;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service");
     return false;
   }
 }
@@ -1749,7 +1755,8 @@ async function buildRecords(
       const cloud = platform().routing as CloudInfraProvider;
       const result = await cloud.verifyDomain(hostname);
       cnameTarget = result.requiredRecords.cname.target;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service");
       /* Oblien unreachable */
     }
 
@@ -1791,7 +1798,7 @@ async function buildRecords(
   // server, else this org's "This Server" row for the pre-deploy preview.
   let serverIp =
     targetServerId && organizationId
-      ? await resolveServerHost(organizationId, targetServerId).catch(() => null)
+      ? await resolveServerHost(organizationId, targetServerId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return null; })
       : ((await resolveProjectServerHost(project)) ??
         (organizationId ? await resolveLocalServerHost(organizationId) : null));
   // A loopback is the local row's display host when no public IP was known at
@@ -1799,7 +1806,7 @@ async function buildRecords(
   // (user-initiated, off-hot-path) preview; leave EMPTY so the UI shows a
   // placeholder rather than a dead `127.0.0.1` the operator would copy verbatim.
   if ((!serverIp || isLoopbackHost(serverIp)) && !targetServerId) {
-    const detected = await resolveInstancePublicIp().catch(() => null);
+    const detected = await resolveInstancePublicIp().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return null; });
     serverIp = detected && !isLoopbackHost(detected) ? detected : null;
   }
   if (isLoopbackHost(serverIp)) serverIp = null;

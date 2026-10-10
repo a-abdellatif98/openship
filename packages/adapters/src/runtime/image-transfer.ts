@@ -12,6 +12,7 @@
  * No extra compression: `docker save` layers are already gzip-compressed.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Transform } from "node:stream";
 import type { DockerRuntime } from "./docker";
 
@@ -42,7 +43,9 @@ export async function transferImage(
   opts?.signal?.throwIfAborted();
   opts?.log?.(`saving ${image.tag} (${image.id.slice(0, 19)})`);
   const { stdout, awaitExit } = await src.saveImage(image.id);
-  void awaitExit.catch(() => {});
+  void awaitExit.catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "adapters/runtime/image-transfer");
+  });
 
   let bytesMoved = 0;
   const counter = new Transform({
@@ -57,10 +60,10 @@ export async function transferImage(
   // source failure during that window (which triggers counter.destroy(err) via the
   // bridge below) isn't an unhandled 'error' event that crashes the process. The
   // destroy still tears the stream down, so `docker load` aborts non-zero as intended.
-  counter.on("error", () => {});
+  counter.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/runtime/image-transfer"); });
   // pipe() does not forward source errors — bridge them so `docker load` aborts
   // instead of hanging on a stream that will never complete.
-  stdout.on("error", (err) => counter.destroy(err));
+  stdout.on("error", (err) => { observeCaughtError(err, "adapters/runtime/image-transfer"); return counter.destroy(err); });
   stdout.pipe(counter);
   const abort = () => {
     counter.destroy(new Error("Image transfer cancelled"));

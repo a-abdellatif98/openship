@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import {
   AppError,
@@ -62,6 +63,7 @@ export function createProjectClusterOperations(
         });
         result.observedAt = new Date().toISOString();
       } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/projects/project-cluster.operations");
         result.error = safeErrorMessage(error);
       }
     }

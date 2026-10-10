@@ -1,3 +1,4 @@
+import { observedAllSettled, reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { ManagedCommandRef } from "@repo/core";
 
@@ -18,7 +19,9 @@ export async function withManagedCommandTracking<T>(hooks: ManagedCommandTrackin
     ...hooks,
     defer(completion) {
       pending.add(completion);
-      void completion.catch(() => {});
+      void completion.catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/command-tracking");
+      });
     },
   }, async () => {
     try {
@@ -28,7 +31,7 @@ export async function withManagedCommandTracking<T>(hooks: ManagedCommandTrackin
       while (pending.size) {
         const batch = [...pending];
         pending.clear();
-        for (const result of await Promise.allSettled(batch))
+        for (const result of await observedAllSettled(batch, "adapters/runtime/cloud/command-tracking"))
           if (result.status === "rejected") failures.push(result.reason);
       }
       if (failures.length) throw failures[0];

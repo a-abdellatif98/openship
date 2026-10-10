@@ -1,4 +1,5 @@
 /** Explicit CLI composition. Project directories never auto-load executable configuration. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { realpath } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { extname, resolve } from "node:path";
@@ -54,7 +55,9 @@ export function initializeNativeClient(configPath: string, userAgent: string): P
 export function closeNativeClient(): Promise<void> {
   closeRequested = true;
   return closing ??= (async () => {
-    await initialization?.catch(() => {});
+    await initialization?.catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "cli/lib/native-client");
+    });
     await session?.ship.close();
     session = undefined;
   })().catch(error => { closing = undefined; throw error; });

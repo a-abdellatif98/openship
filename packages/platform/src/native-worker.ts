@@ -1,4 +1,6 @@
 /** Node worker entry, never imported by the public host facade. No HTTP application or listener. */
+import { observedAllSettled, reportCaughtError as observeCaughtError, reportError, errorReporter, diagnosticId, type ErrorContext } from "@repo/core/diagnostics";
+import { installNodeErrorReporting, withErrorContext } from "@repo/core/diagnostics/node";
 import { parentPort, workerData } from "node:worker_threads";
 import type { NativePlatformOptions } from "./native-config";
 import type { ExecutionContext } from "./context";
@@ -22,6 +24,7 @@ import { AppCollectionSchemas, AppResourceSchemas, BackupDestinationCollectionSc
 import { OperationError, ProjectControlSchemas, ServiceCollectionSchemas, ServiceResourceSchemas, DomainCollectionSchemas, DomainResourceSchemas, DomainScopedSchemas, DnsOperationSchemas, CredentialCollectionSchemas, CredentialResourceSchemas, ServerCollectionSchemas, ServerResourceSchemas, type ServerLogsInput, type InstallServerComponentsInput, type ServerInstallSessionInput } from "@repo/contracts";
 
 if (!parentPort) throw new Error("The native engine must run in an owned worker");
+installNodeErrorReporting("worker");
 const port = parentPort;
 const { options } = workerData as { options: NativePlatformOptions };
 type Command = { id: number; operation: string; args: unknown[] };
@@ -50,7 +53,8 @@ try {
     // deliberately leaves them alone while other calls may still use them.
     for (const layer of new Set(Object.values(instance))) {
       if (layer && typeof layer === "object" && "dispose" in layer && typeof layer.dispose === "function") {
-        try { await layer.dispose(); } catch (error) { errors.push(error); }
+        try { await layer.dispose(); } catch (error) {
+          observeCaughtError(error, "platform/native-worker"); errors.push(error); }
       }
     }
     if (errors.length) throw new AggregateError(errors, "Native provider cleanup failed");
@@ -109,7 +113,7 @@ try {
   async function close() {
     draining = true;
     return closePromise ??= (async () => {
-      await Promise.allSettled([...inFlight]);
+      await observedAllSettled([...inFlight], "platform/native-worker");
       const { stopNotificationRunner } = await import("./engine/lib/notification-workers");
       await stopNotificationRunner();
       const { shutdownJobRunner } = await import("./engine/lib/job-runner");
@@ -125,9 +129,9 @@ try {
       const { drainBackgroundWork } = await import("./engine/lib/background-work");
       await drainBackgroundWork();
       finalizing = true;
-      await Promise.allSettled([...inFlight]);
+      await observedAllSettled([...inFlight], "platform/native-worker");
       for (const stream of streams.values()) stream.abort.abort();
-      await Promise.allSettled([...streams.values()].map(s => s.iterator.return?.()));
+      await observedAllSettled([...streams.values()].map(s => s.iterator.return?.()), "platform/native-worker");
       streams.clear();
       await drainBackgroundWork();
       const [{ closeSessionManager }, { shutdownCacheStores }, { sshManager }, { flushAudit }, { closeEncryption }, { takeAllFolderSessions }, { rm }] = await Promise.all([
@@ -148,10 +152,15 @@ try {
         async () => { for (const source of takeAllFolderSessions()) if (source.stagingDir) await rm(source.stagingDir, { recursive: true, force: true }); },
         async () => { closeEncryption(); }, database.closeDb,
       ]) {
-        try { await cleanup(); } catch (error) { cleanupErrors.push(error); }
+        try { await cleanup(); } catch (error) {
+          observeCaughtError(error, "platform/native-worker"); cleanupErrors.push(error); }
       }
       if (cleanupErrors.length) throw new AggregateError(cleanupErrors, "Native resource cleanup failed");
-    })().catch(error => { closePromise = undefined; throw error; });
+    })().catch(error => {
+      reportError(error, { component: "native-worker", operation: "close", handled: true });
+      closePromise = undefined;
+      throw error;
+    }).finally(() => errorReporter.flush(500));
   }
 
   async function dispatch(operation: string, args: unknown[]): Promise<unknown> {
@@ -274,7 +283,7 @@ try {
         : kind === "projects.streamRuntimeLogs"
           ? kernel.projects.streamRuntimeLogs(context as ExecutionContext, input[0] as string, input[1] as { tail?: number }, { signal: abort.signal })
         : kind === "projects.retryRoutingStream"
-          ? kernel.projects.retryRoutingStream(context as ExecutionContext, input[0] as string, { signal: abort.signal })
+          ? kernel.projects.retryRoutingStream(context as ExecutionContext, input[0] as string, { ...(input[1] as { sessionId?: string; idempotencyKey?: string }), signal: abort.signal })
         : kind === "services.streamLogs"
           ? kernel.services.streamLogs(context as ExecutionContext, input[0] as string, input[1] as string, input[2] as { tail?: number }, { signal: abort.signal })
           : kind === "domains.verifyStream"
@@ -341,17 +350,28 @@ try {
   port.on("message", (command: Command) => {
     // Close waits only for ordinary invocations; a subscription can intentionally wait forever.
     const tracked = !["close", "stream.next", "stream.close"].includes(command.operation);
-    const task = Promise.resolve().then(() => dispatch(command.operation, command.args));
+    const context: ErrorContext = { source: "worker", component: "native-worker", operation: command.operation, traceId: diagnosticId() };
+    const task = withErrorContext(context,
+      () => Promise.resolve().then(() => dispatch(command.operation, command.args)), true);
     if (tracked) inFlight.add(task);
-    task.then(data => port.postMessage({ id: command.id, data }), error => port.postMessage({ id: command.id, error: failure(error) }))
+    task.then(data => port.postMessage({ id: command.id, data }), error => {
+      reportError(error, { ...context, handled: true });
+      port.postMessage({ id: command.id, error: failure(error) });
+    })
       .finally(() => { inFlight.delete(task); });
   });
   port.postMessage({ event: "ready" });
 } catch (error) {
+  observeCaughtError(error, "platform/native-worker");
   // Import failures in the database factory already close partial connections.
   // A later provider/configuration failure must close the completed connection too.
-  await closeProviders?.().catch(() => {});
-  await import("@repo/db").then(db => db.closeDb()).catch(() => {});
+  await closeProviders?.().catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/native-worker");
+  });
+  await import("@repo/db").then(db => db.closeDb()).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/native-worker");
+  });
+  await errorReporter.flush(500);
   port.postMessage({ event: "failed", error: failure(error) });
   port.close();
 }

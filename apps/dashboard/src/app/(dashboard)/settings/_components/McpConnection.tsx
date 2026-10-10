@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 /**
@@ -24,7 +25,8 @@ function useCopy() {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/McpConnection");
       /* clipboard blocked — user can select manually */
     }
   };
@@ -93,7 +95,8 @@ interface McpClientDef {
 function encodeConfig(obj: unknown): string {
   try {
     return encodeURIComponent(btoa(JSON.stringify(obj)));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/McpConnection");
     return "";
   }
 }
@@ -306,7 +309,7 @@ export function McpConnection() {
     tokensApi
       .listMcpClients()
       .then((res) => !cancelled && setClients(res.data ?? []))
-      .catch(() => !cancelled && setClients([]));
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/McpConnection"); return !cancelled && setClients([]); });
     return () => {
       cancelled = true;
     };
@@ -337,7 +340,8 @@ export function McpConnection() {
     try {
       const res = await tokensApi.listMcpClients();
       setClients(res.data ?? []);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/McpConnection");
       /* the save succeeded; a stale count is cosmetic and self-heals on reload */
     }
   };

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { exitCommand, rethrowCommandExit } from "../lib/command-exit";
 /**
  * `openship deploy` — deploy the current project.
@@ -30,7 +31,8 @@ function git(args: string[]): string | undefined {
         .toString()
         .trim() || undefined
     );
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "cli/commands/deploy");
     return undefined;
   }
 }

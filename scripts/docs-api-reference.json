@@ -2817,7 +2817,7 @@
     "servers.getNetworkSettings": {
       "page": "servers",
       "section": "Managed servers",
-      "description": "Read provider outbound internet settings and route-managed ingress ports without starting the server.",
+      "description": "Read outbound internet and route-managed ingress without starting the server; request details for egress rules, IP diagnostics and a revision.",
       "route": "GET /api/system/servers/:id/network-settings"
     },
     "servers.updateNetworkSettings": {
@@ -2825,6 +2825,96 @@
       "section": "Managed servers",
       "description": "Change outbound internet after confirming its effect on every project; preserve ingress and private connectivity.",
       "route": "PATCH /api/system/servers/:id/network-settings"
+    },
+    "servers.managedInfo": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Read the selected managed server image, operating system, lifecycle and purchased allocation. Does not start the VM or return its raw configuration.",
+      "route": "GET /api/system/servers/:id/managed/info"
+    },
+    "servers.managedBootLogs": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Read a bounded tail of managed server boot logs. Requires server admin; logs may contain application output.",
+      "route": "POST /api/system/servers/:id/managed/boot-logs"
+    },
+    "servers.managedSshStatus": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Read SSH enablement and public connection instructions for this managed server. Never returns passwords.",
+      "route": "GET /api/system/servers/:id/managed/ssh"
+    },
+    "servers.setManagedSsh": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Enable or disable SSH with explicit confirmation and expected enablement. Changes all SSH users on this server.",
+      "route": "PATCH /api/system/servers/:id/managed/ssh"
+    },
+    "servers.setManagedSshKey": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Replace the root authorized public key on this server. Accepts one OpenSSH public key; never a private key. Requires confirmation.",
+      "route": "PUT /api/system/servers/:id/managed/ssh/key"
+    },
+    "servers.setManagedSshPassword": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Set the root SSH password on this managed server. Requires confirmation. The password is never returned or audited.",
+      "route": "PUT /api/system/servers/:id/managed/ssh/password"
+    },
+    "servers.managedSshConnection": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Issue a short-lived SSH connection for this managed server. Requires server admin and confirmation. Treat its password as a secret.",
+      "route": "POST /api/system/servers/:id/managed/ssh/connection"
+    },
+    "servers.managedRuntimeStatus": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Read the managed server Runtime API status without enabling it or returning a token.",
+      "route": "GET /api/system/servers/:id/managed/runtime-api"
+    },
+    "servers.enableManagedRuntime": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Enable the Runtime API used by Openship for deployments and server management. Requires server admin and active server entitlement.",
+      "route": "POST /api/system/servers/:id/managed/runtime-api/enable"
+    },
+    "servers.managedRuntimeCredential": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Reveal the current workspace-only Runtime API credential. Requires server admin and confirmation. Does not enable the service or issue an account/namespace token.",
+      "route": "POST /api/system/servers/:id/managed/runtime-api/credential"
+    },
+    "servers.rotateManagedRuntimeCredential": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Rotate the Runtime API credential after reviewing the current revision. Invalidates prior tokens and sessions. A stale revision cannot repeat a successful rotation.",
+      "route": "POST /api/system/servers/:id/managed/runtime-api/rotate"
+    },
+    "servers.managedWorkloads": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "List native managed processes with live status, capped at 100 entries. Distinguishes manual, project and system workloads; does not return environments or commands.",
+      "route": "GET /api/system/servers/:id/managed/workloads"
+    },
+    "servers.managedWorkloadLogs": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Read bounded logs for a process on this managed server. Requires server admin. Process ID is scoped to the server.",
+      "route": "POST /api/system/servers/:id/managed/workloads/logs"
+    },
+    "servers.createManagedWorkload": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Create a stopped manual native process on this server. Reuse the same idempotency key after an uncertain response. Commands and environment are admin-only and not audited. Start it explicitly after creation.",
+      "route": "POST /api/system/servers/:id/managed/workloads"
+    },
+    "servers.controlManagedWorkload": {
+      "page": "servers",
+      "section": "Managed server controls",
+      "description": "Start, stop or delete a manual process created by the server controls. Requires confirmation. Project and platform processes must use their own lifecycle controls.",
+      "route": "POST /api/system/servers/:id/managed/workloads/control"
     },
     "mail.getSteps": {
       "page": "mail",
@@ -3238,7 +3328,7 @@
     },
     "instance.migrateToServer": {
       "page": "data-transfer",
-      "description": "Migrate single-user → your own remote server.",
+      "description": "Earlier server migration (501 unavailable; use Instance location).",
       "route": "POST /api/system/migration/start"
     },
     "instance.migrateToCloud": {
@@ -3298,6 +3388,10 @@
     }
   },
   "http": {
+    "POST /api/diagnostics/client-errors": {
+      "page": "diagnostics",
+      "description": "Submit bounded, untrusted dashboard error reports. Public, rate-limited intake with no read access."
+    },
     "POST /api/cloud/servers/:id/authorize": {
       "page": "cloud",
       "section": "Managed server connections",
@@ -3622,6 +3716,11 @@
       "page": "projects",
       "description": "Read edge readiness for the project."
     },
+    "GET /api/projects/:id/routing/retry/stream": {
+      "page": "projects",
+      "description": "Replay and follow an existing routing repair using its sessionId; never starts a repair.",
+      "sdk": "projects.retryRoutingStream(id, { sessionId })"
+    },
     "POST /api/projects/:id/routing/ensure-edge/respond": {
       "page": "projects",
       "description": "Answer an edge setup prompt for the project."
@@ -3889,6 +3988,116 @@
     "PATCH /api/cloud/support/mine/:id": {
       "page": "support",
       "description": "Open or resolve the signed-in customer’s own ticket."
+    },
+    "GET /": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Show connection instructions for an API-only instance."
+    },
+    "GET /login": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Show how to sign in to an API-only instance through Desktop."
+    },
+    "GET /accept-invite/:id": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Show the invitation address to open in Desktop; no invitation data is exposed."
+    },
+    "GET /api/system/instance": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Read this installation’s controller role and handoff progress (instance administrator or trusted Desktop recovery)."
+    },
+    "GET /api/system/instance/identity": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Read the active installation identity and protocol version without account data."
+    },
+    "POST /api/system/instance/preflight": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Check portable credentials and source-host bindings before moving (instance administrator, read-only)."
+    },
+    "POST /api/system/instance/offer": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Create a ten-minute source or receiver capability for a whole-instance handoff (instance administrator)."
+    },
+    "POST /api/system/instance/move": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Start a reviewed move using the other instance’s code; existing workloads stay on their hosts."
+    },
+    "POST /api/system/instance/provision": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Deploy API-only or API plus dashboard on a selected server through the normal deployment engine, then hand off control."
+    },
+    "POST /api/system/instance/resume": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Resume the saved handoff; a retired source never falls back to its stale data."
+    },
+    "POST /api/system/instance/cancel": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Cancel before retirement and restore the receiver only after source confirmation."
+    },
+    "POST /api/system/instance/connect": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Connect Desktop with a one-use device code without copying instance data."
+    },
+    "POST /api/system/instance/connect-address": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Connect Desktop to a confirmed API address; remote sign-in is still required."
+    },
+    "POST /api/system/instance/disconnect": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Resume an unrelated paused local instance; a migrated source must use a reverse handoff."
+    },
+    "POST /api/system/instance/return": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Pull the latest remote instance back into Desktop with remote administrator authorization."
+    },
+    "POST /api/system/instance/move-previous": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Move current Desktop data back to the previously paired server installation."
+    },
+    "POST /api/system/instance/pair": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Issue a ten-minute device code for the signed-in user’s own permissions."
+    },
+    "POST /api/system/instance/pair/claim": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Atomically exchange the one-use code for its issuing user’s remote device session."
+    },
+    "POST /api/system/instance/bootstrap": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Bind a provisioned receiver to one handoff using its installation secret; does not activate it."
+    },
+    "POST /api/system/instance/peer/:id/:action": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Capability-authenticated bind, freeze, stage, prepare, retire, activate, complete or abort; activation requires source retirement proof."
+    },
+    "GET /api/system/instance/peer/:id/chunks/:index": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Download an authenticated encrypted snapshot chunk for the bound handoff."
+    },
+    "PUT /api/system/instance/peer/:id/chunks/:index": {
+      "page": "data-transfer",
+      "section": "Instance location",
+      "description": "Verify and store an encrypted snapshot chunk for the bound receiver."
     }
   }
 }

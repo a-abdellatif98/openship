@@ -9,6 +9,7 @@
  * Used by the build pipeline as a fallback when no App/PAT token is available
  * and the target server opted into credential forwarding. See ./README.md.
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "@repo/adapters";
 import { openRelay, writeHelperScript } from "./relay";
 
@@ -40,7 +41,9 @@ export async function openDeployRelay(opts: {
   try {
     scriptPath = await writeHelperScript(opts.executor, opts.sessionId, relay.port, relay.nonce);
   } catch (err) {
-    await relay.close().catch(() => {});
+    await relay.close().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/git-forwarding/deploy");
+    });
     throw err;
   }
 
@@ -49,8 +52,12 @@ export async function openDeployRelay(opts: {
     close: async () => {
       // Remove the remote script while the connection is still held by the
       // relay retain, then close the tunnel + release.
-      await Promise.resolve(opts.executor.rm(scriptPath)).catch(() => {});
-      await relay.close().catch(() => {});
+      await Promise.resolve(opts.executor.rm(scriptPath)).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/git-forwarding/deploy");
+      });
+      await relay.close().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/git-forwarding/deploy");
+      });
     },
   };
 }

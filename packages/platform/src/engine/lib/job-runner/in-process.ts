@@ -21,6 +21,8 @@
  * the queue until a slot opens.
  */
 
+import { observedAllSettled, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
+import { observeBackground } from "@repo/core/diagnostics/node";
 import cronParser from "cron-parser";
 import { repos } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
@@ -66,7 +68,7 @@ export class InProcessJobRunner implements JobRunner {
     // Poll periodically — backstop for runs the fast-path missed.
     this.pollTimer = setInterval(() => {
       void this.track(() => this.poll()).catch((err) =>
-        console.warn("[job-runner:in-process] poll error:", err),
+        errorDiagnostics.warn("platform/engine/lib/job-runner/in-process", "[job-runner:in-process] poll error:", err),
       );
     }, POLL_INTERVAL_MS);
     this.pollTimer.unref();
@@ -93,7 +95,7 @@ export class InProcessJobRunner implements JobRunner {
       let timer: NodeJS.Timeout | undefined;
       try {
         await Promise.race([
-          Promise.allSettled([...this.activeTasks]),
+          observedAllSettled([...this.activeTasks], "platform/engine/lib/job-runner/in-process"),
           ...(Number.isFinite(deadlineMs) ? [new Promise<void>(resolve => {
             timer = setTimeout(resolve, Math.max(0, deadlineMs - (Date.now() - start)));
           })] : []),
@@ -103,7 +105,7 @@ export class InProcessJobRunner implements JobRunner {
       }
     }
     if (this.activeTasks.size > 0) {
-      console.warn(
+      errorDiagnostics.warn("platform/engine/lib/job-runner/in-process",
         `[job-runner:in-process] shutdown deadline passed with ${this.activeTasks.size} active tasks`,
       );
     }
@@ -161,8 +163,8 @@ export class InProcessJobRunner implements JobRunner {
       const interval = cronParser.parseExpression(entry.cronExpression);
       nextMs = Math.max(0, interval.next().getTime() - Date.now());
     } catch (err) {
-      console.warn(
-        `[job-runner:in-process] invalid cron "${entry.cronExpression}" for ${entry.jobId} — schedule disabled`,
+      errorDiagnostics.warn("platform/engine/lib/job-runner/in-process",
+        `[job-runner:in-process] invalid cron "${entry.cronExpression}" for ${entry.jobId} — schedule disabled`, err,
       );
       this.recurring.delete(entry.jobId);
       return;
@@ -178,11 +180,11 @@ export class InProcessJobRunner implements JobRunner {
       if (nextMs > MAX_TIMER_DELAY_MS) { this.armNextTick(entry); return; }
       void this.track(async () => {
         try {
-          await entry.onTick();
+          await observeBackground({ component: "job-runner", jobId: entry.jobId }, entry.onTick);
         } catch (err) {
-          console.warn(
+          errorDiagnostics.warn("platform/engine/lib/job-runner/in-process",
             `[job-runner:in-process] recurring ${entry.jobId} failed:`,
-            safeErrorMessage(err),
+            safeErrorMessage(err), err,
           );
         }
         // A replacement registered while this callback awaited owns the next tick.
@@ -204,11 +206,11 @@ export class InProcessJobRunner implements JobRunner {
       this.inFlight.add(runId);
       void this.track(async () => {
         try {
-          await this.processRun!(runId);
+          await observeBackground({ component: "backup-runner", runId }, () => this.processRun!(runId));
         } catch (err) {
-          console.error(
+          errorDiagnostics.error("platform/engine/lib/job-runner/in-process",
             `[job-runner:in-process] run ${runId} crashed:`,
-            safeErrorMessage(err),
+            safeErrorMessage(err), err,
           );
         } finally {
           this.inFlight.delete(runId);
@@ -221,7 +223,7 @@ export class InProcessJobRunner implements JobRunner {
   private track<T>(work: () => Promise<T>): Promise<T> {
     const task = Promise.resolve().then(work);
     this.activeTasks.add(task);
-    void task.then(() => this.activeTasks.delete(task), () => this.activeTasks.delete(task));
+    void task.then(() => this.activeTasks.delete(task), () => { /* diagnostics-ignore: observeBackground records the failure; this branch only removes the tracked task. */ return this.activeTasks.delete(task); });
     return task;
   }
 
@@ -239,9 +241,9 @@ export class InProcessJobRunner implements JobRunner {
       }
       if (this.enqueueQueue.length > 0) void this.drainQueue();
     } catch (err) {
-      console.warn(
+      errorDiagnostics.warn("platform/engine/lib/job-runner/in-process",
         "[job-runner:in-process] poll query failed:",
-        safeErrorMessage(err),
+        safeErrorMessage(err), err,
       );
     }
   }
@@ -258,9 +260,9 @@ export class InProcessJobRunner implements JobRunner {
       }
       if (this.enqueueQueue.length > 0) void this.drainQueue();
     } catch (err) {
-      console.warn(
+      errorDiagnostics.warn("platform/engine/lib/job-runner/in-process",
         "[job-runner:in-process] boot requeue failed:",
-        safeErrorMessage(err),
+        safeErrorMessage(err), err,
       );
     }
   }

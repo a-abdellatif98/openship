@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { promisify } from "node:util";
@@ -135,7 +136,8 @@ export async function uploadIncrementalArtifact(
             const decoded = await decompress(stored, { maxOutputLength: content.length });
             if (decoded.equals(content)) chunk = old;
           }
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/backup/common/incremental");
           // The previous object may disappear after HEAD, be truncated, or fail
           // to decompress. Upload the current source to this run's own key; a
           // damaged old snapshot must not poison the next restore point.

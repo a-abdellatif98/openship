@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { refreshMailCertificate } from "../mail/mail-certificate.service";
 /**
  * Server managed-CONTAINER status + apply service.
@@ -136,7 +137,7 @@ type ContainerProbe =
  * failed — we map that to `unknown` (keep the cache), NOT to absence.
  */
 async function detectEdge(executor: CommandExecutor): Promise<ContainerProbe> {
-  const detected = await detectEdgeContainer(executor).catch(() => null);
+  const detected = await detectEdgeContainer(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return null; });
   if (detected === null) return { kind: "unknown" };
   if (!detected.exists) return { kind: "absent" };
   const pinnedLabel = pinnedEdgeImage();
@@ -183,7 +184,7 @@ async function detectMail(
 ): Promise<ContainerProbe> {
   const record = await repos.mailServer.get(server.id);
   if (!record) return { kind: "absent" };
-  const probe = await detectMailEngine(executor).catch(() => null);
+  const probe = await detectMailEngine(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return null; });
   if (!probe) return { kind: "unknown" };
   const pinnedLabel = pinnedMailImage();
   const base = {
@@ -211,7 +212,7 @@ async function detectMail(
     // No engine of either shape. That's only a CONCLUSION if Docker actually
     // answered: with an unreachable daemon "no container" is a failed probe, and
     // writing it would flip a healthy mail box to "Stopped · container missing".
-    if (!(await dockerAvailable(executor).catch(() => false))) return { kind: "unknown" };
+    if (!(await dockerAvailable(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return false; }))) return { kind: "unknown" };
     return {
       kind: "present",
       view: {
@@ -293,19 +294,23 @@ export async function detectServerContainers(server: Server, options: { refreshC
     ): Promise<void> => {
       if (probe.kind === "present") {
         views.push(probe.view);
-        await upsertView(server, probe.view).catch(() => {});
+        await upsertView(server, probe.view).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service");
+        });
       } else if (probe.kind === "absent") {
-        await repos.serverContainerStatus.remove(server.id, component).catch(() => {});
+        await repos.serverContainerStatus.remove(server.id, component).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service");
+        });
       }
       // "unknown" → leave the last-known cached row untouched.
     };
 
     // The edge is a container on EVERY box, so with no reachable Docker there is
     // nothing to conclude about it — leave its cached row alone.
-    if (await dockerAvailable(executor).catch(() => false)) {
+    if (await dockerAvailable(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return false; })) {
       await cacheProbe(
         "edge",
-        await detectEdge(executor).catch((): ContainerProbe => ({ kind: "unknown" })),
+        await detectEdge(executor).catch((diagnosticFailure): ContainerProbe => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return ({ kind: "unknown" }); }),
       );
     }
     // Mail is NOT necessarily a container (a legacy box runs systemd units), so its
@@ -313,10 +318,10 @@ export async function detectServerContainers(server: Server, options: { refreshC
     // lives. `detectMail` does its own Docker check before concluding "no engine".
     await cacheProbe(
       "mail",
-      await detectMail(executor, server).catch((): ContainerProbe => ({ kind: "unknown" })),
+      await detectMail(executor, server).catch((diagnosticFailure): ContainerProbe => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return ({ kind: "unknown" }); }),
     );
     await refreshMailCertificate(server.id, { executor, force: options.refreshCertificate }).catch((error) => {
-      console.warn(`[mail-certificate] ${server.id}: ${safeErrorMessage(error)}`);
+      errorDiagnostics.warn("platform/engine/modules/system/server-containers.service", `[mail-certificate] ${server.id}: ${safeErrorMessage(error)}`, error);
     });
   });
   return views;
@@ -352,7 +357,9 @@ export async function applyServerContainer(
   onLog?: (log: SystemLog) => void,
   intent: ContainerApplyIntent = "update",
 ): Promise<ApplyContainerResult> {
-  await repos.serverContainerStatus.setInProgress(server.id, component, true).catch(() => {});
+  await repos.serverContainerStatus.setInProgress(server.id, component, true).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service");
+  });
   try {
     return await sshManager.withExecutor(server.id, async (executor) => {
       const log = (l: SystemLog) => onLog?.(l);
@@ -392,7 +399,9 @@ export async function applyServerContainer(
       return outcome;
     });
   } finally {
-    await repos.serverContainerStatus.setInProgress(server.id, component, false).catch(() => {});
+    await repos.serverContainerStatus.setInProgress(server.id, component, false).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service");
+    });
   }
 }
 
@@ -417,9 +426,11 @@ async function cacheAfterAction(
 ): Promise<void> {
   const probe =
     component === "edge"
-      ? await detectEdge(executor).catch((): ContainerProbe => ({ kind: "unknown" }))
-      : await detectMail(executor, server).catch((): ContainerProbe => ({ kind: "unknown" }));
-  if (probe.kind === "present") await upsertView(server, probe.view, lastError).catch(() => {});
+      ? await detectEdge(executor).catch((diagnosticFailure): ContainerProbe => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return ({ kind: "unknown" }); })
+      : await detectMail(executor, server).catch((diagnosticFailure): ContainerProbe => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return ({ kind: "unknown" }); });
+  if (probe.kind === "present") await upsertView(server, probe.view, lastError).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service");
+  });
 }
 
 /**
@@ -448,7 +459,8 @@ export async function refreshServerContainer(
     await sshManager.withExecutor(serverId, (executor) =>
       cacheAfterAction(server, executor, component, lastError),
     );
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service");
     /* best-effort */
   }
 }
@@ -510,7 +522,10 @@ export function runContainerApply(
       );
       return { updated: result.updated, down: result.down };
     } catch (err) {
-      if (!enteredApply) await repos.serverContainerStatus.setInProgress(server.id, component, false).catch(() => {});
+      observeCaughtError(err, "platform/engine/modules/system/server-containers.service");
+      if (!enteredApply) await repos.serverContainerStatus.setInProgress(server.id, component, false).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service");
+      });
       const message = safeErrorMessage(err);
       appendContainerLog(session.id, message, "error");
       finishContainerApplySession(session.id, "failed", undefined, message);
@@ -545,7 +560,7 @@ export async function scanOrgContainers(organizationId: string, beforeScan?: (se
   const out = servers.map((server) => ({ server, views: [] as ServerContainerView[] }));
   await mapWithLimit(out, SCAN_CONCURRENCY, async (entry) => {
     await beforeScan?.(entry.server);
-    entry.views = await detectServerContainers(entry.server).catch(() => []);
+    entry.views = await detectServerContainers(entry.server).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return []; });
   });
   return out;
 }
@@ -658,7 +673,7 @@ export async function applyAllContainers(
         const status = await probeEdge(executor);
         return status.canProceedClean ? null : ("needs_takeover_consent" as const);
       })
-      .catch(() => "unreachable" as const);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return "unreachable" as const; });
     if (!reason) return;
     blocked.add(q.server.id);
     skipped.push({
@@ -691,7 +706,9 @@ export async function applyAllContainers(
   // the work was taken on.
   await Promise.all(
     targets.map((t) =>
-      repos.serverContainerStatus.setInProgress(t.server.id, t.component, true).catch(() => {}),
+      repos.serverContainerStatus.setInProgress(t.server.id, t.component, true).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service");
+      }),
     ),
   );
 
@@ -699,8 +716,12 @@ export async function applyAllContainers(
   // apply clears its own flag in `applyServerContainer`'s finally; a target whose
   // worker never runs (process death mid-run) is cleared at the next boot.
   void trackBackgroundWork(mapWithLimit(targets, BULK_APPLY_CONCURRENCY, async (t) => {
-    await runContainerApply(t.server, t.component, t.intent, beforeApply && (() => beforeApply(t.server))).done.catch(() => {});
-  })).catch(() => {});
+    await runContainerApply(t.server, t.component, t.intent, beforeApply && (() => beforeApply(t.server))).done.catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service");
+    });
+  })).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service");
+  });
 
   return { started, skipped };
 }
@@ -722,13 +743,13 @@ export async function scanInstanceContainers(): Promise<{
   behind: number;
   updated: number;
 }> {
-  const settings = await repos.instanceSettings.get().catch(() => undefined);
+  const settings = await repos.instanceSettings.get().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return undefined; });
   const auto = Boolean(settings?.autoUpdateInfra);
   const servers = await repos.server.list();
   const detected = servers.map((server) => ({ server, views: [] as ServerContainerView[] }));
   await mapWithLimit(detected, SCAN_CONCURRENCY, async (entry) => {
     // Unreachable server / probe failure → skip, don't fail the sweep.
-    entry.views = await detectServerContainers(entry.server, { refreshCertificate: true }).catch(() => []);
+    entry.views = await detectServerContainers(entry.server, { refreshCertificate: true }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return []; });
   });
 
   let behind = 0;
@@ -740,7 +761,7 @@ export async function scanInstanceContainers(): Promise<{
     for (const v of behindViews) {
       // Through runContainerApply so an operator watching the dashboard can
       // re-attach to the same session the boot hook is driving.
-      const r = await runContainerApply(server, v.component).done.catch(() => null);
+      const r = await runContainerApply(server, v.component).done.catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.service"); return null; });
       if (r?.updated) updated++;
     }
   }

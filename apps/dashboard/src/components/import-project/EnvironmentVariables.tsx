@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 import { Input } from "@/components/ui/input";
 
@@ -243,7 +244,7 @@ const EnvironmentVariables: React.FC<EnvironmentVariablesPropsOptional> = ({
   // lie — and the operator gets the error toast.
   const revealAndShow = useCallback(
     async (keys: string[]) => {
-      const vals = await ensureRevealed(keys).catch(() => null);
+      const vals = await ensureRevealed(keys).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/import-project/EnvironmentVariables"); return null; });
       if (!vals) return;
       const got = keys.filter((key) => Object.hasOwn(vals, key));
       if (got.length < keys.length) {
@@ -498,7 +499,8 @@ const EnvironmentVariables: React.FC<EnvironmentVariablesPropsOptional> = ({
         // rows that just landed (no-op if not in collapsible mode).
         setExpanded(true);
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/import-project/EnvironmentVariables");
       showToast(ev.toast.clipboardBlocked, "error", ev.toast.title);
     }
   }, [applyEnvText, isEditingMode, showToast, ev]);
@@ -589,7 +591,8 @@ const EnvironmentVariables: React.FC<EnvironmentVariablesPropsOptional> = ({
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/import-project/EnvironmentVariables");
       showToast(ev.toast.downloadFailed, "error", ev.toast.title);
     } finally {
       downloadInFlight.current = false;

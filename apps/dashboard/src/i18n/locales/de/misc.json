@@ -129,7 +129,15 @@
     "acceptedTitle": "Du bist dabei",
     "acceptedRedirect": "Weiterleitung zum Dashboard...",
     "errorTitle": "Diese Einladung kann nicht angenommen werden",
-    "backToDashboard": "Zurück zum Dashboard"
+    "backToDashboard": "Zurück zum Dashboard",
+    "invitedBy": "Eingeladen von {name}",
+    "roleLabel": "Rolle:",
+    "desktopOpen": "In Desktop öffnen",
+    "desktopCopy": "Einladungslink kopieren",
+    "desktopCopied": "Link kopiert",
+    "desktopFallback": "Desktop wurde nicht geöffnet? Füge den Einladungslink unter Einstellungen → Instanz → Mit einer Instanz verbinden ein.",
+    "desktopDescription": "Nutze Desktop oder fahre hier im Browser fort.",
+    "switchAccount": "Mit dem eingeladenen Konto anmelden"
   },
   "cloudAuthorize": {
     "missingRedirect": "Fehlender redirect-Parameter.",

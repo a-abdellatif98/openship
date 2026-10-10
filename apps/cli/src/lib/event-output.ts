@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { DeploymentEvent } from "@repo/contracts";
 import { fail } from "./cmd-helpers";
 import { isJsonMode, printJsonLine } from "./output";
@@ -42,6 +43,7 @@ export async function printEvents(
         "The connection ended before completion was confirmed. Reattach to the existing operation to check its outcome.",
       );
   } catch (error) {
+    observeCaughtError(error, "cli/lib/event-output");
     fail(error);
   }
 }

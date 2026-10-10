@@ -8,6 +8,7 @@
  *   - SSE heartbeat keep-alive for proxy compatibility
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { SYSTEM } from "@repo/core";
 import type { InstallPhaseEvent, InstallPhaseId } from "@repo/core";
 import { TtlCache } from "../state/cache";
@@ -479,7 +480,8 @@ export function createSessionManager(options: SessionManagerOptions = {}) {
     for (const writer of session.subscribers) {
       try {
         writer("prompt", payload);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/deployments/session-manager");
         session.subscribers.delete(writer);
       }
     }
@@ -527,7 +529,8 @@ export function createSessionManager(options: SessionManagerOptions = {}) {
       for (const writer of session.subscribers) {
         try {
           writer("end", JSON.stringify({ message: "Platform closed" }));
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "platform/deployments/session-manager");
           /* Disconnected subscriber. */
         }
       }

@@ -9,6 +9,7 @@
  * (ENCRYPTED_COLUMNS) and only ever revealed to the owning project's editors.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import crypto from "node:crypto";
 import { repos, type IncomingWebhook, type WebhookDelivery } from "@repo/db";
 import type {
@@ -93,7 +94,8 @@ function tryDecrypt(sealed: string | null): string | null {
   if (!sealed) return null;
   try {
     return decrypt(sealed);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/incoming-webhooks/incoming.service");
     return null; // key-rotated / corrupted — surface as "no secret" rather than throw
   }
 }
@@ -322,7 +324,8 @@ export async function triggerIncomingWebhook(opts: {
   }
   // authMode === "none": open — no credential required.
 
-  return dispatchIncomingWebhook(hook, opts).catch(() => {
+  return dispatchIncomingWebhook(hook, opts).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/incoming-webhooks/incoming.service");
     auditAttempt(hook, opts, "incoming_webhook.auth_failed");
     return { error: "unauthorized" };
   });
@@ -373,8 +376,8 @@ export async function dispatchIncomingWebhook(
     recordIncomingDelivery(hook, opts, "dispatched", { actionRef: ref });
     return { ok: true, action: hook.actionType, ref };
   } catch (err) {
-    console.warn(
-      `[incoming-webhook] action ${hook.actionType} failed for hook ${hook.id}: ${(err as Error)?.message ?? err}`,
+    errorDiagnostics.warn("platform/engine/modules/incoming-webhooks/incoming.service",
+      `[incoming-webhook] action ${hook.actionType} failed for hook ${hook.id}: ${(err as Error)?.message ?? err}`, err,
     );
     recordIncomingDelivery(hook, opts, "failed", { error: (err as Error)?.message ?? String(err) });
     return { error: "action_failed" };
@@ -403,7 +406,9 @@ function recordIncomingDelivery(
       userAgent: opts.userAgent,
       summary: { name: hook.name },
     }))
-    .catch(() => {});
+    .catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/incoming-webhooks/incoming.service");
+    });
 }
 
 // ─── Delivery feed (webhook_delivery — history/observability) ────────────────

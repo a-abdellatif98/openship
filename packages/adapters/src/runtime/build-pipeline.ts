@@ -11,6 +11,7 @@
  * instance flows from build.service.ts → adapter → pipeline → deploy.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { BuildConfig, BuildStep, LogEntry, LogCallback } from "../types";
 import { safeErrorMessage, packageManagerEnsureCommand, nodeBinPathExport } from "@repo/core";
 import {
@@ -199,7 +200,9 @@ export async function killProcessesUnderDir(
   const scan = (sig: string) =>
     `for p in /proc/[0-9]*; do c=$(readlink "$p/cwd" 2>/dev/null); ` +
     `case "$c" in ${patterns.join("|")}) kill -${sig} "\${p##*/}" 2>/dev/null || true;; esac; done`;
-  await executor.exec(`${scan("TERM")}; sleep 2; ${scan("KILL")}`).catch(() => {});
+  await executor.exec(`${scan("TERM")}; sleep 2; ${scan("KILL")}`).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "adapters/runtime/build-pipeline");
+  });
 }
 
 export interface BuildPipelineResult {
@@ -332,7 +335,7 @@ export async function runBuildPipeline(
                 `cd ${sq(env.projectDir)} && git ${CRED} cat-file -e ${sq(`${config.commitSha}^{commit}`)}`,
               ).then(
                 () => true,
-                () => false,
+                () => { /* diagnostics-ignore: A nonzero file/commit presence probe selects the existing fetch fallback; actual fetch failures are reported. */ return false; },
               );
               if (!commitPresent) {
                 logger.log(
@@ -433,6 +436,7 @@ export async function runBuildPipeline(
 
     return { status: "deploying", durationMs };
   } catch (err) {
+    observeCaughtError(err, "adapters/runtime/build-pipeline");
     const durationMs = Date.now() - startTime;
     // A cancel is not a failure — report it distinctly so the caller marks the
     // deployment "cancelled" (not "failed") and doesn't roll it into onFailure.

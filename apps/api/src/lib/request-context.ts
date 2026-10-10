@@ -1,3 +1,4 @@
+import { enrichErrorContext } from "@repo/core/diagnostics/node";
 import type { Context } from "hono";
 import type {
   ContextRole,
@@ -69,6 +70,7 @@ export interface BuildRequestContextInput {
 }
 
 export function buildRequestContext(input: BuildRequestContextInput): RequestContext {
+  enrichErrorContext({ userId: input.user.id, organizationId: input.organizationId, traceId: input.traceId });
   return {
     userId: input.user.id,
     user: input.user,
@@ -91,6 +93,7 @@ export function buildRequestContext(input: BuildRequestContextInput): RequestCon
 /** Compatibility helper for internal organization selection. Application
  *  operations use the shared authorizer's resolved context instead. */
 export function withScopedOrg(ctx: RequestContext, scopedOrganizationId: string): RequestContext {
+  enrichErrorContext({ organizationId: scopedOrganizationId });
   if (ctx.organizationId === scopedOrganizationId) return ctx;
   return { ...ctx, organizationId: scopedOrganizationId };
 }

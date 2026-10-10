@@ -37,6 +37,7 @@
  * instance whose scheduler is broken.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { ValidationError, digestSha, withTimeout } from "@repo/core";
 import { repos, type NewUpdateStatus, type Project, type UpdateStatus } from "@repo/db";
@@ -332,7 +333,8 @@ async function pollUpstream(
       resolveUpstreamDrift(actor, project),
       UPSTREAM_POLL_MS,
       "Upstream poll timed out",
-    ).catch(() => {
+    ).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/updates/updates.service");
       const unknown = unresolvedUpstreamDrift(project);
       rememberRetry(project, unknown);
       return unknown;
@@ -341,7 +343,7 @@ async function pollUpstream(
       persistUpstream(project, upstream, checkedAt),
       CACHE_WRITE_MS,
       "Update cache write timed out",
-    ).catch(() => rememberRetry(project, upstream));
+    ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/updates/updates.service"); return rememberRetry(project, upstream); });
     return upstream;
   })();
   inFlight.set(project.id, run);
@@ -393,7 +395,7 @@ async function backgroundCtxFor(
 ): Promise<RequestContext | null> {
   const hit = cache.get(organizationId);
   if (hit !== undefined) return hit;
-  const owner = await resolveOrgOwner(organizationId).catch(() => null);
+  const owner = await resolveOrgOwner(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/updates/updates.service"); return null; });
   const ctx = owner
     ? buildBackgroundContext({ userId: owner.userId, organizationId, label: "updates:scan" })
     : null;
@@ -418,7 +420,8 @@ async function scanProjects(ctx: RequestContext | null, rows: Project[]): Promis
       const actor = ctx ?? (await backgroundCtxFor(project.organizationId, ctxByOrg));
       const upstream = await pollUpstream(actor, project);
       if (upstream.supported) supported += 1;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/updates/updates.service");
       /* best-effort: skip this project, keep scanning */
     }
   });
@@ -466,7 +469,7 @@ async function driftItem(
   const resolved = await upstreamFor(actor, project, row);
   if (!resolved) return null;
   const status: DriftStatus = await evaluateDrift(project, resolved.upstream, actor).catch(
-    () => ({ supported: false }) as DriftStatus,
+    (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/updates/updates.service"); return ({ supported: false }) as DriftStatus; },
   );
   const view = presentation(status);
   if (!view || !status.supported) return null;
@@ -509,7 +512,7 @@ export async function listOrganizationUpdates(
       repos.updateStatus.listByOrg(organizationId),
       CACHE_WRITE_MS,
       "Update cache read timed out",
-    ).catch(() => []),
+    ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/updates/updates.service"); return []; }),
   ]);
   const rowByProject = new Map(cached.map((r) => [r.projectId, r]));
 
@@ -524,7 +527,7 @@ export async function listOrganizationUpdates(
       driftItem(ctx, project, rowByProject.get(project.id)),
       remaining,
       "Update feed timed out",
-    ).catch(() => null);
+    ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/updates/updates.service"); return null; });
     if (item) items.push(item);
   });
 
@@ -550,7 +553,7 @@ export async function getProjectDrift(
     pollUpstream(ctx, project).then((upstream) => evaluateDrift(project, upstream, ctx)),
     FEED_BUDGET_MS,
     "Project update check timed out",
-  ).catch(() => ({ supported: false }));
+  ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/updates/updates.service"); return ({ supported: false }); });
 }
 
 // ─── Applying ────────────────────────────────────────────────────────────────

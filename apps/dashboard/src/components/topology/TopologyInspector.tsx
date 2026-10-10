@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import type { ProjectCluster } from "@repo/contracts";
@@ -85,7 +86,8 @@ function Detail({
               try {
                 await copyText(value);
                 setCopied({ value });
-              } catch {
+              } catch (diagnosticFailure) {
+                observeCaughtError(diagnosticFailure, "dashboard/components/topology/TopologyInspector");
                 setCopied(null);
                 showToast(t.projectDetail.services.detail.networking.copyFailed, "error");
               }

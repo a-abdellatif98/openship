@@ -7,6 +7,23 @@ const router =
   'const r = secureRouter(new Hono(), { module: "system", basePath: "/api/system", localOnly: true });';
 const parse = (body) => moduleHttpSurface("routes.ts", router + "\n" + body);
 
+test("documents root-mounted API-only landing pages without inventing an API prefix", () => {
+  const routes = moduleHttpSurface(
+    "access-page.ts",
+    [
+      'const r = secureRouter(new Hono(), { module: "instance-access", basePath: "", localOnly: true });',
+      'for (const path of ["/", "/login", "/accept-invite/:id"]) {',
+      '  r.public("get", path, { reason: "Static landing page" }, handler);',
+      "}",
+    ].join("\n"),
+  );
+  assert.deepEqual(
+    routes.map((route) => route.path),
+    ["/", "/login", "/accept-invite/:id"],
+  );
+  assert.ok(routes.every((route) => route.localOnly));
+});
+
 test("resolves correlated route aliases and shared permission metadata without executing handlers", () => {
   const routes = parse(
     [

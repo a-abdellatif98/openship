@@ -10,6 +10,7 @@
  * on failure we record the error so the dashboard can surface it.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos, type BackupDestination } from "@repo/db";
 import type { BackupDestinationStats, BackupDestinationHistory, ListBackupDestinationRunsInput } from "@repo/contracts";
 import { type DestinationKind, type BackupDestinationRow } from "@repo/adapters";
@@ -475,6 +476,7 @@ export async function preflightDestination(
       ? { ok: true, code: result.code }
       : { ok: false, reason: result.message, code: result.code };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/backup-destinations/destination.service");
     const reason = safeErrorMessage(err);
     await repos.backupDestination.setLastVerified(id, false, reason);
     return { ok: false, reason };
@@ -552,6 +554,7 @@ export async function preflightDraft(
       ? { ok: true, code: result.code }
       : { ok: false, reason: result.message, code: result.code };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/backup-destinations/destination.service");
     return { ok: false, reason: safeErrorMessage(err) };
   }
 }

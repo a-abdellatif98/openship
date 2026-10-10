@@ -27,6 +27,7 @@
  * no replay-amplification risk that HMAC + timestamp would address.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import crypto from "node:crypto";
 import { repos } from "@repo/db";
 import { audit } from "@repo/platform/engine/lib/audit-emitter";
@@ -47,7 +48,7 @@ export async function triggerBackupViaWebhook(opts: {
     // already opaque to attackers; here we surface the attempt to the
     // operator log so token-enumeration patterns are visible. We
     // can't audit-emit (no org context) but we DON'T log the token.
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/backups/triggers/webhook",
       `[backup-webhook] auth failed (no policy bound) ip=${opts.clientIp ?? "?"} ua=${opts.userAgent ?? "?"}`,
     );
     return { error: "not_found" };
@@ -55,7 +56,7 @@ export async function triggerBackupViaWebhook(opts: {
   // backup_policy doesn't carry organizationId directly — resolve via
   // its project. Required for the audit row's NOT NULL fk to org.
   const project = policy.projectId
-    ? await repos.project.findById(policy.projectId).catch(() => null)
+    ? await repos.project.findById(policy.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/triggers/webhook"); return null; })
     : null;
   const organizationId = project?.organizationId;
 

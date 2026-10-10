@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -95,7 +96,9 @@ function MailRestoreContent({
             .map((s) => ({ id: s.id, name: s.name, host: s.host, domain: s.domain, completed: s.completed })),
         ),
       )
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/mail-restore-modal");
+      });
   }, [mode, sourceServerId]);
 
   const canStart =

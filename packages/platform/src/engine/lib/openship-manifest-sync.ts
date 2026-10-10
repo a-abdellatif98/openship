@@ -13,6 +13,7 @@
  * mirror is unnecessary — every function here no-ops outside desktop mode.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "@repo/adapters";
 import { repos, dumpSubgraph, type Project, type Deployment } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
@@ -60,8 +61,8 @@ export async function syncProjectToServerManifest(input: {
     return;
   }
   try {
-    const domainRows = await repos.domain.listByProject(project.id).catch(() => []);
-    const app = await repos.projectGroup.findById(project.groupId).catch(() => null);
+    const domainRows = await repos.domain.listByProject(project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/openship-manifest-sync"); return []; });
+    const app = await repos.projectGroup.findById(project.groupId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/openship-manifest-sync"); return null; });
     const meta = (deployment.meta ?? {}) as { runtimeMode?: string };
     const entry: ManifestProjectEntry = {
       id: project.id,
@@ -91,6 +92,7 @@ export async function syncProjectToServerManifest(input: {
     await upsertProjectIntoManifest(executor, entry);
     log?.("Synced project to server .openship/manifest.json (recovery index)");
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/openship-manifest-sync");
     log?.(`Warning: .openship manifest sync failed (non-fatal): ${safeErrorMessage(err)}`);
   }
 
@@ -101,6 +103,7 @@ export async function syncProjectToServerManifest(input: {
     await writeProjectSnapshot(executor, project.id, dump);
     log?.("Wrote server .openship project snapshot (faithful recovery restore)");
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/openship-manifest-sync");
     log?.(`Warning: .openship project snapshot write failed (non-fatal): ${safeErrorMessage(err)}`);
   }
 }
@@ -139,9 +142,12 @@ export async function pruneOrphanManifestArtifacts(
       projects: manifest.projects.filter((p) => !isOrphan(p)),
     });
     for (const p of dropped) {
-      await removeProjectSnapshot(exec, p.id).catch(() => {});
+      await removeProjectSnapshot(exec, p.id).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/openship-manifest-sync");
+      });
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/openship-manifest-sync");
     // best-effort — never fail the scan on a pruning hiccup.
   }
 }
@@ -150,7 +156,8 @@ export async function removeProjectFromServerManifests(project: Project): Promis
   let deps: Deployment[] = [];
   try {
     deps = (await repos.deployment.listByProject(project.id, { perPage: 1000 })).rows;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/openship-manifest-sync");
     return;
   }
   const seenServers = new Set<string>();
@@ -166,12 +173,15 @@ export async function removeProjectFromServerManifests(project: Project): Promis
         const exec = resolved.platform.executor;
         if (exec) {
           await removeProjectFromManifest(exec, project.id);
-          await removeProjectSnapshot(exec, project.id).catch(() => {});
+          await removeProjectSnapshot(exec, project.id).catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "platform/engine/lib/openship-manifest-sync");
+          });
         }
       } finally {
         disposePlatform(resolved);
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/openship-manifest-sync");
       // Server unreachable — fine; the reconcile cross-check (no running
       // container → skip) prevents resurrecting the deleted project.
     }

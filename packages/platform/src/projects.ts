@@ -27,6 +27,7 @@ import {
   type ListProjectsInput,
   type ProjectLogStreams,
   type ProjectRoutingStreams,
+  type ProjectRoutingStreamOptions,
   type ServerLogsInput,
 } from "@repo/contracts";
 import type { Authorization } from "./authorization";
@@ -79,7 +80,11 @@ export interface ProjectDependencies {
   controls?: ResourceServices<typeof ProjectControlSchemas>;
   home?(ctx: ExecutionContext): Promise<unknown>;
   subscribeLogs?(ctx: ExecutionContext, id: string, input: { tail?: number }): EventSubscription;
-  subscribeRoutingRetry?(ctx: ExecutionContext, id: string): EventSubscription;
+  subscribeRoutingRetry?(
+    ctx: ExecutionContext,
+    id: string,
+    options?: Omit<ProjectRoutingStreamOptions, "signal">,
+  ): EventSubscription;
   openServerLogs?(
     ctx: ExecutionContext,
     id: string,
@@ -201,17 +206,26 @@ export function createProjectOperations(
     },
     async *retryRoutingStream(ctx, value, options = {}) {
       const id = parseInput(ResourceIdSchema, value);
+      const sessionId =
+        options.sessionId === undefined
+          ? undefined
+          : parseInput(ResourceIdSchema, options.sessionId);
+      const idempotencyKey =
+        options.idempotencyKey === undefined
+          ? undefined
+          : parseInput(ResourceIdSchema, options.idempotencyKey);
+      const action = sessionId === undefined ? "write" : "read";
       options.signal?.throwIfAborted();
-      const context = await authorize(ctx, id, "write");
+      const context = await authorize(ctx, id, action);
       const subscribe = resources().subscribeRoutingRetry;
       if (!subscribe)
         throw new AppError("Routing retry is not configured", 501, "CAPABILITY_UNAVAILABLE");
       for await (const event of subscriptionEvents(
-        subscribe(context, id),
+        subscribe(context, id, { sessionId, idempotencyKey }),
         options.signal,
         "complete",
       )) {
-        await authorize(context, id, "write");
+        await authorize(context, id, action);
         yield event;
       }
     },

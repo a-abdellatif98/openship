@@ -38,6 +38,7 @@
  *     one scrape rather than two.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { env } from "@repo/platform/engine/config/index";
 import { cacheStore } from "@repo/platform/engine/lib/cache-store/index";
@@ -238,15 +239,19 @@ export function scrapeServerIfStale(serverId: string): Promise<void> {
       try {
         await scrapeServer(serverId);
       } catch (err) {
+        observeCaughtError(err, "platform/engine/modules/system/analytics-scraper");
         debug(`scrape-on-demand:error server=${serverId} ${safeErrorMessage(err)}`);
       } finally {
         // TTL-throttle the next scrape; the key expiring makes the server
         // eligible again without any manual timestamp bookkeeping.
         await store
           .set(key, Date.now(), SCRAPE_STALE_SECONDS)
-          .catch(() => {});
+          .catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "platform/engine/modules/system/analytics-scraper");
+          });
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/system/analytics-scraper");
       // Restores the "never throws" contract this function documents and that
       // `runAnalyticsScrapeSweep` relies on. The inner catch only covers
       // `scrapeServer`; `cacheStore()` and `store.get()` sit ABOVE it, so a cache
@@ -311,6 +316,7 @@ export async function runAnalyticsScrapeSweep(): Promise<{
   // to 30 minutes instead of to the project's next route apply, which for a stable project
   // can be weeks. One round trip per server; the write is idempotent.
   const cfg = await reconcileAnalyticsConfig().catch((err) => {
+    observeCaughtError(err, "platform/engine/modules/system/analytics-scraper");
     debug(`sweep:config-reconcile failed ${safeErrorMessage(err)}`);
     return { servers: 0, hosts: 0 };
   });

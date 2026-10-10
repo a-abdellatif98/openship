@@ -33,7 +33,12 @@ async function restoreSessionOrganization(c: Context, organizationId: string) {
   const ctx = operationContext(c);
   if (ctx.principalKind || ctx.sessionKind === "zero-auth") return;
   // This is a cookie/session selection operation, not a native execution path.
-  await auth.api.setActiveOrganization({ headers: c.req.raw.headers, body: { organizationId } });
+  const { headers } = await auth.api.setActiveOrganization({
+    headers: c.req.raw.headers, body: { organizationId }, returnHeaders: true,
+  });
+  // Better Auth also updates its signed session cache. Without these cookies
+  // the browser (or Desktop bridge) can keep selecting the previous workspace.
+  for (const cookie of headers.getSetCookie()) c.header("Set-Cookie", cookie, { append: true });
 }
 export async function inviteMember(c: Context) {
   const body = await c.req.json();

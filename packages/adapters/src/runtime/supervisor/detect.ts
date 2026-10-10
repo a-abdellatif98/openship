@@ -9,6 +9,7 @@
  * the API (e.g. macOS API → SSH to Linux server → systemd).
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { safeErrorMessage } from "@repo/core";
 
 import type { CommandExecutor } from "../../types";
@@ -42,6 +43,7 @@ export async function detectSupervisor(
   workDir: string,
 ): Promise<ProcessSupervisor> {
   const profile = await resolveEnvironment(executor).catch((err: unknown) => {
+    observeCaughtError(err, "adapters/runtime/supervisor/detect");
     // Unreachable box: the supervisor choice is moot, since the next command fails too.
     systemDebug("supervisor", `detect: host unreachable, using nohup — ${safeErrorMessage(err)}`);
     return null;
@@ -73,7 +75,7 @@ export async function detectSupervisor(
   }
 
   if (fallbackReason) {
-    console.warn(
+    errorDiagnostics.warn("adapters/runtime/supervisor/detect",
       `[supervisor] the service will run under nohup and will NOT restart after a reboot: ${fallbackReason}`,
     );
   }

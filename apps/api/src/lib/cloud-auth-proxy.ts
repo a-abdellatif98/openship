@@ -10,6 +10,7 @@
  * the local side (mirroring users, creating sessions, managing codes).
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { randomUUID, randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { db, schema, repos, eq } from "@repo/db";
 import { storeCloudSession } from "@repo/platform/engine/lib/cloud/session";
@@ -165,7 +166,7 @@ async function generateHandoffCode(
   state?: string,
 ): Promise<string> {
   // Lazy purge — cheap, runs at most once per minute via inserts.
-  await repos.cloudHandoffCode.purgeExpired().catch(() => undefined);
+  await repos.cloudHandoffCode.purgeExpired().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/lib/cloud-auth-proxy"); return undefined; });
 
   const code = randomBytes(32).toString("hex");
   await repos.cloudHandoffCode.create({
@@ -193,7 +194,7 @@ async function generateHandoffCode(
  * the CLI can poll idempotently.
  */
 async function findHandoffCodeByState(state: string): Promise<string | null> {
-  const row = await repos.cloudHandoffCode.findByState(state).catch(() => null);
+  const row = await repos.cloudHandoffCode.findByState(state).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/lib/cloud-auth-proxy"); return null; });
   return row?.code ?? null;
 }
 
@@ -214,9 +215,8 @@ async function exchangeHandoffCode(
 ): Promise<{ user: CloudUser; sessionToken: string } | null> {
   const row = await repos.cloudHandoffCode.consume(code);
   if (!row) {
-    console.error(
-      `[handoff-exchange-miss] code=${code.slice(0, 12)}… ` +
-        `not found in DB or already expired/consumed.`,
+    errorDiagnostics.error("api/lib/cloud-auth-proxy",
+      "[handoff-exchange-miss] Code not found or already expired/consumed.",
     );
     return null;
   }
@@ -224,14 +224,14 @@ async function exchangeHandoffCode(
   // PKCE verification — if a challenge was stored, verifier is mandatory
   if (row.codeChallenge) {
     if (!codeVerifier) {
-      console.warn(`[handoff] PKCE: code_verifier required but not provided`);
+      errorDiagnostics.warn("api/lib/cloud-auth-proxy", `[handoff] PKCE: code_verifier required but not provided`);
       return null;
     }
     const computed = createHash("sha256")
       .update(codeVerifier)
       .digest("base64url");
     if (computed !== row.codeChallenge) {
-      console.warn(`[handoff] PKCE mismatch`);
+      errorDiagnostics.warn("api/lib/cloud-auth-proxy", `[handoff] PKCE mismatch`);
       return null;
     }
   }
@@ -264,7 +264,7 @@ async function exchangeCodeWithCloud(
     body: JSON.stringify({ code, code_verifier: codeVerifier }),
   });
   if (!res.ok) {
-    console.error(
+    errorDiagnostics.error("api/lib/cloud-auth-proxy",
       `[cloud-auth] exchange-code returned ${res.status} from ${url}`,
     );
     return null;
@@ -274,7 +274,7 @@ async function exchangeCodeWithCloud(
   // it throw the whole connect-callback handler.
   const contentType = res.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) {
-    console.error(
+    errorDiagnostics.error("api/lib/cloud-auth-proxy",
       `[cloud-auth] exchange-code returned non-JSON (content-type=${contentType}) from ${url}`,
     );
     return null;
@@ -285,10 +285,10 @@ async function exchangeCodeWithCloud(
     };
     return data ?? null;
   } catch (err) {
-    console.error(
+    errorDiagnostics.error("api/lib/cloud-auth-proxy",
       `[cloud-auth] exchange-code JSON parse failed: ${
         safeErrorMessage(err)
-      }`,
+      }`, err,
     );
     return null;
   }
@@ -408,7 +408,7 @@ function pollDesktopAuth(nonce: string): { status: "pending" | "resolved" | "exp
 
 function exchangeDesktopClaim(code: string): { token: string; expiresAt: Date } | null {
   if (!pendingClaim || pendingClaim.code !== code) {
-    console.log(`[desktop-auth] claim failed: ${!pendingClaim ? 'no pendingClaim' : 'code mismatch'}`);
+    errorDiagnostics.warn("api/lib/cloud-auth-proxy", `[desktop-auth] claim failed: ${!pendingClaim ? 'no pendingClaim' : 'code mismatch'}`);
     return null;
   }
   if (Date.now() - pendingClaim.createdAt > 60_000) {

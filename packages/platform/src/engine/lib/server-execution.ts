@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { AppError, NotFoundError } from "@repo/core";
 import { repos, tryAcquireAdvisoryLock } from "@repo/db";
 import type { CommandExecutor, ShellOptions } from "@repo/adapters";
@@ -126,7 +127,9 @@ export async function openServerShell(
       shell = await connection.executor.openShell(options);
     }
     shell.onClose(() => {
-      void release().catch(() => {});
+      void release().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/server-execution");
+      });
     });
     return { shell, release };
   } catch (error) {

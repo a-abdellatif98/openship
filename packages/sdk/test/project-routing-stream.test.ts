@@ -54,6 +54,27 @@ describe("routing retry facades", () => {
     });
   });
 
+  it("reattaches over GET with the exact session ID, even when that repair has finished", async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response('event: complete\ndata: {"type":"complete","status":"completed"}\n\n', {
+          headers: { "content-type": "text/event-stream" },
+        }),
+    );
+    const client = new OpenshipClient({ baseUrl: "https://ship.test", fetch });
+    const events = [];
+    for await (const event of client.projects.retryRoutingStream("project/a", {
+      sessionId: "routing/a?",
+    }))
+      events.push(event);
+    const [url, options] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(options.method).toBe("GET");
+    expect(new URL(url).pathname).toBe("/api/projects/project%2Fa/routing/retry/stream");
+    expect(new URL(url).searchParams.get("sessionId")).toBe("routing/a?");
+    expect(events).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it("runs natively without HTTP and revalidates identity before disclosing each event", async () => {
     const state = authorizationFixture();
     state.members.set("org-a:alice", { id: "a", role: "owner" });

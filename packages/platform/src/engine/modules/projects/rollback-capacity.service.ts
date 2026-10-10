@@ -10,6 +10,7 @@
  * window the pruner wouldn't enforce.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos } from "@repo/db";
 import type { RollbackCapacity } from "@repo/contracts";
@@ -40,13 +41,13 @@ export async function getRollbackCapacity(
   // Which host would this project deploy to? The active release records it;
   // a project that has never deployed has no host to measure yet.
   const activeDep = project.activeDeploymentId
-    ? await findActiveDeployment(project).catch(() => null)
+    ? await findActiveDeployment(project).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/rollback-capacity.service"); return null; })
     : null;
   const serverId = (activeDep?.meta as { serverId?: string } | null)?.serverId;
   // An unreachable host must degrade the LABEL, not the endpoint: everything
   // else here is persisted, so a failed probe still renders a truthful window
   // with the disk figures blank.
-  const disk = activeDep ? await getHostDisk(serverId, organizationId).catch(() => null) : null;
+  const disk = activeDep ? await getHostDisk(serverId, organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/rollback-capacity.service"); return null; }) : null;
 
   return {
     window: detail.window,

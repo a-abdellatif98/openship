@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useEffect, useId, useRef, useState } from "react";
@@ -77,7 +78,8 @@ export const ServerDeletionModal = ({
       .then((res) => {
         if (!cancelled && res?.preview) setPreview(res.preview);
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/servers/ServerDeletionModal");
         /* Informational: a failed preview must not block the removal, and
            `serverDestroyBlockedReason(null)` then withholds the destroy option
            rather than offering it against an unknown host. */

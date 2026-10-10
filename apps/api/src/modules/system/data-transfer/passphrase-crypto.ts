@@ -9,6 +9,7 @@
  * fails the GCM auth tag and surfaces as WrongPassphraseError.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { randomBytes, scryptSync } from "node:crypto";
 
 import { decryptWithKey, encryptWithKey } from "@repo/platform/engine/lib/encryption";
@@ -52,7 +53,8 @@ export function openSecretBundle(sealed: SealedSecrets, passphrase: string): Sec
   try {
     const key = deriveKey(passphrase, Buffer.from(sealed.kdf.salt, "base64"), sealed.kdf);
     return JSON.parse(decryptWithKey(key, sealed.blob)) as SecretBundle;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/modules/system/data-transfer/passphrase-crypto");
     // Wrong key (GCM auth failure), bad KDF params, or malformed JSON — all mean
     // "this passphrase can't open this file".
     throw new WrongPassphraseError();

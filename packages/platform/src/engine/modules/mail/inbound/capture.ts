@@ -28,6 +28,7 @@
 // byte-identical private ones, and core's docstring records that nine existed before it
 // was consolidated. Every value interpolated into a command on this path reaches root on a
 // host-networked, NET_ADMIN container, so it should be the audited one.
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { safeErrorMessage } from "@repo/core";
 import { execute, q, queryOne, transaction } from "@repo/platform/engine/modules/mail/admin/psql-runner";
 import { hashPassword } from "@repo/platform/engine/modules/mail/admin/password";
@@ -195,10 +196,15 @@ export async function ensureCollectorMailbox(
   try {
     await createMaildirOnDisk(target, layout);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/mail/inbound/capture");
     // Same compensating rollback as createMailbox: leaving the rows behind would make
     // Postfix accept mail for an address whose storage does not exist, which bounces.
-    await execute(target, `DELETE FROM forwardings WHERE address = ${q(username)}`).catch(() => {});
-    await execute(target, `DELETE FROM mailbox WHERE username = ${q(username)}`).catch(() => {});
+    await execute(target, `DELETE FROM forwardings WHERE address = ${q(username)}`).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/inbound/capture");
+    });
+    await execute(target, `DELETE FROM mailbox WHERE username = ${q(username)}`).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/inbound/capture");
+    });
     throw new Error(
       `Could not create the collector maildir for ${d}: ${safeErrorMessage(err)}`,
     );
@@ -318,7 +324,7 @@ export async function reconcileDomains(
   const refused: string[] = [];
 
   for (const d of engineDomains) {
-    const state = await readArmedState(target, d).catch(() => null);
+    const state = await readArmedState(target, d).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/inbound/capture"); return null; });
     if (!state) continue;
 
     if (shouldArm.has(d)) {
@@ -327,12 +333,12 @@ export async function reconcileDomains(
         continue;
       }
       if (!state.token) {
-        await armDomain(target, d).then(() => armed.push(d)).catch(() => refused.push(d));
+        await armDomain(target, d).then(() => armed.push(d)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/inbound/capture"); return refused.push(d); });
       }
       continue;
     }
     if (state.token) {
-      await disarmDomain(target, d).then(() => disarmed.push(d)).catch(() => undefined);
+      await disarmDomain(target, d).then(() => disarmed.push(d)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/inbound/capture"); return undefined; });
     }
   }
   return { armed, disarmed, refused };

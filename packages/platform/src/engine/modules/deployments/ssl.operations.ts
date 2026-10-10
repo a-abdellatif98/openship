@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { AppError, OperationError, type DeploymentSslSchemas } from "@repo/contracts";
 import type { ScopedServices } from "../../../resource-operations";
 import type { ExecutionContext } from "../../../context";
@@ -24,7 +25,8 @@ function failure(error: unknown, message: string): never {
 export const deploymentSslOperations: ScopedServices<typeof DeploymentSslSchemas> = {
   async sslStatus(ctx, input) {
     try { return { success: true, ...await service.getStatus(input.domain, ctx.organizationId, access(ctx, "read")) }; }
-    catch (error) { failure(error, "Failed to check SSL status"); }
+    catch (error) {
+      observeCaughtError(error, "platform/engine/modules/deployments/ssl.operations"); failure(error, "Failed to check SSL status"); }
   },
   async renewSsl(ctx, input) {
     try {
@@ -32,6 +34,7 @@ export const deploymentSslOperations: ScopedServices<typeof DeploymentSslSchemas
       audit.recordAsync(operationAuditContext(ctx), { eventType: "deployment:write", resourceType: "deployment", resourceId: "*",
         after: { operation: "renewSsl", domain: input.domain, includeWww: input.includeWww === true, results: result.results } });
       return result;
-    } catch (error) { failure(error, "Failed to renew SSL"); }
+    } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/deployments/ssl.operations"); failure(error, "Failed to renew SSL"); }
   },
 };

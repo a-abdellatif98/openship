@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { spawn } from "node:child_process";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -76,7 +77,7 @@ const options = (password?: string): RedisOptions => ({
 });
 export function redisConnection(endpoint: RedisEndpoint, password = process.env.REDISCLI_AUTH) {
   const client = new Redis(endpoint.port, endpoint.host, options(password));
-  client.on("error", () => {});
+  client.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/cluster/tasks/redis"); });
   return client;
 }
 export function validateRedisManifest(
@@ -184,7 +185,7 @@ export async function restoreRedis(
           maxRedirections: 16,
         })
       : redisConnection(endpoint);
-  target.on("error", () => {});
+  target.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/cluster/tasks/redis"); });
   try {
     for (const [index, file] of manifest.files.entries()) {
       const folder = join(directory, `restore-${index}`);
@@ -229,7 +230,7 @@ export async function restoreRedis(
         error = (error + data).slice(-2000);
       });
       let failure: Error | undefined;
-      process.on("error", (reason) => {
+      process.on("error", (reason) => { observeCaughtError(reason, "adapters/cluster/tasks/redis");
         failure = reason;
       });
       process.once("exit", (code) => {
@@ -242,7 +243,7 @@ export async function restoreRedis(
         maxRetriesPerRequest: null,
         enableOfflineQueue: true,
       });
-      temporary.on("error", () => {});
+      temporary.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/cluster/tasks/redis"); });
       try {
         await Promise.race([
           temporary.ping(),

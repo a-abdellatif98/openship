@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { TERMINAL_COLS_MAX, TERMINAL_ROWS_MAX, type TerminalTarget } from "@repo/contracts";
 import type { TerminalSession } from "@repo/sdk/client";
 import { getRemoteClient } from "./ship-client";
@@ -36,6 +37,7 @@ export async function openTerminal(
     try {
       session?.write(data);
     } catch (error) {
+      observeCaughtError(error, "cli/lib/terminal");
       abort.abort(error);
     }
   };
@@ -46,6 +48,7 @@ export async function openTerminal(
         Math.max(1, Math.min(output.rows || 24, TERMINAL_ROWS_MAX)),
       );
     } catch (error) {
+      observeCaughtError(error, "cli/lib/terminal");
       abort.abort(error);
     }
   };

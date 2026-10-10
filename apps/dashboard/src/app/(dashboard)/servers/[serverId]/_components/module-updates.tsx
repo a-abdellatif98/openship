@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useState } from "react";
@@ -125,7 +126,8 @@ export function ServerModuleUpdates({ serverId }: { serverId: string }) {
   const load = useCallback(async () => {
     try {
       setMods(await systemApi.listServerModules(serverId));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/servers/[serverId]/_components/module-updates");
       setMods([]);
     } finally {
       setLoading(false);
@@ -149,7 +151,8 @@ export function ServerModuleUpdates({ serverId }: { serverId: string }) {
             "error",
           );
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/servers/[serverId]/_components/module-updates");
         showToast(interpolate(t.servers.modules.updateFailed, { module: m.moduleName }), "error");
       } finally {
         setBusy(null);

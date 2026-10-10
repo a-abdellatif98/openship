@@ -25,6 +25,7 @@
  * (`controlPlaneContainerIds`) is what keeps them out of the candidate pool at all.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 
 import { isControlPlaneProject } from "../../lib/resource-access";
@@ -75,9 +76,9 @@ export async function classifyManagedContainers(
 
     for (const sd of managed) {
       if (!sd.containerId) continue;
-      const dep = await repos.deployment.findById(sd.deploymentId).catch(() => null);
+      const dep = await repos.deployment.findById(sd.deploymentId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/managed-containers"); return null; });
       if (!dep || dep.organizationId !== organizationId) continue; // other org / stale row
-      const proj = await repos.project.findById(dep.projectId).catch(() => null);
+      const proj = await repos.project.findById(dep.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/managed-containers"); return null; });
       if (!proj || proj.deletedAt) continue;
       if (isControlPlaneProject(proj)) {
         out.controlPlane.add(sd.containerId);
@@ -91,7 +92,8 @@ export async function classifyManagedContainers(
       });
     }
     return out;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/managed-containers");
     return empty;
   }
 }

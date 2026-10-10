@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { getPlatformKernel } from "@repo/platform/engine/lib/platform";
 import { operationContext, applyOperationContext } from "../../lib/operation-context";
 /**
@@ -18,7 +19,7 @@ import type { TEnsureProjectBody } from "@repo/contracts";
 import { parseProjectDeleteOptions } from "./project-delete-options";
 
 function logEnsureProjectError(userId: string, body: TEnsureProjectBody, err: unknown) {
-  console.error("[PROJECT] Failed to ensure project", {
+  errorDiagnostics.error("api/modules/projects/project.controller", "[PROJECT] Failed to ensure project", {
     userId,
     projectId: body.projectId,
     name: body.name,
@@ -33,10 +34,10 @@ function logEnsureProjectError(userId: string, body: TEnsureProjectBody, err: un
       domainType: endpoint.domainType,
     })),
   });
-  console.error(err);
+  errorDiagnostics.error("api/modules/projects/project.controller", err);
 
   if (err instanceof Error && err.cause) {
-    console.error("[PROJECT] Ensure project cause:", err.cause);
+    errorDiagnostics.error("api/modules/projects/project.controller", "[PROJECT] Ensure project cause:", err.cause);
   }
 }
 
@@ -49,6 +50,7 @@ export async function ensure(c: Context) {
     applyOperationContext(c, result.context);
     return c.json(result.data);
   } catch (err) {
+    observeCaughtError(err, "api/modules/projects/project.controller");
     logEnsureProjectError(getRequestContext(c).userId, body, err);
     if (err instanceof AppError)
       return c.json({ success: false, error: err.message, code: err.code }, err.statusCode as 400);
@@ -369,6 +371,7 @@ async function clusterResourceStream(c: Context, kind: "database" | "volume") {
       ](initial.context, id, { signal: abort.signal }))
         await stream.writeSSE(event);
     } catch (error) {
+      observeCaughtError(error, "api/modules/projects/project.controller");
       if (!abort.signal.aborted)
         await stream.writeSSE({
           event: "error",
@@ -495,6 +498,7 @@ export async function runtimeLogStream(c: Context) {
         await stream.writeSSE(event);
       }
     } catch (error) {
+      observeCaughtError(error, "api/modules/projects/project.controller");
       if (!abort.signal.aborted)
         await stream.writeSSE({
           event: "error",
@@ -725,16 +729,26 @@ export async function retryRouting(c: Context) {
 export async function retryRoutingStream(c: Context) {
   const context = operationContext(c);
   const id = param(c, "id");
+  const sessionId = c.req.method === "GET" ? c.req.query("sessionId") : undefined;
+  if (c.req.method === "GET" && !sessionId)
+    throw new AppError(
+      "Choose the routing log to reconnect to.",
+      400,
+      "ROUTING_RETRY_SESSION_REQUIRED",
+    );
   return streamSSE(c, async (stream) => {
     const abort = new AbortController();
     stream.onAbort(() => abort.abort());
     try {
       for await (const event of getPlatformKernel().projects.retryRoutingStream(context, id, {
         signal: abort.signal,
+        sessionId,
+        idempotencyKey: c.req.method === "POST" ? c.req.query("idempotencyKey") : undefined,
       })) {
         await stream.writeSSE(event);
       }
     } catch (error) {
+      observeCaughtError(error, "api/modules/projects/project.controller");
       if (!abort.signal.aborted) {
         await stream.writeSSE({
           event: "log",

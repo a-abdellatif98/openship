@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const projectRepo = vi.hoisted(() => ({ findById: vi.fn() }));
@@ -800,7 +801,7 @@ describe("applyProjectRouting — static frontend composite", () => {
 
   it("says why when the composite still cannot be built", async () => {
     rows(null);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(errorDiagnostics, "warn").mockImplementation(() => {});
 
     await applyProjectRouting("proj_1");
 
@@ -833,7 +834,7 @@ describe("applyProjectRouting — static frontend composite", () => {
       },
     ]);
     runtimeReturning({ ip: null });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(errorDiagnostics, "warn").mockImplementation(() => {});
 
     await applyProjectRouting("proj_1");
 

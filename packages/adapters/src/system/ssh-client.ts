@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Client } from "ssh2";
 import type { ClientChannel, ConnectConfig, SFTPWrapper } from "ssh2";
 import type { Duplex, Readable } from "node:stream";
@@ -70,7 +71,7 @@ export async function connectSshClient(config: SshConfig): Promise<StreamLocalCa
       resolve(client);
     });
 
-    client.on("error", (err) => {
+    client.on("error", (err) => { observeCaughtError(err, "adapters/system/ssh-client");
       if (settled) return;
       settled = true;
       transport?.destroy();
@@ -90,6 +91,7 @@ export async function connectSshClient(config: SshConfig): Promise<StreamLocalCa
     try {
       client.connect({ ...toConnectConfig(config), ...(transport ? { sock: transport } : {}) });
     } catch (err) {
+      observeCaughtError(err, "adapters/system/ssh-client");
       transport?.destroy();
       client.end();
       reject(err);
@@ -222,7 +224,7 @@ export function attachDialStdioDiagnostics<T extends Duplex>(stream: T): T {
     diagnostics.exitCode = typeof code === "number" ? code : null;
     diagnostics.signal = typeof signal === "string" ? signal : null;
   });
-  stream.on("error", (err: unknown) => {
+  stream.on("error", (err: unknown) => { observeCaughtError(err, "adapters/system/ssh-client");
     diagnostics.error ??= safeErrorMessage(err);
   });
 
@@ -277,7 +279,8 @@ export async function execSshCommand(
       if (stream) {
         try {
           stream.close();
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/system/ssh-client");
           /* already closed */
         }
       }
@@ -298,7 +301,8 @@ export async function execSshCommand(
         // channel) - tear this one down too instead of leaving it orphaned.
         try {
           stream.close();
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/system/ssh-client");
           /* already closed */
         }
         return;

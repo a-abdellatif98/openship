@@ -18,6 +18,7 @@ export interface InvitationClaim {
   role: string;
   expiresAt: Date;
   inviterId: string;
+  inviterName: string | null;
   inviterIsInstanceAdmin: boolean;
   organization: {
     id: string;
@@ -46,6 +47,7 @@ export interface InvitationClaimOrganization {
 export interface InvitationClaimInviter {
   id: string;
   role: string;
+  name?: string;
 }
 
 /** One policy for both invitation creation and the public claim-page UI. */
@@ -85,6 +87,7 @@ export function invitationClaimFromRecords(
     role: invitation.role,
     expiresAt: invitation.expiresAt,
     inviterId: invitation.inviterId,
+    inviterName: inviter.name?.trim() || null,
     inviterIsInstanceAdmin: inviter.role === "admin",
     organization: {
       id: organization.id,

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -88,7 +89,8 @@ export function GitHubConnection() {
       setInstallUrl(res?.installUrl || null);
       setCapabilities((res?.capabilities as GitHubCapabilities | undefined) ?? null);
       setCustomSourcesConfigured(res?.customSourcesConfigured === true);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/GitHubConnection");
       if (request !== statusRequest.current) return;
       setState(EMPTY_STATE);
       setAccounts([]);
@@ -105,7 +107,9 @@ export function GitHubConnection() {
     void settingsApi
       .get()
       .then((r) => setForwardGit(!!r.forwardGitToServer))
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/GitHubConnection");
+      });
     return () => {
       statusRequest.current++;
     };
@@ -765,7 +769,9 @@ function DeviceFlowPanel(props: {
           <button
             type="button"
             onClick={() =>
-              void navigator.clipboard?.writeText(cliAction.userCode ?? "").catch(() => {})
+              void navigator.clipboard?.writeText(cliAction.userCode ?? "").catch((diagnosticFailure) => {
+                observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/GitHubConnection");
+              })
             }
             title={t.settings.github.copyCode}
             className="rounded-md bg-muted px-3 py-1.5 font-mono text-base font-bold tracking-widest text-foreground hover:bg-muted/70 transition-colors"

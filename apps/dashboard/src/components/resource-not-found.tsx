@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import Link from "next/link";
@@ -103,7 +104,9 @@ function IdChip({ value, copyLabel }: { value: string; copyLabel?: string }) {
     p.then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    }).catch(() => {});
+    }).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/components/resource-not-found");
+    });
   };
   return (
     <button

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos, type Domain } from "@repo/db";
 import { ConflictError, isWildcardHostname } from "@repo/core";
 import { CloudInfraProvider } from "@repo/adapters";
@@ -64,7 +65,8 @@ async function checkManagedSlugAvailable(hostname: string): Promise<boolean | nu
   try {
     const result = await runtime.checkSlug(slug, getRoutingBaseDomain());
     return result.available;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/project-route-store");
     return null;
   }
 }

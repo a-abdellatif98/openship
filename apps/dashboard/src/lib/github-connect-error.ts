@@ -7,6 +7,7 @@
  * post-close handler reads + clears it and shows a toast — otherwise the flow
  * would just silently report "not connected".
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 export const GITHUB_CONNECT_ERROR_KEY = "openship.github.connectError";
 
 type ConnectErrorStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -15,7 +16,8 @@ function browserStorage(): ConnectErrorStorage | null {
   if (typeof window === "undefined") return null;
   try {
     return window.localStorage;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/lib/github-connect-error");
     return null;
   }
 }
@@ -29,7 +31,8 @@ export function storeGitHubConnectError(
   if (!error || !storage) return;
   try {
     storage.setItem(state ? `${GITHUB_CONNECT_ERROR_KEY}.${state}` : GITHUB_CONNECT_ERROR_KEY, error);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/lib/github-connect-error");
     /* storage unavailable */
   }
 }
@@ -45,7 +48,8 @@ export function consumeGitHubConnectError(
     const error = storage.getItem(key);
     if (error !== null) storage.removeItem(key);
     return error;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/lib/github-connect-error");
     return null;
   }
 }

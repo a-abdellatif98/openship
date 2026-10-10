@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { Suspense, useState } from "react";
@@ -107,6 +108,7 @@ function ResetPasswordForm() {
         setCode("");
       }
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(auth)/reset-password/page");
       toast("error", isNetworkError(err)
         ? t.auth.errors.serverUnreachable
         : t.auth.errors.generic);

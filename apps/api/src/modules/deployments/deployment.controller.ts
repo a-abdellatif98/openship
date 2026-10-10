@@ -2,6 +2,7 @@
  * Deployment controller - Hono request handlers.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import { AppError } from "@repo/core";
 import { freezeContext } from "@repo/platform";
@@ -122,7 +123,7 @@ export async function restorePlan(c: Context) {
 }
 
 export async function pin(c: Context) {
-  const body = await c.req.json<{ pinned?: boolean }>().catch(() => ({}));
+  const body = await c.req.json<{ pinned?: boolean }>().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/deployments/deployment.controller"); return ({}); });
   const result = await getPlatformKernel().deployments.pin(operationContext(c), param(c, "id"), body);
   applyOperationContext(c, result.context);
   return c.json({ data: result.data });
@@ -244,7 +245,7 @@ export async function buildStatus(c: Context) {
  *   resolves the latest commit on the branch — the auto-redeploy semantic.
  */
 export async function buildRedeploy(c: Context) {
-  const body = await c.req.json<{ useExistingCommit?: boolean }>().catch(() => ({}));
+  const body = await c.req.json<{ useExistingCommit?: boolean }>().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/deployments/deployment.controller"); return ({}); });
   const result = await getPlatformKernel().deployments.redeploy(operationContext(c), param(c, "id"), body);
   applyOperationContext(c, result.context);
   return c.json({ success: true, ...result.data });

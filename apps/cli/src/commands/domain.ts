@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { exitCommand, rethrowCommandExit } from "../lib/command-exit";
 /**
  * `openship domain` — custom domains, DNS verification, and SSL.
@@ -58,6 +59,7 @@ const listCmd = new Command("list")
       }
       printTable(rows.map(domainRow), ["id", "hostname", "type", "primary", "verified", "status", "ssl"]);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/domain");
       rethrowCommandExit(e);
       fail(e);
     }
@@ -80,6 +82,7 @@ const addCmd = new Command("add")
       info("  Add these DNS records at your registrar, then run `openship domain verify " + res.domain.id + "`:");
       if (res.records) printRecords(res.records);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/domain");
       rethrowCommandExit(e);
       sp?.fail("Add failed");
       fail(e);
@@ -93,6 +96,7 @@ const previewCmd = new Command("preview")
     try {
       printRecords(await getShipClient().domains.preview({ hostname }));
     } catch (e) {
+      observeCaughtError(e, "cli/commands/domain");
       rethrowCommandExit(e);
       fail(e);
     }
@@ -128,6 +132,7 @@ const verifyCmd = new Command("verify")
       if (body.sslStatus) info(`  SSL: ${body.sslStatus}`);
       if (!body.verified) exitCommand(1);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/domain");
       rethrowCommandExit(e);
       sp?.fail("Verify failed");
       fail(e);
@@ -144,6 +149,7 @@ const primaryCmd = new Command("primary")
       sp?.succeed(`${domain.hostname} is now primary`);
       if (isJsonMode()) printJson(domain);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/domain");
       rethrowCommandExit(e);
       sp?.fail("Failed to set primary");
       fail(e);
@@ -157,6 +163,7 @@ const recordsCmd = new Command("records")
     try {
       printRecords(await getShipClient().domains.records(id));
     } catch (e) {
+      observeCaughtError(e, "cli/commands/domain");
       rethrowCommandExit(e);
       fail(e);
     }
@@ -183,6 +190,7 @@ const renewCmd = new Command("renew")
       sp?.succeed(`Renewed ${data.domain}`);
       printSsl(data);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/domain");
       rethrowCommandExit(e);
       sp?.fail("Renew failed");
       fail(e);
@@ -201,6 +209,7 @@ const verifySslCmd = new Command("verify-ssl")
       printSsl(data);
       if (!data.verified) exitCommand(1);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/domain");
       rethrowCommandExit(e);
       sp?.fail("SSL check failed");
       fail(e);
@@ -227,6 +236,7 @@ const renewAllCmd = new Command("renew-all")
         info("  Nothing needed renewal.");
       }
     } catch (e) {
+      observeCaughtError(e, "cli/commands/domain");
       rethrowCommandExit(e);
       sp?.fail("Renew-all failed");
       fail(e);

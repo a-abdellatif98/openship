@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -116,7 +117,7 @@ function PersistentPathsCard(): React.JSX.Element {
       // Read back rather than echo the draft: the server normalizes bare paths
       // into real mounts, and on a reset only it knows what the framework
       // default resolves to.
-      const fresh = await projectsApi.getObjectStorage(id).catch(() => null);
+      const fresh = await projectsApi.getObjectStorage(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/StorageSettings"); return null; });
       updateBuild({
         volumes: fresh?.data?.volumes ?? volumes,
         resolvedVolumes: fresh?.data?.resolvedVolumes ?? volumes ?? [],
@@ -250,7 +251,8 @@ function ObjectStorageCard(): React.JSX.Element {
     try {
       const res = await projectsApi.getObjectStorage(id);
       setView(res.data ?? null);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/StorageSettings");
       // A read failure leaves the card in its empty state; the bind attempt will
       // surface the real error with a message worth showing.
       setView(null);

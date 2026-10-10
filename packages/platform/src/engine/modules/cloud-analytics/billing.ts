@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { z } from "zod";
 import { repos } from "@repo/db";
 import type { PlanTierId } from "@repo/core";
@@ -63,7 +64,9 @@ export async function observeVerifiedBillingEvent(
   // turn an old checkout into a new payment.
   const checkoutId = (data as { checkoutId?: unknown } | null)?.checkoutId;
   if (typeof checkoutId === "string" && checkoutId.length > 0 && checkoutId.length <= 256) {
-    await repos.cloudAnalytics.recheckCheckout(organizationId, checkoutId).catch(() => {});
+    await repos.cloudAnalytics.recheckCheckout(organizationId, checkoutId).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud-analytics/billing");
+    });
   }
 }
 

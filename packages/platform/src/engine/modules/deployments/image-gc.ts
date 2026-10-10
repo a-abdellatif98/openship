@@ -17,6 +17,7 @@
  * Scheduled as the `images:gc` system job (see modules/jobs/job.registry.ts).
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos, type Project } from "@repo/db";
 import { DockerRuntime, ownsBuiltImage, kubernetesBuildImageTag } from "@repo/adapters";
@@ -122,7 +123,7 @@ async function reapProjectImagesUnlocked(project: Project): Promise<ReapResult> 
           out.skippedInUse += 1;
         } else {
           out.errors += 1;
-          console.error(`[image-gc] project ${project.id}: image removal failed: ${safeErrorMessage(err)}`);
+          errorDiagnostics.error("platform/engine/modules/deployments/image-gc", `[image-gc] project ${project.id}: image removal failed: ${safeErrorMessage(err)}`, err);
         }
       }
     }
@@ -165,7 +166,7 @@ export async function reapProjectImagesSafe(
   } catch (err) {
     const msg = `[image-gc] reclaim skipped for project ${id}: ${safeErrorMessage(err)}`;
     if (onWarn) onWarn(msg);
-    else console.error(msg);
+    else errorDiagnostics.error("platform/engine/modules/deployments/image-gc", msg, err);
   }
 }
 
@@ -197,7 +198,7 @@ export async function runImageGcSweep(): Promise<ImageGcSummary> {
       summary.errors += r.errors;
     } catch (err) {
       summary.errors += 1;
-      console.error(`[image-gc] project ${project.id} sweep failed:`, safeErrorMessage(err));
+      errorDiagnostics.error("platform/engine/modules/deployments/image-gc", `[image-gc] project ${project.id} sweep failed:`, safeErrorMessage(err), err);
     }
   }
   return summary;

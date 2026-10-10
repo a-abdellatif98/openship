@@ -130,7 +130,6 @@ export function moduleHttpSurface(file, text, mounts = new Map()) {
           const options = value(init.arguments[1], bindings);
           if (
             typeof options?.basePath !== "string" ||
-            !options.basePath ||
             typeof options?.module !== "string" ||
             !options.module ||
             (Object.hasOwn(options, "localOnly") && typeof options.localOnly !== "boolean")
@@ -177,7 +176,7 @@ export function moduleHttpSurface(file, text, mounts = new Map()) {
           for (const verb of verbs)
             routes.push({
               method: verb.toUpperCase(),
-              path: (router.basePath + (path === "/" ? "" : path)).replace(/\/$/, ""),
+              path: (router.basePath + (path === "/" ? "" : path)).replace(/\/$/, "") || "/",
               module: router.module,
               access: internal
                 ? "Internal operator"

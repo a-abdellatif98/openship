@@ -1799,7 +1799,8 @@ describe("group identity", () => {
     await confirm();
     expect(openFor(projectId)).toHaveLength(1);
 
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { diagnostics } = await import("@repo/core/diagnostics");
+    const warn = vi.spyOn(diagnostics, "warn").mockImplementation(() => {});
     try {
       // Nothing stops a server being deleted while projects still target it.
       h.servers.delete("srvGone");
@@ -1827,7 +1828,8 @@ describe("group identity", () => {
     setState(containerId, "exited", { exitCode: 1 });
     h.servers.set("srvMoved", { id: "srvMoved", name: "box", organizationId: "org2" });
 
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { diagnostics } = await import("@repo/core/diagnostics");
+    const warn = vi.spyOn(diagnostics, "warn").mockImplementation(() => {});
     try {
       const summary = await confirm();
 
@@ -1850,7 +1852,8 @@ describe("group identity", () => {
     });
     setState(containerId, "exited", { exitCode: 1 });
 
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { diagnostics } = await import("@repo/core/diagnostics");
+    const warn = vi.spyOn(diagnostics, "warn").mockImplementation(() => {});
     try {
       const summary = await confirm();
 

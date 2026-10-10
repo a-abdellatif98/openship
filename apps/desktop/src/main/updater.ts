@@ -14,6 +14,7 @@
  * digest to the publisher key embedded in this app. Missing proofs fail closed.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { app, net, shell } from "electron";
 import {
   changelogMarkdownUrl,
@@ -105,7 +106,8 @@ async function checkForUpdateUncached(): Promise<UpdateCheck> {
       latest: { version: tag.replace(/^v/, ""), tag, notes: changelogNotes ?? "" },
       manifest,
     };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "desktop/main/updater");
     return { available: false, latest: null, manifest: null };
   }
 }
@@ -120,7 +122,8 @@ async function fetchChangelog(tag: string): Promise<string | null> {
     });
     if (!res.ok) return null;
     return extractChangelogSection(await res.text(), tag);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "desktop/main/updater");
     return null;
   }
 }
@@ -142,7 +145,8 @@ async function fetchManifest(tag: string): Promise<AdvisoryManifest | null> {
     });
     if (!res.ok) return null;
     return parseManifest(await res.json());
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "desktop/main/updater");
     return null;
   }
 }
@@ -221,7 +225,8 @@ async function downloadVerifiedInstaller(asset: UpdateAsset, version: string, on
       if (tok && /^[0-9a-f]{64}$/.test(tok)) expected = tok;
       else sidecarError = "malformed";
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "desktop/main/updater");
     sidecarError = "unreachable";
   }
   if (!expected) {
@@ -243,7 +248,8 @@ async function downloadVerifiedInstaller(asset: UpdateAsset, version: string, on
       throw new Error("No publisher signature");
     }
     verifyUpdateSignature(JSON.parse(await readUpdateProof(signature)), { version, name: asset.name, sha256: digest });
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "desktop/main/updater");
     rmSync(dest, { force: true });
     throw new Error("Update signature is missing or invalid. Refusing to install this update.");
   }
@@ -275,7 +281,7 @@ export function installUpdate(file: string): void {
     if (process.platform === "win32") return installWindows(file);
     return installLinux(file);
   } catch (err) {
-    console.error("[updater] seamless install failed, opening installer:", err);
+    errorDiagnostics.error("desktop/main/updater", "[updater] seamless install failed, opening installer:", err);
     fallbackOpen(file);
   }
 }

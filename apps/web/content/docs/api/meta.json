@@ -7,6 +7,7 @@
     "http",
     "auth",
     "health",
+    "diagnostics",
     "---Applications---",
     "projects",
     "sources",

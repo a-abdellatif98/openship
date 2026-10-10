@@ -23,7 +23,9 @@
  * prefix: "openship.terminal.resume+" (same).
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
+import { trackBackgroundWork } from "@repo/platform/engine/lib/background-work";
 import type { Context } from "hono";
 import {
   TERMINAL_SUBPROTOCOL_PREFIX as SUBPROTOCOL_PREFIX,
@@ -191,7 +193,10 @@ async function resolveServiceForOrg(
     const resolved = await (activity ? activity.run(resolve) : resolve());
     runtime = resolved.runtime;
   } catch (err) {
-    await activity?.release().catch(() => {});
+    observeCaughtError(err, "api/modules/service-terminal/service-terminal.controller");
+    await activity?.release().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "api/modules/service-terminal/service-terminal.controller");
+    });
     return {
       ok: false,
       code: "server_error",
@@ -257,7 +262,7 @@ async function resolveServiceForOrg(
 export async function issueTicket(c: Context) {
   const ctx = getRequestContext(c);
 
-  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const body = await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/service-terminal/service-terminal.controller"); return ({} as Record<string, unknown>); });
   const serviceId = typeof (body as { serviceId?: unknown }).serviceId === "string"
     ? ((body as { serviceId: string }).serviceId)
     : "";
@@ -331,9 +336,10 @@ export const serviceTerminalWsHandler = upgradeWebSocket(async (c) => {
         const sessOrgId =
           (session.session as { activeOrganizationId?: string | null } | null)
             ?.activeOrganizationId ?? null;
-        activeOrgId = await resolveActiveOrganizationId(userId, sessOrgId).catch(() => null);
+        activeOrgId = await resolveActiveOrganizationId(userId, sessOrgId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/service-terminal/service-terminal.controller"); return null; });
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "api/modules/service-terminal/service-terminal.controller");
       /* fall through */
     }
   }
@@ -534,6 +540,7 @@ function buildHandlers(ctx: HandshakeCtx) {
           term: "xterm-256color",
         }));
       } catch (err) {
+        observeCaughtError(err, "api/modules/service-terminal/service-terminal.controller");
         const code: ErrorCode = "ssh_connect";
         sendControl(ws, {
           type: "error",
@@ -544,7 +551,9 @@ function buildHandlers(ctx: HandshakeCtx) {
         // The shell never opened, so no session takes ownership of the runtime
         // below — release it here or a terminal that fails to attach leaks its
         // transport (the likeliest case being an unreachable host).
-        if (ctx.release) await ctx.release().catch(() => {});
+        if (ctx.release) await ctx.release().catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "api/modules/service-terminal/service-terminal.controller");
+        });
         else disposeRuntime(ctx.runtime);
         return;
       }
@@ -561,7 +570,7 @@ function buildHandlers(ctx: HandshakeCtx) {
         auditId = row.id;
       } catch {
         // eslint-disable-next-line no-console
-        console.error("[service-terminal] failed to write audit open row");
+        errorDiagnostics.error("api/modules/service-terminal/service-terminal.controller", "[service-terminal] failed to write audit open row");
       }
 
       const sessionId = auditId ?? `transient-${randomUUID()}`;
@@ -688,12 +697,24 @@ function buildHandlers(ctx: HandshakeCtx) {
   };
 }
 
-export async function teardown(
+export function teardown(
   state: ConnState,
   reason: TerminalExitReason,
   exitCode: number | null,
   alreadyUnregistered = false,
   forceClose = true,
+) {
+  return trackBackgroundWork(
+    teardownConnection(state, reason, exitCode, alreadyUnregistered, forceClose),
+  );
+}
+
+async function teardownConnection(
+  state: ConnState,
+  reason: TerminalExitReason,
+  exitCode: number | null,
+  alreadyUnregistered: boolean,
+  forceClose: boolean,
 ) {
   // Full teardown already completed for this connection.
   if (state.ended) return;
@@ -742,7 +763,8 @@ export async function teardown(
         exitCode,
         exitReason: reason,
       });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "api/modules/service-terminal/service-terminal.controller");
       // boot-time sweep will close orphaned rows
     }
   }

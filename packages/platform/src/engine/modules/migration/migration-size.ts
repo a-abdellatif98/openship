@@ -12,6 +12,7 @@
  * denominator for the bar.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "@repo/adapters";
 import { sq, statPath } from "./direct-transfer";
 import { mapWithLimit } from "../../lib/map-with-limit";
@@ -56,7 +57,7 @@ export async function duBytes(exec: CommandExecutor, path: string): Promise<numb
   // -s summarize, -b apparent bytes (matches rsync's transferred bytes).
   const out = await exec
     .exec(`du -sb ${sq(path)} 2>/dev/null | cut -f1`, { timeout: PROBE_TIMEOUT_MS })
-    .catch(() => "");
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration-size"); return ""; });
   const n = Number(out.trim());
   return out.trim() && Number.isFinite(n) && n >= 0 ? n : null;
 }
@@ -67,7 +68,7 @@ export async function volumeBytes(exec: CommandExecutor, name: string): Promise<
       .exec(`docker volume inspect ${sq(name)} --format '{{.Mountpoint}}' 2>/dev/null`, {
         timeout: INSPECT_TIMEOUT_MS,
       })
-      .catch(() => "")
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration-size"); return ""; })
   ).trim();
   if (!mp) return null;
   return duBytes(exec, mp);
@@ -78,7 +79,7 @@ async function imageBytes(exec: CommandExecutor, ref: string): Promise<number | 
     .exec(`docker image inspect ${sq(ref)} --format '{{.Size}}' 2>/dev/null || echo`, {
       timeout: INSPECT_TIMEOUT_MS,
     })
-    .catch(() => "");
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration-size"); return ""; });
   const n = Number(out.trim());
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -103,7 +104,7 @@ export async function sizeOfMoveSet(exec: CommandExecutor, set: MoveSet): Promis
     // Up-front existence/type for a path the user can act on (bind/custom) so
     // the plan warns before the move — a missing path is the resolvable case.
     if (t.kind === "bind" || t.kind === "path") {
-      const st = await statPath(exec, t.probe).catch(() => null);
+      const st = await statPath(exec, t.probe).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/migration-size"); return null; });
       return {
         ref: t.ref,
         kind: t.kind,

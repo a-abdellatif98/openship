@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Platform } from "@repo/adapters";
 import { safeErrorMessage } from "@repo/core";
 import { cloudClient } from "./cloud/client";
@@ -148,6 +149,7 @@ export async function syncManagedEdgeRoutes(
       opts.onLog?.(`  ${tgt.hostname} → http://${target} (Openship Cloud edge → this server)\n`);
       if (warning) opts.onLog?.(`Note: ${tgt.hostname} is ${warning}\n`, "warn");
     } catch (err) {
+      observeCaughtError(err, "platform/engine/lib/managed-edge-proxy");
       const reason = safeErrorMessage(err);
       failures.push(`${tgt.hostname} (${reason})`);
       opts.onLog?.(
@@ -178,6 +180,7 @@ export async function deregisterManagedEdgeRoutes(
     try {
       await cloudClient({ organizationId: opts.organizationId }).edgeProxy.deregister(slug);
     } catch (err) {
+      observeCaughtError(err, "platform/engine/lib/managed-edge-proxy");
       failures.push(`${slug} (${safeErrorMessage(err)})`);
     }
   }

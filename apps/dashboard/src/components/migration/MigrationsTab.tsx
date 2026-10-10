@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useState } from "react";
@@ -49,7 +50,8 @@ export function MigrationsTab({
     try {
       const res = await dockerMigrationApi.list(serverId);
       setRuns(res.runs);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/migration/MigrationsTab");
       setRuns((prev) => prev ?? []);
     }
   }, [serverId]);
@@ -63,7 +65,9 @@ export function MigrationsTab({
         for (const s of list) if (s.name) map[s.id] = s.name;
         setNames(map);
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/migration/MigrationsTab");
+      });
   }, [fetchRuns]);
 
   // Poll while anything is in flight (and only while showing the list) so the

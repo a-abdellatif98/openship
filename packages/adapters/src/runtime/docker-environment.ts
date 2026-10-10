@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type Dockerode from "dockerode";
 import { AppError, isValidEnvKey, safeErrorMessage } from "@repo/core";
 import { randomUUID } from "node:crypto";
@@ -190,12 +191,14 @@ export async function applyDockerEnvironment(
     // must not roll back a committed apply or report that the env was not applied.
     try {
       await original.remove();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/docker-environment");
       result.warning =
         "Environment applied, but the stopped previous container could not be removed.";
     }
     return result;
   } catch (error) {
+    observeCaughtError(error, "adapters/runtime/docker-environment");
     const recovery: string[] = [];
     if (replacement) {
       try {
@@ -205,6 +208,7 @@ export async function applyDockerEnvironment(
         });
         await replacement.remove();
       } catch (restoreError) {
+        observeCaughtError(restoreError, "adapters/runtime/docker-environment");
         recovery.push(safeErrorMessage(restoreError));
       }
     }
@@ -212,6 +216,7 @@ export async function applyDockerEnvironment(
       try {
         await original.rename({ name });
       } catch (restoreError) {
+        observeCaughtError(restoreError, "adapters/runtime/docker-environment");
         recovery.push(safeErrorMessage(restoreError));
       }
     }
@@ -221,6 +226,7 @@ export async function applyDockerEnvironment(
           .getNetwork(network)
           .connect({ Container: before.Id, EndpointConfig: endpointSettings[network] });
       } catch (restoreError) {
+        observeCaughtError(restoreError, "adapters/runtime/docker-environment");
         recovery.push(safeErrorMessage(restoreError));
       }
     }
@@ -228,6 +234,7 @@ export async function applyDockerEnvironment(
       try {
         await original.start();
       } catch (restoreError) {
+        observeCaughtError(restoreError, "adapters/runtime/docker-environment");
         recovery.push(safeErrorMessage(restoreError));
       }
     }
@@ -235,6 +242,7 @@ export async function applyDockerEnvironment(
       try {
         await options.onRestored(containerIdentity(before.Id, await original.inspect()));
       } catch (restoreError) {
+        observeCaughtError(restoreError, "adapters/runtime/docker-environment");
         recovery.push(safeErrorMessage(restoreError));
       }
     }

@@ -21,6 +21,7 @@
  * was never written at all.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   probeStaticOutput,
   resolveServedStaticPath,
@@ -175,7 +176,7 @@ export async function auditStaticOutput(
     const r = await probe(target.servedPath, {
       hostname: target.hostname,
       requestPath: target.path,
-    }).catch(() => null);
+    }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/output-audit.service"); return null; });
     if (!r) {
       results.push({
         path: target.path,
@@ -231,7 +232,8 @@ async function resolveProbe(source: OutputAuditSource): Promise<StaticProbe | nu
   try {
     const executor = await runtime.inContainerExecutor(containerId);
     return (servedPath) => probeStaticOutput(executor, servedPath);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/output-audit.service");
     return null;
   }
 }

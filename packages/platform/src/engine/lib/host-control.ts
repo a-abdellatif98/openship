@@ -24,6 +24,7 @@
  * relationship to the settings write).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { resolvePlatformConfig } from "./platform-config";
 
 /** Native no-routing mode reuses the bare desktop adapter, but is still an owned
@@ -66,7 +67,8 @@ export async function resolveHostControlEnabled(): Promise<boolean> {
     const { repos } = await import("@repo/db");
     const stored = (await repos.instanceSettings.get())?.hostControlEnabled;
     resolved = stored ?? !envHostControlDisabled();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/host-control");
     resolved = !envHostControlDisabled();
   }
 
@@ -89,7 +91,8 @@ export async function syncHostControlOverride(): Promise<void> {
   let stored: boolean | null = null;
   try {
     stored = (await repos.instanceSettings.get())?.hostControlEnabled ?? null;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/host-control");
     // DB unreadable: leave the override cleared so the env floor governs.
     stored = null;
   }

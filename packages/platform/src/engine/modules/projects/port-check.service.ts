@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos } from "@repo/db";
 import type { BuildLogger } from "@repo/adapters";
@@ -99,7 +100,8 @@ async function runPortProbe(
     if (ports.length === 0 && project.port) ports.push(project.port);
     if (ports.length === 0) return [];
     return await auditPorts(runtime, deployment.containerId, ports, silentLogger);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/port-check.service");
     return [];
   } finally {
     disposePlatform(resolved);

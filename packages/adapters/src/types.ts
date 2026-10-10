@@ -143,6 +143,8 @@ export interface BuildConfig {
   port: number;
   /** Runtime image for generated Docker recipes. */
   runtimeImage: string;
+  /** Internal: generated managed Cloud Node runtime adapter. */
+  managedNodeListener?: boolean;
   /** Start command for generated runtime images. */
   startCommand?: string;
   /** Files/directories needed at runtime for generated Docker recipes. */
@@ -546,6 +548,8 @@ export interface RouteRedirect {
 /** A response-header rule compiled from vercel.json `headers`. */
 export interface RouteHeaderRule {
   path: string;
+  /** Literal sources match exactly; absent retains legacy prefix behavior. */
+  exact?: boolean;
   headers: { key: string; value: string }[];
 }
 

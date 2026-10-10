@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Command, Option } from "commander";
 import { readFileSync } from "node:fs";
 import type { CreateJobInput, UpdateJobInput } from "@repo/sdk";
@@ -42,6 +43,7 @@ async function saveJob(opts: Record<string, string | boolean>, key?: string): Pr
     const data = await (key === undefined ? jobs.create(body as CreateJobInput) : jobs.update(key, body as UpdateJobInput));
     printJson(data);
   } catch (e) {
+    observeCaughtError(e, "cli/commands/job");
     fail(e);
   }
 }
@@ -74,6 +76,7 @@ jobCommand.command("list")
       const data = await getShipClient().jobs.list();
       printTable(data, ["key", "label", "kind", "enabled", "scheduleType", "cronExpression", "nextRunAt"]);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/job");
       fail(e);
     }
   });
@@ -85,6 +88,7 @@ jobCommand.command("get <key>")
       const data = await getShipClient().jobs.get(key);
       printJson(data);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/job");
       fail(e);
     }
   });
@@ -107,6 +111,7 @@ jobCommand.command("delete <key>")
       if (isJsonMode()) printJson(result);
       else ok(`Deleted ${key}`);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/job");
       fail(e);
     }
   });
@@ -120,6 +125,7 @@ jobCommand.command("run <key>")
       printJson(data);
       if (opts.follow && data.runId) await followRun(data.runId);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/job");
       fail(e);
     }
   });
@@ -132,6 +138,7 @@ jobCommand.command("runs <key>")
       const data = await getShipClient().jobs.listRuns(key, opts.limit ? { limit: Number(opts.limit) } : undefined);
       printTable(data, ["id", "trigger", "status", "startedAt", "durationMs", "error"]);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/job");
       fail(e);
     }
   });
@@ -152,6 +159,7 @@ jobCommand.command("logs <runId>")
         if (data.error) err(data.error);
       }
     } catch (e) {
+      observeCaughtError(e, "cli/commands/job");
       fail(e);
     }
   });

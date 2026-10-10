@@ -755,7 +755,8 @@
       "provisioning": "Esperando certificado",
       "expired": "Caducado",
       "error": "Error",
-      "inactive": "Inactivo"
+      "inactive": "Inactivo",
+      "unknown": "Desconocido"
     },
     "typeCustom": "Dominio personalizado",
     "typeFree": "Subdominio gratuito",
@@ -928,7 +929,8 @@
         "manual_certificate": "Este dominio usa un certificado subido manualmente. Sube un reemplazo válido y compruébalo. Openship no lo renueva automáticamente.",
         "managed_certificate": "TLS lo gestiona tu proxy externo u Openship Cloud. Revisa la configuración de ese proveedor.",
         "route_missing": "Esta ruta configurada aún no se ha aplicado. Reintenta el enrutamiento para aplicarla. No hay reintentos automáticos de enrutamiento programados.",
-        "manual_dns": "Este certificado usa verificación TXT manual. Abre la configuración de HTTPS para confirmar un nuevo registro TXT o elige un proveedor DNS conectado para la renovación automática."
+        "manual_dns": "Este certificado usa verificación TXT manual. Abre la configuración de HTTPS para confirmar un nuevo registro TXT o elige un proveedor DNS conectado para la renovación automática.",
+        "managed_owner": "El servicio propietario administra este nombre de host y su certificado. Revisa la configuración del dominio de ese servicio."
       }
     },
     "records": {

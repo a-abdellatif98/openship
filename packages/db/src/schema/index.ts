@@ -90,3 +90,4 @@ export { clusterStorage } from "./cluster-storage";
 export { clusterDatabase } from "./cluster-database";
 export { cloudAnalyticsEvent, cloudAnalyticsCheckout, cloudAnalyticsWorkspace } from "./cloud-analytics";
 export { cloudSupportTicket, cloudSupportMessage } from "./cloud-support";
+export { instanceController, instanceHandoff } from "./instance-controller";

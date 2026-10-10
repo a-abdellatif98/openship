@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { Context, Next } from "hono";
 import { db, schema, eq } from "@repo/db";
 import { env } from "@repo/platform/engine/config/env";
@@ -63,7 +64,7 @@ export async function cloudSessionAuth(c: Context, next: Next) {
       ]
         .filter(Boolean)
         .join(" ");
-      console.warn(
+      errorDiagnostics.warn("api/modules/cloud/cloud-session-auth",
         `[cloud-session-auth] fingerprint mismatch userId=${row.userId} sessionId=${row.id} ${reason} (mode=${env.CLOUD_SESSION_PINNING})`,
       );
       if (env.CLOUD_SESSION_PINNING === "strict") {

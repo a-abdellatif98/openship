@@ -22,6 +22,7 @@
  *   - Exponential backoff: 1s → 2s → 4s, max 3 attempts.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, getApiErrorMessage } from "@/lib/api/client";
 import {
@@ -192,7 +193,8 @@ export function usePtyConnection({
     if (ws) {
       try {
         ws.close(1000, "client_close");
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/hooks/usePtyConnection");
         /* already closing */
       }
     }
@@ -270,6 +272,7 @@ export function usePtyConnection({
     try {
       ws = new WebSocket(transport.buildWsUrl(), protocols);
     } catch (err: any) {
+      observeCaughtError(err, "dashboard/hooks/usePtyConnection");
       clearHandshakeTimer();
       setIsConnecting(false);
       setError({ code: "transport" });
@@ -289,7 +292,8 @@ export function usePtyConnection({
         if (ws.readyState === WebSocket.OPEN) {
           try {
             ws.send(JSON.stringify({ type: "ping" }));
-          } catch {
+          } catch (diagnosticFailure) {
+            observeCaughtError(diagnosticFailure, "dashboard/hooks/usePtyConnection");
             /* peer gone */
           }
         }
@@ -421,7 +425,8 @@ export function usePtyConnection({
       } else {
         ws.send(data);
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/hooks/usePtyConnection");
       /* peer gone */
     }
   }, []);
@@ -431,7 +436,8 @@ export function usePtyConnection({
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     try {
       ws.send(JSON.stringify({ type: "resize", cols, rows }));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/hooks/usePtyConnection");
       /* peer gone */
     }
   }, []);
@@ -450,7 +456,8 @@ export function usePtyConnection({
     if (ws?.readyState === WebSocket.OPEN) {
       try {
         ws.send(JSON.stringify({ type: "close" }));
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/hooks/usePtyConnection");
         /* peer gone */
       }
     }

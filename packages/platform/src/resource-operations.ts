@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   AppError,
   NotFoundError,
@@ -83,7 +84,8 @@ export function presentOperationOutput(spec: ResourceOperationSchema, result: un
   let data: unknown;
   try {
     data = JSON.parse(JSON.stringify(result));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/resource-operations");
     throw new AppError(
       `Invalid ${name} response`,
       500,

@@ -15,6 +15,7 @@
  * This whole module is self-hosted: `runStartupHooks()` is a no-op under
  * CLOUD_MODE and skips any hook whose `modes` don't include the live target.
  */
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { env } from "../../config/env";
 import { resolvePlatformConfig } from "../platform-config";
 
@@ -54,7 +55,7 @@ export async function runStartupHooks(): Promise<void> {
     try {
       await hook.run();
     } catch (err) {
-      console.warn(`[startup] hook "${hook.id}" failed:`, err);
+      errorDiagnostics.warn("platform/engine/lib/startup/index", `[startup] hook "${hook.id}" failed:`, err);
     }
   }
 }

@@ -113,7 +113,7 @@ export function compileResolvedRoutingToOblien(
 
   for (const h of compiled.headerRules) {
     routes.push({
-      match: { path: h.path, type: "prefix" },
+      match: { path: h.path, type: h.exact ? "exact" : "prefix" },
       action: { kind: "headers", set: h.headers },
     });
   }

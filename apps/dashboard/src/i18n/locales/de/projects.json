@@ -352,7 +352,7 @@
     "failed": "Fehlgeschlagen",
     "starting": "Wird gestartet",
     "restarting": "Startet neu",
-    "unknown": "Unbekannt"
+    "unknown": "Status nicht verfügbar"
   },
   "routingRetry": {
     "title": "Domain-Routing benötigt Aufmerksamkeit",

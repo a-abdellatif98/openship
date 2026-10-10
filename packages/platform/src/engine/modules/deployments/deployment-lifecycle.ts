@@ -13,6 +13,7 @@
  * while all side-effects on completion live here.
  */
 
+import { reportError, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   repos,
   type Project,
@@ -99,7 +100,7 @@ function collectLogs(ctx: LifecycleContext): LogEntry[] {
     return ctx.persistLogs();
   } catch (err) {
     const detail = safeErrorMessage(err);
-    console.error(`[deployment-lifecycle] persistLogs crashed for ${ctx.dep.id}: ${detail}`);
+    errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle", `[deployment-lifecycle] persistLogs crashed for ${ctx.dep.id}: ${detail}`, err);
     return [
       {
         timestamp: new Date().toISOString(),
@@ -124,7 +125,7 @@ async function cleanupOwnedServiceContainers(
   ctx: LifecycleContext,
   outcome: "failure" | "cancel",
 ): Promise<ServiceDeployment[]> {
-  const serviceDeps = await repos.service.listByDeployment(ctx.dep.id).catch(() => []);
+  const serviceDeps = await repos.service.listByDeployment(ctx.dep.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/deployment-lifecycle"); return []; });
   if (!ctx.runtime || serviceDeps.length === 0) return serviceDeps;
 
   let protectedContainers: Set<string>;
@@ -133,9 +134,9 @@ async function cleanupOwnedServiceContainers(
       await computeCleanupKeepSet(ctx.project, { excludeDeploymentId: ctx.dep.id })
     ).containers;
   } catch (err) {
-    console.error(
+    errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle",
       `[DEPLOY] ${ctx.dep.id}: couldn't resolve the live-container keep set during ${outcome}; ` +
-        `protecting every service container: ${safeErrorMessage(err)}`,
+        `protecting every service container: ${safeErrorMessage(err)}`, err,
     );
     return serviceDeps;
   }
@@ -151,7 +152,7 @@ async function cleanupOwnedServiceContainers(
       continue;
     }
     await ctx.runtime.destroy(containerId).catch((err) => {
-      console.error(
+      errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle",
         `[DEPLOY] Failed to destroy service container ${containerId} on ${outcome}:`,
         err,
       );
@@ -177,9 +178,9 @@ async function finishSession(
   await repos.deployment
     .finishBuildSession(buildSessionId, status, durationMs, logs)
     .catch((err) =>
-      console.error(
+      errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle",
         `[deployment-lifecycle] finishBuildSession(${buildSessionId}, ${status}) failed — ` +
-          `deployment outcome unchanged: ${safeErrorMessage(err)}`,
+          `deployment outcome unchanged: ${safeErrorMessage(err)}`, err,
       ),
     );
 }
@@ -203,7 +204,7 @@ export async function reportPipelineError(
   errorMeta?: { errorCode?: string; errorDetails?: Record<string, unknown> },
 ): Promise<void> {
   if (ctx.settled) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/deployments/deployment-lifecycle",
       `[build] post-settlement error for ${ctx.dep.id} (outcome ${ctx.settled} kept): ${message}`,
     );
     logger.log(
@@ -240,7 +241,8 @@ function ensureTerminalFailureLog(ctx: LifecycleContext, error?: string): void {
     alreadyPresent = ctx
       .persistLogs()
       .some((entry) => entry.level === "error" && entry.message.trim() === terminalMessage.trim());
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/deployment-lifecycle");
     // collectLogs below owns the observable fallback for a broken persistence
     // callback. The live terminal line is still worth emitting here.
   }
@@ -284,7 +286,7 @@ async function recordOutcome(
     try {
       const applied = await repos.deployment.updateStatus(depId, status, attempt.extra);
       if (index > 0) {
-        console.error(
+        errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle",
           `[deployment-lifecycle] ${depId}: recorded "${status}" ${attempt.label} — ` +
             `the rejected payload was dropped: ${lastError}`,
         );
@@ -295,10 +297,11 @@ async function recordOutcome(
       // nothing. "refused" suppresses the success; "failed" must not.
       return { state: applied === false ? "refused" : "applied", error: null };
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/deployments/deployment-lifecycle");
       lastError = safeErrorMessage(err);
     }
   }
-  console.error(
+  errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle",
     `[deployment-lifecycle] ${depId}: could not record outcome "${status}": ${lastError}`,
   );
   // The write failed outright. The deploy still SUCCEEDED, so the caller reports
@@ -398,7 +401,9 @@ export async function onReconciling(
   const { dep, buildSessionId } = ctx;
 
   if (result.containerId) {
-    await repos.deployment.setContainerId(dep.id, result.containerId).catch(() => {});
+    await repos.deployment.setContainerId(dep.id, result.containerId).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/deployment-lifecycle");
+    });
   }
 
   const collapsed = collectLogs(ctx);
@@ -499,6 +504,9 @@ export async function onFailure(
   errorMeta?: { errorCode?: string; errorDetails?: Record<string, unknown>; errorMessage?: string },
 ): Promise<void> {
   const { runtime, project, dep, buildSessionId, provisioned } = ctx;
+  reportError(error ?? "Deployment failed", { kind: "deployment", component: "deployment-lifecycle",
+    operation: "deployment.failed", organizationId: dep.organizationId, projectId: project.id,
+    deploymentId: dep.id, serverId: project.serverId ?? undefined, durationMs, code: errorMeta?.errorCode, handled: true });
 
   // Do this at the lifecycle choke point, before cleanup can add secondary
   // diagnostics, so both SSE and the persisted build session end with the real
@@ -511,11 +519,11 @@ export async function onFailure(
     try {
       await cleanupBuildArtifact(runtime, provisioned.imageRef);
     } catch (destroyErr) {
-      console.error(`[DEPLOY] Failed to destroy ${provisioned.imageRef} on failure:`, destroyErr);
+      errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle", `[DEPLOY] Failed to destroy ${provisioned.imageRef} on failure:`, destroyErr);
       // Retry once after a short delay
       await new Promise((r) => setTimeout(r, 2000));
       await cleanupBuildArtifact(runtime, provisioned.imageRef).catch((retryErr) => {
-        console.error(`[DEPLOY] Retry destroy also failed for ${provisioned.imageRef}:`, retryErr);
+        errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle", `[DEPLOY] Retry destroy also failed for ${provisioned.imageRef}:`, retryErr);
       });
     }
   }
@@ -564,7 +572,7 @@ export async function onFailure(
   // further: no second terminal event, and no `deployment.failed` notification
   // for a deploy the user ended on purpose. Mirrors the guard in onSuccess.
   if (outcome.state === "refused") {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/deployments/deployment-lifecycle",
       `[deployment-lifecycle] ${dep.id}: deploy failed after the user cancelled it; ` +
         `leaving the row cancelled and reporting the cancel rather than a failure`,
     );
@@ -642,9 +650,11 @@ export async function onCancelled(
     try {
       await cleanupBuildArtifact(runtime, provisioned.imageRef);
     } catch (destroyErr) {
-      console.error(`[DEPLOY] Failed to destroy ${provisioned.imageRef} on cancel:`, destroyErr);
+      errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle", `[DEPLOY] Failed to destroy ${provisioned.imageRef} on cancel:`, destroyErr);
       await new Promise((r) => setTimeout(r, 2000));
-      await cleanupBuildArtifact(runtime, provisioned.imageRef).catch(() => {});
+      await cleanupBuildArtifact(runtime, provisioned.imageRef).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/deployment-lifecycle");
+      });
     }
   }
 
@@ -652,10 +662,10 @@ export async function onCancelled(
   // containers carried from the active release. Then close every service's UI
   // status for this cancelled attempt.
   const serviceDeps = opts.keepProvisioned
-    ? await repos.service.listByDeployment(dep.id).catch(() => [])
+    ? await repos.service.listByDeployment(dep.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/deployment-lifecycle"); return []; })
     : await cleanupOwnedServiceContainers(ctx, "cancel");
   const services =
-    serviceDeps.length > 0 ? await repos.service.listByProject(dep.projectId).catch(() => []) : [];
+    serviceDeps.length > 0 ? await repos.service.listByProject(dep.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/deployment-lifecycle"); return []; }) : [];
   const serviceNameMap = new Map(services.map((s) => [s.id, s.name]));
 
   for (const serviceDep of serviceDeps) {
@@ -700,8 +710,8 @@ async function readReleaseVersion(
       (await repos.deployment.getNextReadyVersion(projectId))
     );
   } catch (err) {
-    console.error(
-      `[deployment-lifecycle] release version lookup failed project=${projectId}: ${safeErrorMessage(err)} — release left unnumbered`,
+    errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle",
+      `[deployment-lifecycle] release version lookup failed project=${projectId}: ${safeErrorMessage(err)} — release left unnumbered`, err,
     );
     return undefined;
   }
@@ -729,8 +739,8 @@ export async function onSuccess(
   await repos.deployment
     .setContainerId(dep.id, result.containerId, result.url)
     .catch((err) =>
-      console.error(
-        `[deployment-lifecycle] setContainerId failed deployment=${dep.id} container=${result.containerId}: ${safeErrorMessage(err)}`,
+      errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle",
+        `[deployment-lifecycle] setContainerId failed deployment=${dep.id} container=${result.containerId}: ${safeErrorMessage(err)}`, err,
       ),
     );
 
@@ -770,7 +780,7 @@ export async function onSuccess(
   // already broadcast `cancelled`, so this returns silently rather than emitting
   // a second terminal event.
   if (outcome.state === "refused") {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/deployments/deployment-lifecycle",
       `[deployment-lifecycle] ${dep.id}: deploy finished after the user cancelled it; ` +
         `leaving the row cancelled and NOT advancing the active release`,
     );
@@ -791,8 +801,8 @@ export async function onSuccess(
   await repos.project
     .setActiveDeployment(project.id, dep.id)
     .catch((err) =>
-      console.error(
-        `[deployment-lifecycle] setActiveDeployment failed project=${project.id} deployment=${dep.id}: ${safeErrorMessage(err)}`,
+      errorDiagnostics.error("platform/engine/modules/deployments/deployment-lifecycle",
+        `[deployment-lifecycle] setActiveDeployment failed project=${project.id} deployment=${dep.id}: ${safeErrorMessage(err)}`, err,
       ),
     );
 
@@ -801,8 +811,8 @@ export async function onSuccess(
   await repos.deployment
     .supersedePendingDecisions(project.id, dep.id)
     .catch((err) =>
-      console.warn(
-        `[deployment-lifecycle] supersedePendingDecisions failed project=${project.id}: ${safeErrorMessage(err)}`,
+      errorDiagnostics.warn("platform/engine/modules/deployments/deployment-lifecycle",
+        `[deployment-lifecycle] supersedePendingDecisions failed project=${project.id}: ${safeErrorMessage(err)}`, err,
       ),
     );
 
@@ -820,8 +830,8 @@ export async function onSuccess(
     await repos.project
       .update(project.id, { serverId: mergedMeta.serverId })
       .catch((err) =>
-        console.warn(
-          `[deployment-lifecycle] persist server binding failed project=${project.id} server=${mergedMeta.serverId}: ${safeErrorMessage(err)}`,
+        errorDiagnostics.warn("platform/engine/modules/deployments/deployment-lifecycle",
+          `[deployment-lifecycle] persist server binding failed project=${project.id} server=${mergedMeta.serverId}: ${safeErrorMessage(err)}`, err,
         ),
       );
   }
@@ -831,7 +841,8 @@ export async function onSuccess(
   // against a stale pre-deploy cache entry.
   try {
     await repos.updateStatus.deleteByProject(project.id);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/deployment-lifecycle");
     // Cache invalidation is best-effort bookkeeping after a successful deploy.
   }
   await finishSession(buildSessionId, "ready", result.durationMs, collectLogs(ctx));

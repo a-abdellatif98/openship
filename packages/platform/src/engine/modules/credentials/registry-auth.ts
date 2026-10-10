@@ -11,6 +11,7 @@
  * POLICY here and leaving the adapter knowing only how to talk to Docker.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { registryForImage, safeErrorMessage } from "@repo/core";
 import type { DockerRegistryAuth } from "@repo/adapters";
 
@@ -49,7 +50,7 @@ export async function resolveRegistryAuthFor(opts: {
     // than reported, so it must be the same value the selector was normalized to.
     return { username, password: secret, serveraddress: registry };
   } catch (err) {
-    console.warn(`[registry-auth] credential lookup failed: ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/modules/credentials/registry-auth", `[registry-auth] credential lookup failed: ${safeErrorMessage(err)}`, err);
     return undefined;
   }
 }

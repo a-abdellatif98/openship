@@ -183,12 +183,12 @@ async function seedRow(client: PGlite, table: string, id: string): Promise<void>
     names.push(`"id"`);
     values.push(`'${id}'`);
   }
-
-  // A recent-prefix fixture can now include managed-server connection checks.
-  // Model a connected SSH server even when ssh_host has become nullable.
-  if (table === "servers" && !names.includes('"ssh_host"')) {
-    names.push('"ssh_host"');
-    values.push("'192.0.2.10'");
+  // Managed servers made ssh_host nullable, but a non-local server still needs
+  // an SSH address or a workspace binding. Keep the seed valid when the moving
+  // upgrade window starts after that constraint was introduced.
+  if (table === "servers" && !names.includes(`"ssh_host"`)) {
+    names.push(`"ssh_host"`);
+    values.push(`'192.0.2.1'`);
   }
 
   await client.exec(
@@ -251,6 +251,182 @@ describe("migration chain applies to an existing, populated database", () => {
     await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
     expect(await appliedMigrations(client)).toBe(total);
   });
+
+  test("upgrades the published Cloud Pages schema without losing project state", async () => {
+    const cutoff =
+      journal.entries.findIndex((entry) => entry.tag === "0168_cloud_static_hosting") + 1;
+    expect(cutoff).toBeGreaterThan(0);
+    const legacy = migrationsPrefix(cutoff);
+    const { client, db } = await freshDb();
+    try {
+      await migrate(db, { migrationsFolder: legacy });
+      await client.exec("SET session_replication_role = replica;");
+      await seedRow(client, "project", SEED_ID);
+      await client.exec(
+        "UPDATE project SET cloud_static_hosting = 'server', active_deployment_id = 'retained-release'",
+      );
+      const projects = (await client.query("SELECT * FROM project")).rows;
+      const applied = (
+        await client.query("SELECT * FROM drizzle.__drizzle_migrations ORDER BY id")
+      ).rows;
+      expect(await tableExists(client, "instance_controller")).toBe(false);
+      expect(await tableExists(client, "instance_handoff")).toBe(false);
+
+      await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+      expect(await appliedMigrations(client)).toBe(total);
+      // Schema-backed reads must include the fields startup and recovery require.
+      expect(await db.select().from(schema.instanceController)).toEqual([]);
+      expect(await db.select().from(schema.instanceHandoff)).toEqual([]);
+      expect((await client.query("SELECT * FROM project")).rows).toEqual(projects);
+      expect(
+        (await client.query("SELECT * FROM drizzle.__drizzle_migrations ORDER BY id")).rows.slice(
+          0,
+          applied.length,
+        ),
+      ).toEqual(applied);
+      await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+      expect(await appliedMigrations(client)).toBe(total);
+    } finally {
+      await client.close();
+      rmSync(legacy, { recursive: true, force: true });
+    }
+  });
+
+  for (const missingFields of [true, false]) {
+    test(`upgrades an applied instance controller migration with portable fields ${missingFields ? "missing" : "already present"}`, async () => {
+      const controllerMigration = "0169_instance_controller";
+      const cutoff = journal.entries.findIndex((entry) => entry.tag === "0168_cloud_static_hosting");
+      expect(cutoff).toBeGreaterThan(0);
+      const legacy = migrationsPrefix(cutoff);
+      const { client, db } = await freshDb();
+      try {
+        // Reproduce the PR's original journal, before main occupied 0168. Its
+        // timestamps and recorded rows must survive the reordered migrations.
+        const earlierEntries: JournalEntry[] = [{
+          idx: cutoff,
+          version: "7",
+          when: 1791331200000,
+          tag: "0168_instance_controller",
+          breakpoints: true,
+        }];
+        const path = join(legacy, "0168_instance_controller.sql");
+        writeFileSync(
+          path,
+          readFileSync(join(MIGRATIONS_DIR, controllerMigration + ".sql"), "utf8")
+            .replaceAll("CREATE TABLE IF NOT EXISTS", "CREATE TABLE"),
+        );
+        if (missingFields) {
+          // A dev instance can have applied 0168 before these fields were added.
+          // Its recorded migration must stay intact; only a new migration runs.
+          writeFileSync(
+            path,
+            readFileSync(path, "utf8")
+              .split("\n")
+              .filter(
+                (line) =>
+                  !/^\s*"(?:environment|desktop_user_id|project_id|recovery|provisioning)" /.test(
+                    line,
+                  ),
+              )
+              .join("\n"),
+          );
+        } else {
+          earlierEntries.push({
+            idx: cutoff + 1,
+            version: "7",
+            when: 1791379680000,
+            tag: "0169_instance_controller_fields",
+            breakpoints: true,
+          });
+          copyFileSync(
+            join(MIGRATIONS_DIR, "0170_instance_controller_fields.sql"),
+            join(legacy, "0169_instance_controller_fields.sql"),
+          );
+        }
+        writeFileSync(
+          join(legacy, "meta", "_journal.json"),
+          JSON.stringify({
+            ...journal,
+            entries: [...journal.entries.slice(0, cutoff), ...earlierEntries],
+          }, null, 2),
+        );
+        const expectedMigrations = total + earlierEntries.length;
+        await migrate(db, { migrationsFolder: legacy });
+        await client.exec(`
+          INSERT INTO instance_controller (installation_id, role, handoff_id, revision, connection)
+            VALUES ('existing-installation', 'retired', 'existing-handoff', 7, 'sealed-device-connection');
+          INSERT INTO instance_handoff (id, direction, owner_user_id, token_hash, secrets, status, expires_at)
+            VALUES ('existing-handoff', 'source', 'existing-owner', 'existing-token-hash', 'sealed-transfer-key', 'prepared', '2026-10-08');
+        `);
+        if (missingFields) {
+          await expect(
+            db
+              .select({ environment: schema.instanceController.environment })
+              .from(schema.instanceController)
+              .limit(1),
+          ).rejects.toThrow(/environment/);
+        } else {
+          await client.exec(`
+            UPDATE instance_controller SET environment = 'sealed-environment', desktop_user_id = 'existing-owner', project_id = 'hosted-api';
+            UPDATE instance_handoff SET recovery = '{"sha256":"saved-checksum"}', provisioning = '{"serverId":"existing-server"}';
+          `);
+        }
+        const controllers = (
+          await client.query<Record<string, unknown>>("SELECT * FROM instance_controller")
+        ).rows;
+        const handoffs = (
+          await client.query<Record<string, unknown>>("SELECT * FROM instance_handoff")
+        ).rows;
+        const applied = (
+          await client.query("SELECT * FROM drizzle.__drizzle_migrations ORDER BY id")
+        ).rows;
+
+        await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+        expect(await appliedMigrations(client)).toBe(expectedMigrations);
+        // These are the same schema-backed reads used during startup and recovery.
+        expect(await db.select().from(schema.instanceController)).toMatchObject([
+          {
+            installationId: "existing-installation",
+            role: "retired",
+            revision: 7,
+            environment: missingFields ? null : "sealed-environment",
+            desktopUserId: missingFields ? null : "existing-owner",
+            projectId: missingFields ? null : "hosted-api",
+          },
+        ]);
+        expect(await db.select().from(schema.instanceHandoff)).toMatchObject([
+          {
+            id: "existing-handoff",
+            status: "prepared",
+            recovery: missingFields ? null : { sha256: "saved-checksum" },
+            provisioning: missingFields ? null : { serverId: "existing-server" },
+          },
+        ]);
+        await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+        expect(await appliedMigrations(client)).toBe(expectedMigrations);
+        expect((await client.query("SELECT * FROM instance_controller")).rows).toEqual(
+          controllers.map((row) => ({
+            environment: null,
+            desktop_user_id: null,
+            project_id: null,
+            ...row,
+          })),
+        );
+        expect((await client.query("SELECT * FROM instance_handoff")).rows).toEqual(
+          handoffs.map((row) => ({ recovery: null, provisioning: null, ...row })),
+        );
+        expect(
+          (await client.query("SELECT * FROM drizzle.__drizzle_migrations ORDER BY id")).rows.slice(
+            0,
+            applied.length,
+          ),
+        ).toEqual(applied);
+      } finally {
+        await client.close();
+        rmSync(legacy, { recursive: true, force: true });
+      }
+    });
+  }
 
   test("upgrades managed server identities and drops retired native placement fields", async () => {
     const cutoff = journal.entries.findIndex((entry) => entry.tag === "0156_managed_servers");

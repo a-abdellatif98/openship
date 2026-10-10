@@ -15,6 +15,7 @@
  * or modify another member's channels.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { ExecutionContext } from "../../../context";
 import type { Static } from "@sinclair/typebox";
 import { CreateChannelBody, UpdateChannelBody, UpsertSubscriptionBody, UpsertNotificationDefaultBody, NotificationDeliveryQuery, ValidationError, NotFoundError } from "@repo/contracts";
@@ -180,6 +181,7 @@ export async function testChannel(ctx: ExecutionContext, id: string) {
   try {
     await sendTestToChannel(channel);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/notifications/notifications.service");
     return { ok: false, error: safeErrorMessage(err) };
   }
 
@@ -388,6 +390,7 @@ function sanitizeChannelConfig(
         try {
           assertPublicUrlLiteral(url, { allowHttp: true });
         } catch (e) {
+          observeCaughtError(e, "platform/engine/modules/notifications/notifications.service");
           return { ok: false, error: e instanceof SsrfError ? e.message : "Invalid webhook URL" };
         }
       }

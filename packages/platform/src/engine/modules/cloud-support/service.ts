@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash, randomUUID } from "node:crypto";
 import { AppError, ConflictError, NotFoundError, SUPPORT_EMAIL, ValidationError } from "@repo/core";
 import {
@@ -288,6 +289,7 @@ export class CloudSupportService {
             await this.options.repo.delivered(message.id, leaseId, new Date());
             summary.delivered++;
           } catch (error) {
+            observeCaughtError(error, "platform/engine/modules/cloud-support/service");
             // SMTP errors may contain credentials/addresses. Persist only a safe
             // operational diagnosis, never the provider's raw response.
             const reason =

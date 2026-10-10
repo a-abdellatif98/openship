@@ -26,6 +26,7 @@
  * including when automatic snapshots are disabled.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Readable } from "node:stream";
 import { isDbImage, payloadSpec, safeErrorMessage, shellQuote, withTimeout } from "@repo/core";
 import { registerProducer } from "../registry";
@@ -82,7 +83,8 @@ async function probeOutput(res: {
       "redis config probe timed out",
     );
     return exit.code === 0 ? output : "";
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/backup/producers/redis");
     return "";
   } finally {
     res.stdout.destroy();
@@ -305,6 +307,7 @@ class RedisRdbProducerImpl implements BackupProducer {
             throw new Error("Redis/Valkey did not acknowledge restoring its save configuration");
           }
         } catch (rollbackError) {
+          observeCaughtError(rollbackError, "adapters/backup/producers/redis");
           throw new AggregateError(
             [error, rollbackError],
             `${safeErrorMessage(error)} Redis/Valkey snapshot settings could not be restored. ` +

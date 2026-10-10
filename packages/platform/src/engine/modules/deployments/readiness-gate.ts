@@ -1,23 +1,7 @@
 /**
- * The deploy-time readiness gate, resolved from a project's `readiness`.
- *
- * OFF IS THE DEFAULT, and that is the whole point of this module. Both post-start
- * checks used to be hardcoded on every deploy — a 15s stabilization watch plus a
- * 45s TCP probe — and both could throw, which failed the deploy and then
- * force-removed the container that had just started successfully. Up to a minute
- * on the critical path to reach a verdict that could delete a working app.
- *
- * What replaced it: nothing, unless the project asks. A deploy with no
- * `readiness` runs neither check and reports ready as soon as the workload is up
- * and routed. "Is my app actually listening?" is still answered — by the ADVISORY
- * in-container probe the pipeline already runs after the deploy is live
- * (`auditPorts` → `meta.portCheck`, re-runnable via POST /projects/:id/port-check),
- * which by construction cannot fail a deploy.
- *
- * A project opts in when it wants the deploy itself to refuse to go green. Even
- * then `onFailure` defaults to "warn": the deploy stays ready and carries an
- * action-required warning. Only an explicit `onFailure: "fail"` vetoes a deploy,
- * and that path now reverts to the previous deployment instead of destroying it.
+ * Shared deployment verification policy for single apps and Compose services.
+ * Managed Cloud containers always get a startup watch. TCP/HTTP probes remain
+ * opt-in, with their own warning/failure policy. Other targets remain opt-in.
  */
 
 import { SYSTEM } from "@repo/core";
@@ -38,8 +22,10 @@ export interface ResolvedReadinessGate {
   stabilization: {
     enabled: boolean;
     windowMs: number;
+    /** Startup failures are independent of custom probe failures. */
+    onFailure: OpenshipReadinessFailureAction;
   };
-  /** What a failed check does. */
+  /** Failure policy for the optional TCP/HTTP probe. */
   onFailure: OpenshipReadinessFailureAction;
   /** True when at least one check is enabled — i.e. the pipeline needs a gate at all. */
   active: boolean;
@@ -52,18 +38,18 @@ function secondsToMs(seconds: number | undefined, fallbackMs: number): number {
     : fallbackMs;
 }
 
-/**
- * Resolve a project's stored `readiness` into the effective gate.
- *
- * Null/undefined/`{}` all resolve to inactive — `active: false` is what makes the
- * pipeline pass `readiness: undefined` to runDeployPipeline and skip the step
- * outright, rather than invoking a no-op check.
- */
+/** Resolve optional probes and the target's minimum startup verification. */
 export function resolveReadinessGate(
   config: OpenshipReadiness | null | undefined,
+  options: { managedCloud?: boolean } = {},
 ): ResolvedReadinessGate {
   const probeEnabled = config?.enabled === true;
-  const stabilizationEnabled = config?.stabilization === true;
+  const stabilizationEnabled = options.managedCloud === true || config?.stabilization === true;
+  const onFailure = config?.onFailure === "fail" ? "fail" : "warn";
+  const requestedWindow = secondsToMs(
+    config?.stabilizationSeconds,
+    SYSTEM.DEPLOYMENTS.STABILIZE_WINDOW_MS,
+  );
   return {
     probe: {
       enabled: probeEnabled,
@@ -74,15 +60,15 @@ export function resolveReadinessGate(
     },
     stabilization: {
       enabled: stabilizationEnabled,
-      windowMs: secondsToMs(
-        config?.stabilizationSeconds,
-        SYSTEM.DEPLOYMENTS.STABILIZE_WINDOW_MS,
-      ),
+      windowMs: options.managedCloud
+        ? Math.max(SYSTEM.DEPLOYMENTS.STABILIZE_WINDOW_MS, requestedWindow)
+        : requestedWindow,
+      onFailure: options.managedCloud ? "fail" : onFailure,
     },
     // "warn" unless the project explicitly asked for a veto. Defaulting to "fail"
     // here would quietly restore the old behaviour for anyone who enabled a probe
     // just to get the log line.
-    onFailure: config?.onFailure === "fail" ? "fail" : "warn",
+    onFailure,
     active: probeEnabled || stabilizationEnabled,
   };
 }
@@ -94,7 +80,7 @@ export function resolveReadinessGate(
  * parts that decide whether a deploy lives or dies — are testable without a
  * runtime, a container, or a socket.
  *
- * Throws when a check failed and `onFailure` is "fail"; that throw is what
+ * Each check uses its own failure policy. A veto is what
  * runDeployPipeline turns into a failed deploy plus a revert to the previous
  * deployment. Otherwise it reports through `onWarn` and returns normally, leaving
  * the deploy live.
@@ -117,7 +103,10 @@ export async function runReadinessGate(opts: {
 
   if (gate.stabilization.enabled && stabilize) {
     const detail = await stabilize(gate.stabilization.windowMs);
-    if (detail) failures.push(detail);
+    if (detail) {
+      if (gate.stabilization.onFailure === "fail") throw new Error(detail);
+      failures.push(detail);
+    }
   }
 
   // Skip the probe once stabilization already failed: dialing a port on a workload

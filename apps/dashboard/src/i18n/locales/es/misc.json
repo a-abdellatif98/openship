@@ -129,7 +129,15 @@
     "acceptedTitle": "Ya estás dentro",
     "acceptedRedirect": "Redirigiendo al panel...",
     "errorTitle": "No se puede aceptar esta invitación",
-    "backToDashboard": "Volver al panel"
+    "backToDashboard": "Volver al panel",
+    "invitedBy": "Invitación de {name}",
+    "roleLabel": "Rol:",
+    "desktopOpen": "Abrir en Desktop",
+    "desktopCopy": "Copiar enlace de invitación",
+    "desktopCopied": "Enlace copiado",
+    "desktopFallback": "¿Desktop no se abrió? Pega este enlace en Ajustes → Instancia → Conectar a una instancia.",
+    "desktopDescription": "Usa Desktop o continúa aquí en el navegador.",
+    "switchAccount": "Iniciar sesión con la cuenta invitada"
   },
   "cloudAuthorize": {
     "missingRedirect": "Falta el parámetro redirect.",

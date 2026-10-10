@@ -13,6 +13,7 @@
  * import it into `en` below — the type + the lazy loader pick it up.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import brand from "./locales/en/brand.json";
 import auth from "./locales/en/auth.json";
 import dashboard from "./locales/en/dashboard.json";
@@ -85,7 +86,8 @@ export async function loadDictionary(locale: Locale): Promise<Dictionary> {
       try {
         const mod = await import(`./locales/${locale}/${ns}.json`);
         return [ns, (mod as { default: unknown }).default] as const;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/i18n/index");
         return [ns, undefined] as const; // missing namespace file → English fallback
       }
     }),

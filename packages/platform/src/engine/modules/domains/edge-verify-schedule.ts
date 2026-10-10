@@ -25,6 +25,7 @@
  * upstream — Cloud's own probe will find it.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { safeErrorMessage } from "@repo/core";
 import { repos } from "@repo/db";
 import type { EdgeTargetVerification } from "@repo/db";
@@ -89,8 +90,8 @@ export async function runEdgeVerifySweep(): Promise<EdgeVerifySweepResult> {
       } catch (err) {
         // One unreachable server must not stop the sweep for every other target.
         result.failed++;
-        console.warn(
-          `[edge-verify-sweep] ${row.target}: ${safeErrorMessage(err)}`,
+        errorDiagnostics.warn("platform/engine/modules/domains/edge-verify-schedule",
+          `[edge-verify-sweep] ${row.target}: ${safeErrorMessage(err)}`, err,
         );
       }
     }
@@ -99,7 +100,7 @@ export async function runEdgeVerifySweep(): Promise<EdgeVerifySweepResult> {
   }
 
   if (result.notServing > 0) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/domains/edge-verify-schedule",
       `[edge-verify-sweep] ${result.notServing} of ${result.targets} verified target(s) ` +
         `are not serving their Openship Cloud challenge token. Their free .opsh.io ` +
         `domains will stop resolving when the verification expires.`,

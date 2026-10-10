@@ -17,6 +17,7 @@
  * to `runtimeTarget.api` / `runtimeTarget.dashboard`, preserving today's behavior.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { env, runtimeTarget, localDashboardUrl } from "../config/env";
 import { repos } from "@repo/db";
 
@@ -61,7 +62,7 @@ function advertisedOrigin(): string | null {
 
 /** Locate the self-app project id (cloud-linked or founding-admin org). */
 async function locateSelfAppProjectId(): Promise<string | null> {
-  const linked = await repos.settings.listCloudLinkedOrgIds().catch(() => [] as string[]);
+  const linked = await repos.settings.listCloudLinkedOrgIds().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/public-url"); return [] as string[]; });
   for (const org of linked) {
     const p = await repos.project.findBySlugInOrg(org, SELF_APP_SLUG);
     if (p && p.appTemplateId === SELF_APP_SLUG) return p.id;
@@ -101,7 +102,8 @@ export async function refreshSelfAppPublicUrl(): Promise<string | null> {
         : null;
     if (generation === cacheGeneration) cachedSelfAppUrl = resolved;
     return resolved;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/public-url");
     return cachedSelfAppUrl;
   }
 }
@@ -150,7 +152,7 @@ export async function getInstanceReachability(): Promise<InstanceReachability> {
       selfAppHasVerifiedDomain: false,
     };
   }
-  const selfAppProjectId = await locateSelfAppProjectId().catch(() => null);
+  const selfAppProjectId = await locateSelfAppProjectId().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/public-url"); return null; });
   if (!selfAppProjectId) {
     return {
       configured: false,
@@ -162,12 +164,14 @@ export async function getInstanceReachability(): Promise<InstanceReachability> {
       selfAppHasVerifiedDomain: false,
     };
   }
-  const primary = await repos.domain.getPrimaryByProject(selfAppProjectId).catch(() => null);
+  const primary = await repos.domain.getPrimaryByProject(selfAppProjectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/public-url"); return null; });
   const hasVerifiedDomain =
     !!primary &&
     primary.verified &&
     (primary.sslStatus === "active" || primary.sslStatus === "external");
-  await refreshSelfAppPublicUrl().catch(() => {});
+  await refreshSelfAppPublicUrl().catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/public-url");
+  });
   const url = publicUrl();
   return {
     configured: !!url,
@@ -197,7 +201,7 @@ export function resolveDashboardPublicUrl(): string {
  */
 export function resolveApiPublicUrl(): string {
   const pub = publicUrl();
-  return pub ? `${pub}${SAME_ORIGIN_PROXY_PREFIX}` : runtimeTarget.api;
+  return pub ? `${pub}${process.env.OPENSHIP_API_ONLY === "true" ? "" : SAME_ORIGIN_PROXY_PREFIX}` : runtimeTarget.api;
 }
 
 /**
@@ -209,7 +213,7 @@ export function resolveApiPublicUrl(): string {
  */
 export function requestApiPublicUrl(req: Request): string {
   const pub = publicUrl();
-  return pub ? `${pub}${SAME_ORIGIN_PROXY_PREFIX}` : requestPublicOrigin(req);
+  return pub ? resolveApiPublicUrl() : requestPublicOrigin(req);
 }
 
 /**

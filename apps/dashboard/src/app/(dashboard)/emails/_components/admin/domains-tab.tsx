@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -159,7 +160,7 @@ export function DomainsTab({
     try {
       const [domainsRes, pendingRes] = await Promise.all([
         mailAdminApi.domains.list(serverId),
-        mailAdminApi.domains.pendingDns(serverId).catch(() => ({ pending: [] })),
+        mailAdminApi.domains.pendingDns(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/domains-tab"); return ({ pending: [] }); }),
       ]);
       setRows(domainsRes.domains);
       setPendingDns(pendingRes.pending);

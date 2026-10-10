@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -36,11 +37,10 @@ import DropdownMenu, { type MenuAction } from "@/components/ui/DropdownMenu";
 import { serversNewlyGranted, hasNewServerGrant, confirmServerAccess } from "@/components/permissions/confirm-server-access";
 import { usePlatform } from "@/context/PlatformContext";
 import { useCloud } from "@/context/CloudContext";
-import { TeamWorkspaceCard } from "./TeamWorkspaceCard";
 import { TeamReachabilityCard, type TeamReachability } from "./TeamReachabilityCard";
 import { WorkspaceManageModal } from "./WorkspaceManageModal";
 import { useI18n, interpolate } from "@/components/i18n-provider";
-import { invitationClaimPath } from "@/lib/invitation-flow";
+import { invitationShareUrl } from "@/lib/invitation-flow";
 
 type MemberRole = "owner" | "admin" | "member" | "restricted";
 
@@ -146,15 +146,15 @@ export function TeamTab() {
         // a row exists for every org, so this always resolves.
         api.get<{ data: { isTeam: boolean; memberCount: number; organizationId?: string } }>(
           "permissions/org-meta",
-        ).catch(() => ({ data: { isTeam: false, memberCount: 0 } })),
+        ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/TeamTab"); return ({ data: { isTeam: false, memberCount: 0 } }); }),
         api
           .get<{
             invitationMailSource?: InvitationMailSource;
             teamReachability?: TeamReachability;
           }>("system/settings")
-          .catch(() => ({ invitationMailSource: "platform" as InvitationMailSource })),
+          .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/TeamTab"); return ({ invitationMailSource: "platform" as InvitationMailSource }); }),
         // Active org name for the manage-workspace modal (rename default + confirm).
-        orgClient.getFullOrganization().catch(() => ({ data: null })),
+        orgClient.getFullOrganization().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/TeamTab"); return ({ data: null }); }),
       ]);
       setMembers(mRes.data?.members ?? []);
       setInvitations(iRes.data ?? []);
@@ -173,7 +173,7 @@ export function TeamTab() {
     } catch (err) {
       // Network/abort errors are handled by the global NetworkErrorHandler;
       // only surface real API errors here so we don't double-toast.
-      console.error("Failed to load members", err);
+      errorDiagnostics.error("dashboard/app/(dashboard)/settings/_components/TeamTab", "Failed to load members", err);
       if (err instanceof ApiError || !isNetworkError(err)) {
         showToast(getApiErrorMessage(err, t.settings.team.toast.loadFailed), "error", t.settings.common.toast.team);
       }
@@ -210,7 +210,8 @@ export function TeamTab() {
           }
         ).organization.setActive;
         await setActive({ organizationId: newOrgId });
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/TeamTab");
         /* fall through — page reload picks up the new org */
       }
       // Force a reload so every context (sidebar, header) picks up the
@@ -264,14 +265,15 @@ export function TeamTab() {
 
   const handleCopyInvite = async (invitationId: string) => {
     try {
-      const url = `${window.location.origin}${invitationClaimPath(invitationId)}`;
+      const url = invitationShareUrl(selfHosted ? reachability?.url ?? null : window.location.origin, invitationId);
       await navigator.clipboard.writeText(url);
       showToast(
         t.settings.common.copied,
         "success",
         t.settings.common.toast.invitations,
       );
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/TeamTab");
       showToast(
         t.settings.team.toast.copyInviteFailed,
         "error",
@@ -286,7 +288,8 @@ export function TeamTab() {
     const personalOrgId = session?.user?.id ? `org_${session.user.id}` : null;
     try {
       if (personalOrgId) await orgClient.setActive({ organizationId: personalOrgId });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/TeamTab");
       /* the reload resolves whatever org remains */
     }
     if (typeof window !== "undefined") window.location.reload();
@@ -399,16 +402,14 @@ export function TeamTab() {
   // workspace — see auth.ts beforeCreateInvitation), so the only real block is
   // a self-hosted single-user instance: no shared location, no multi-user auth,
   // so a teammate couldn't reach it. There we hide the button and show the
-  // "shared location" hint (TeamWorkspaceCard) instead of a dead action.
+  // reachability setup instead of a dead action.
   // Smart gate: invites are allowed once the instance is actually REACHABLE
   // (a real public URL — env `--public-url` or the Openship app's verified
   // domain), not gated on the migration-wizard flag. So adding a domain to the
   // Openship app turns invites on directly.
   const canInvite = isAdminOrOwner && (!selfHosted || !!reachability?.configured);
 
-  // Not reachable yet (self-hosted, no public URL) → show inline guidance
-  // (add a domain to Openship / install it) + the migrate-elsewhere option,
-  // instead of a dead-ended invite button.
+  // One notice offers the shared move flow or finishes this instance's domain.
   const showWorkspaceMigration = selfHosted && !reachability?.configured;
 
   // Delete/leave apply to a TEAM workspace only — never the personal workspace
@@ -504,6 +505,7 @@ export function TeamTab() {
           selfHosted={selfHosted}
           initialMailSource={invitationMailSource}
           cloudConnected={cloudConnected}
+          instanceUrl={selfHosted ? reachability?.url ?? null : window.location.origin}
           onConnectCloud={connectCloud}
           onInvited={() => void refresh()}
           onClose={() => setInviteOpen(false)}
@@ -645,14 +647,9 @@ export function TeamTab() {
         </>
       )}
 
-      {/* Not reachable yet: inline guidance (add a domain to Openship / install
-          it) is the primary path; the migrate-elsewhere card is the alternative.
-          Last in the tab so the members UI leads. */}
+      {/* Reachability uses one notice and the shared Instance location flow. */}
       {showWorkspaceMigration && (
-        <>
-          <TeamReachabilityCard reachability={reachability} />
-          <TeamWorkspaceCard canMigrate={!!isOwner} />
-        </>
+        <TeamReachabilityCard reachability={reachability} canMigrate={!!isOwner} />
       )}
 
       {/* Owner-only manage modal: rename, pause all projects, or delete the

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -42,7 +43,8 @@ const decodeLogEntry = (entry: any): string | null => {
                 bytes[i] = binary.charCodeAt(i);
             }
             return new TextDecoder().decode(bytes).replace(/\r?\n$/, '');
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs");
             // Fall through to message below.
         }
     }
@@ -180,7 +182,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
                     // Show visual feedback
                     showToast(t.projectDetail.logs.terminal.copiedToClipboard, 'success');
                 }).catch(err => {
-                    console.error('Failed to copy text:', err);
+                    errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Failed to copy text:', err);
                 });
             }
         });
@@ -199,7 +201,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
                     }
                 }, 100);
             } catch (e) {
-                console.error('Resize error:', e);
+                errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Resize error:', e);
             }
         };
 
@@ -270,7 +272,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
                     try {
                         xtermRef.current.xterm.write(log + '\r\n');
                     } catch (err) {
-                        console.error('Error writing log to terminal:', err);
+                        errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Error writing log to terminal:', err);
                     }
                 }
             });
@@ -336,7 +338,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
 
             setHasMatches(found);
         } catch (error) {
-            console.warn('Search addon error:', error);
+            errorDiagnostics.warn("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Search addon error:', error);
             setHasMatches(false);
         }
     }, []);
@@ -385,7 +387,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
                 }
             });
         } catch (error) {
-            console.warn('Search next error:', error);
+            errorDiagnostics.warn("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Search next error:', error);
         }
     };
 
@@ -407,7 +409,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
                 }
             });
         } catch (error) {
-            console.warn('Search previous error:', error);
+            errorDiagnostics.warn("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Search previous error:', error);
         }
     };
 
@@ -432,7 +434,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
                 }
             },
             onError: (message) => {
-                console.error('Terminal logs error:', message);
+                errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Terminal logs error:', message);
                 showToast(message, 'error', t.projectDetail.logs.terminal.logsErrorTitle);
             },
             onContainerExit: (exitCode, message) => {
@@ -451,7 +453,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
             setTerminalStreaming(false);
         },
         onError: (error) => {
-            console.error('Terminal logs stream error:', error);
+            errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Terminal logs stream error:', error);
             setTerminalStreaming(false);
             showToast(t.projectDetail.logs.terminal.connectFailed, 'error', t.projectDetail.logs.terminal.connectFailedTitle);
         },
@@ -471,7 +473,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
                 if (text) addTerminalLog(text);
             }
         } catch (error) {
-            console.warn('Failed to load recent terminal logs:', error);
+            errorDiagnostics.warn("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Failed to load recent terminal logs:', error);
         }
     }, [historyTarget, addTerminalLog]);
 
@@ -509,7 +511,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
                     }, 1500);
                 }
             } catch (error) {
-                console.error('Error starting stream:', error);
+                errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Error starting stream:', error);
                 setTerminalStreaming(false);
             }
         }
@@ -542,7 +544,7 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
             await loadRecentLogs(true);
             await connectLiveStream();
         })().catch((error) => {
-            console.error('Error switching log stream:', error);
+            errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs", 'Error switching log stream:', error);
             setTerminalStreaming(false);
         });
     }, [streamTarget, loadRecentLogs, connectLiveStream]);
@@ -556,7 +558,8 @@ export const TerminalLogs: React.FC<TerminalLogsProps> = ({
         void (async () => {
             await loadRecentLogs();
             await connectLiveStream();
-        })().catch(() => {
+        })().catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/logs/TerminalLogs");
             setTerminalStreaming(false);
         });
     }, [terminalReady, streamTarget, loadRecentLogs, connectLiveStream]);

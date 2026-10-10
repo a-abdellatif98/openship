@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { assertCloudProxyScope } from "../../lib/cloud/scope";
 import { AppError, NotFoundError, safeErrorMessage } from "@repo/core";
 import { OperationError, ProjectTransferSchemas } from "@repo/contracts";
@@ -44,7 +45,8 @@ export function createProjectTransferOperations(recordAudit: ProjectDependencies
               ...(result.unrecoverableSteps > 0 && { warning: "Promoted to cloud; some local resources need manual cleanup." }) };
         record(ctx, id, "cloud", data);
         return data;
-      } catch (error) { return transferFailure(error, "Project transfer to cloud failed"); }
+      } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/projects/project-transfer.operations"); return transferFailure(error, "Project transfer to cloud failed"); }
     },
     async transferToSelfHosted(ctx, id) {
       assertTransferScope(ctx);
@@ -53,7 +55,8 @@ export function createProjectTransferOperations(recordAudit: ProjectDependencies
         const data = { ok: true, projectId: result.projectId, workspaceId: null, imported: result.imported };
         record(ctx, id, "self-hosted", data);
         return data;
-      } catch (error) { return transferFailure(error, "Project transfer to self-hosted failed"); }
+      } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/projects/project-transfer.operations"); return transferFailure(error, "Project transfer to self-hosted failed"); }
     },
   };
 }

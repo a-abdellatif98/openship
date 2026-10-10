@@ -11,7 +11,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { repos } from "@repo/db";
+import { db, eq, repos, schema } from "@repo/db";
 import { provisionUser } from "@repo/platform/engine/lib/provision-user";
 
 export const LOCAL_EMAIL = "local@openship.local";
@@ -39,6 +39,17 @@ export async function ensureLocalUser(): Promise<LocalUser> {
   if (cached) return cached;
   const generation = cacheGeneration;
 
+  // Desktop's active identity belongs to this installation. A handoff keeps
+  // the real administrator's id, even when no synthetic Local User exists in
+  // the incoming database. It must not create an unrelated empty workspace.
+  const [controller] = await db.select().from(schema.instanceController).where(eq(schema.instanceController.id, "local"));
+  if (controller?.desktopUserId) {
+    const owner = await repos.user.findById(controller.desktopUserId);
+    if (!owner || owner.role !== "admin") throw new Error("The local instance identity is unavailable. Finish the instance handoff before continuing.");
+    if (generation === cacheGeneration) cached = owner as LocalUser;
+    return owner as LocalUser;
+  }
+
   const existing = await repos.user.findByEmail(LOCAL_EMAIL);
   const id = existing?.id ?? randomUUID();
 
@@ -58,6 +69,7 @@ export async function ensureLocalUser(): Promise<LocalUser> {
 
   const row = await repos.user.findById(id);
   if (!row) throw new Error("Failed to provision local user");
+  if (controller) await db.update(schema.instanceController).set({ desktopUserId: row.id }).where(eq(schema.instanceController.id, "local"));
 
   const resolved = {
     id: row.id,

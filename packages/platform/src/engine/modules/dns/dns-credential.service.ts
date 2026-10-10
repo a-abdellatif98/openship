@@ -10,6 +10,7 @@
  * provisioning path, which is the only place we legitimately hold plaintext.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { ConflictError, ENV_MASK, NotFoundError, safeErrorMessage } from "@repo/core";
 import { repos, type DnsCredential } from "@repo/db";
 import { encryptSecretField, decryptSecretField } from "../../lib/credential-encryption";
@@ -90,7 +91,7 @@ export async function getCredential(
   organizationId: string,
   id: string,
 ): Promise<SanitizedDnsCredential | null> {
-  const row = await credentialService.getCredential(organizationId, id).catch(() => null);
+  const row = await credentialService.getCredential(organizationId, id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/dns/dns-credential.service"); return null; });
   if (!row || row.provider !== "cloudflare") return null;
   return asDnsCredential(organizationId, row);
 }
@@ -113,7 +114,7 @@ export async function addCredential(
 }
 
 export async function removeCredential(organizationId: string, id: string): Promise<void> {
-  const existing = await credentialService.getCredential(organizationId, id).catch(() => null);
+  const existing = await credentialService.getCredential(organizationId, id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/dns/dns-credential.service"); return null; });
   if (!existing || existing.provider !== "cloudflare") throw new NotFoundError("DNS credential", id);
   await credentialService.deleteCredential(organizationId, id);
 }
@@ -212,7 +213,7 @@ export async function markCredentialInvalid(
   await repos.credential
     .markInvalid(organizationId, credentialId, "The DNS provider rejected this token.")
     .catch((err: unknown) =>
-      console.warn("[dns] could not mark credential invalid:", safeErrorMessage(err)),
+      errorDiagnostics.warn("platform/engine/modules/dns/dns-credential.service", "[dns] could not mark credential invalid:", safeErrorMessage(err), err),
     );
 }
 
@@ -343,6 +344,7 @@ export async function planRecords(
         ...(current !== undefined ? { current } : {}),
       });
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/dns/dns-credential.service");
       // A list that failed on auth or transport is "couldn't check", never a
       // half-plan the operator might apply against — collapse to the lookup's
       // own vocabulary.
@@ -418,6 +420,7 @@ export async function provisionRecords(
       await provider.upsertRecord(credentials, zone.id, input);
       records.push({ name: input.name, type: input.type, outcome: "applied", action });
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/dns/dns-credential.service");
       if (err instanceof DnsApiError && err.isAuthFailure) {
         await markCredentialInvalid(organizationId, lookup.manager.credentialId);
       }
@@ -476,6 +479,7 @@ export async function releaseRecords(
         deleted++;
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/dns/dns-credential.service");
       // Best effort by design: a domain must still be removable from Openship
       // when the provider is unreachable. The leftover record is visible in the
       // operator's zone; a blocked delete is not.

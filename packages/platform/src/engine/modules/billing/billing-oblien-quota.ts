@@ -2,6 +2,7 @@
  * Oblien Mode B owns charges, grants, renewals, quotas and suspension.
  * Openship mirrors that authority. Explicit complimentary plans use Mode A.
  */
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { AppError, safeErrorMessage, type PlanTierId, type PlanLimits, type OblienLimits } from "@repo/core";
 import { repos } from "@repo/db";
 import type { NamespaceUsageUnits } from "@repo/adapters";
@@ -136,7 +137,7 @@ export async function reconcileOblienEntitlement(orgId: string, workspaceId?: Cl
   try {
     return (await syncOblienEntitlement(orgId, { workspaceId })).drift;
   } catch (error) {
-    console.warn(`[billing] entitlement reconciliation failed for org ${orgId}: ${safeErrorMessage(error)}`);
+    errorDiagnostics.warn("platform/engine/modules/billing/billing-oblien-quota", `[billing] entitlement reconciliation failed for org ${orgId}: ${safeErrorMessage(error)}`, error);
     return null;
   }
 }

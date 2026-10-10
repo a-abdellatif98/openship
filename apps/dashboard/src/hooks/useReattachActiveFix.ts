@@ -14,6 +14,7 @@
  * only `containerTargets` (never `install`) to avoid a second UI for one run.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useRef } from "react";
 import { systemApi } from "@/lib/api";
 import {
@@ -76,7 +77,8 @@ export function useReattachActiveFix(
             openEdgeInstall(s.serverId, { attachSessionId: s.sessionId });
             return;
           }
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/hooks/useReattachActiveFix");
           /* nothing running — a missing/finished session is the common case */
         }
       }
@@ -100,7 +102,8 @@ export function useReattachActiveFix(
             });
             return;
           }
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/hooks/useReattachActiveFix");
           /* nothing running for this (server, component) */
         }
       }

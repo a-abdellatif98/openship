@@ -18,6 +18,7 @@
  * token instead of replacing it, and nothing is deleted when a free domain is dropped.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { safeErrorMessage } from "@repo/core";
 import { repos } from "@repo/db";
 import type { Platform } from "@repo/adapters";
@@ -79,7 +80,7 @@ export async function ensureTargetVerified(
 
   const existing = await repos.edgeTargetVerification
     .findByTarget(organizationId, canonical)
-    .catch(() => undefined);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/edge-target-verify"); return undefined; });
 
   // A very recent attempt decides for every caller in this window. Its outcome is
   // reused verbatim — including a success, since a 403 immediately after a green
@@ -114,6 +115,7 @@ export async function ensureTargetVerified(
     try {
       challenge = await client.edgeProxy.requestVerification(canonical);
     } catch (err) {
+      observeCaughtError(err, "platform/engine/lib/edge-target-verify");
       return { verified: false, reason: safeErrorMessage(err) };
     }
     if (!challenge) {
@@ -143,6 +145,7 @@ export async function ensureTargetVerified(
         return { verified: false, reason };
       }
     } catch (err) {
+      observeCaughtError(err, "platform/engine/lib/edge-target-verify");
       const reason = `could not install the challenge on this box's edge: ${safeErrorMessage(err)}`;
       await recordFailure(row.id, reason);
       return { verified: false, reason };
@@ -171,6 +174,7 @@ export async function ensureTargetVerified(
     try {
       result = await client.edgeProxy.checkVerification(challenge.id);
     } catch (err) {
+      observeCaughtError(err, "platform/engine/lib/edge-target-verify");
       const reason = safeErrorMessage(err);
       await recordFailure(row.id, reason);
       return { verified: false, reason, ...(selfProbeWarning ? { selfProbeWarning } : {}) };
@@ -214,7 +218,7 @@ export async function ensureTargetVerified(
 async function recordFailure(id: string, reason: string): Promise<void> {
   await repos.edgeTargetVerification
     .recordCheck(id, { status: "failed", lastError: reason })
-    .catch(() => undefined);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/edge-target-verify"); return undefined; });
 }
 
 /** Bare host from a canonical target, unbracketing IPv6 for `serveEdgeChallenge`
@@ -264,6 +268,7 @@ export async function probeOwnToken(
     }
     return { ok: true };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/edge-target-verify");
     return { ok: false, reason: safeErrorMessage(err) };
   }
 }
@@ -285,8 +290,8 @@ export async function resolveRoutingPlatform(
     const target = serverId ? "server" : "local";
     return await resolveTargetPlatform(target, "docker", serverId, organizationId);
   } catch (err) {
-    console.warn(
-      `[edge-verify] could not resolve routing for ${serverId ?? "this box"}: ${safeErrorMessage(err)}`,
+    errorDiagnostics.warn("platform/engine/lib/edge-target-verify",
+      `[edge-verify] could not resolve routing for ${serverId ?? "this box"}: ${safeErrorMessage(err)}`, err,
     );
     return null;
   }

@@ -11,6 +11,7 @@
  * authoritative `mailbox` / `forwardings` tables.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { sshManager } from "../../../lib/ssh-manager";
 import { readState } from "../mail-state";
 import { provisionDomainDkim, genSecret } from "../mail.service";
@@ -181,8 +182,8 @@ export async function createDomain(
     });
   } catch (err) {
     const message = safeErrorMessage(err);
-    console.warn(
-      `createDomain: postmaster mailbox creation failed for ${domain}: ${message}`,
+    errorDiagnostics.warn("platform/engine/modules/mail/admin/domains.service",
+      `createDomain: postmaster mailbox creation failed for ${domain}: ${message}`, err,
     );
     postmasterPassword = undefined;
     postmasterWarning =
@@ -231,6 +232,7 @@ export async function createDomain(
           const dkimValue = await provisionDomainDkim(exec, domain);
           return { installDomain, dkimValue, dkimError: undefined, ipv4, ipv6, relayInclude };
         } catch (err) {
+          observeCaughtError(err, "platform/engine/modules/mail/admin/domains.service");
           return {
             installDomain,
             dkimValue: undefined,
@@ -260,8 +262,8 @@ export async function createDomain(
     }
   } catch (err) {
     const message = safeErrorMessage(err);
-    console.warn(
-      `createDomain: DNS record persistence failed for ${domain}: ${message}`,
+    errorDiagnostics.warn("platform/engine/modules/mail/admin/domains.service",
+      `createDomain: DNS record persistence failed for ${domain}: ${message}`, err,
     );
     dnsWarning = `DNS record persistence failed for ${domain}: ${message}`;
   }
@@ -371,6 +373,7 @@ export async function deleteDomain(
       try {
         await hardDeleteMailbox(serverId, m.username);
       } catch (err) {
+        observeCaughtError(err, "platform/engine/modules/mail/admin/domains.service");
         // Surface the first failure: leaving half-deleted state is worse
         // than aborting the cascade and letting the operator retry.
         throw new Error(
@@ -396,7 +399,9 @@ export async function deleteDomain(
 
   // Best-effort: drop any persisted DNS-pending banner state so the
   // dashboard doesn't keep nagging about a domain that no longer exists.
-  await deleteDomainDns(serverId, d).catch(() => {});
+  await deleteDomainDns(serverId, d).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/domains.service");
+  });
 }
 
 /**

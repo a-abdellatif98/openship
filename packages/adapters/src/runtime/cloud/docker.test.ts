@@ -144,6 +144,33 @@ describe("containers on one Oblien Docker workspace", () => {
     await expect(runtime.applyEnvironment("container-a", {}, options)).rejects.toThrow("out of credits");
     expect(apply).not.toHaveBeenCalled();
   });
+  it("retains managed listener activation during an environment refresh using only published ports", async () => {
+    rows.push({
+      Id: "node-a",
+      State: "running",
+      Ports: [],
+      Labels: {
+        "openship.project": "project-a",
+        "io.openship.managed-node-listener": "1",
+      },
+    });
+    stoppedPorts.set("node-a", { "3000/tcp": [{ HostIp: "0.0.0.0", HostPort: "30001" }] });
+    const apply = vi
+      .spyOn(DockerRuntime.prototype, "applyEnvironment")
+      .mockResolvedValue({ containerId: "replacement-a" });
+    await runtime.applyEnvironment(
+      "node-a",
+      {
+        NODE_OPTIONS: "--max-old-space-size=128",
+        OPENSHIP_MANAGED_PUBLIC_PORTS: "9229",
+      },
+      { projectId: "project-a", serviceName: "app", onReplaced: vi.fn() },
+    );
+    expect(apply.mock.calls[0]?.[1]).toEqual({
+      NODE_OPTIONS: "--max-old-space-size=128",
+      OPENSHIP_MANAGED_PUBLIC_PORTS: "3000",
+    });
+  });
   it.each(["running", "stopped"])("updates a %s bridge before accepting Docker connections", async initialState => {
     vi.useFakeTimers();
     let bridgeState = initialState;

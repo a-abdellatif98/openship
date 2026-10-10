@@ -22,6 +22,7 @@
  * clear costs them their data.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { resolveExecutor, type ServiceHandle } from "@repo/adapters";
 import { safeErrorMessage } from "@repo/core";
 import { createMigrationDockerRuntime as createServerDockerRuntime } from "./migration-runtime";
@@ -48,6 +49,7 @@ export async function probeOneVolume(
     if (!probe.exists || probe.empty) return null;
     return "occupied";
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/migration/volume-conflict");
     onLog?.(
       `could not inspect target volume ${sourceId} (${safeErrorMessage(err)}) — ` +
         `treating it as unverified rather than overwriting it`,
@@ -94,6 +96,7 @@ export async function probeTargetVolumeConflicts(opts: {
   try {
     rt = await createServerDockerRuntime(opts.targetServerId, opts.organizationId);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/migration/volume-conflict");
     // Could not ask at all → every candidate is a conflict. The alternative is
     // overwriting on the strength of a failed connection.
     opts.onLog?.(
@@ -134,6 +137,7 @@ export async function probeTargetVolumeConflicts(opts: {
         const verdict = await probeOneVolume(exec, handle, source.id, opts.onLog);
         if (verdict) conflicts.set(q.volume, verdict);
       } catch (err) {
+        observeCaughtError(err, "platform/engine/modules/migration/volume-conflict");
         opts.onLog?.(
           `could not enumerate target volume ${q.volume} (${safeErrorMessage(err)}) — ` +
             `treating it as unverified rather than overwriting it`,
@@ -142,7 +146,9 @@ export async function probeTargetVolumeConflicts(opts: {
       }
     }
   } finally {
-    await rt.dispose().catch(() => {});
+    await rt.dispose().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/volume-conflict");
+    });
   }
   return conflicts;
 }

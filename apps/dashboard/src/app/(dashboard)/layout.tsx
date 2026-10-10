@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { redirect } from "next/navigation";
 import { getSession, getDeploymentInfoOrNull } from "@/lib/server/session";
 import { resolveRequestProductView } from "@/lib/server/product-view";
@@ -8,6 +9,8 @@ import { MigratedLauncher } from "@/components/migrated-launcher";
 import { MigrationInProgress } from "@/components/migration-in-progress";
 import { DashboardProviders } from "./providers";
 import { serverApi, ServerApiError } from "@/lib/server/api";
+import { InstanceRecovery } from "@/components/instance/InstanceRecovery";
+import type { InstanceStatus } from "@/lib/api/instance";
 
 /**
  * Better Auth's organization plugin returns `{ data: Org[] }` from
@@ -26,6 +29,7 @@ async function fetchUserOrgs(): Promise<OrgListItem[]> {
     if (Array.isArray(res)) return res;
     return res.data ?? [];
   } catch (err) {
+    observeCaughtError(err, "dashboard/app/(dashboard)/layout");
     // 401/404 here means the org plugin can't enumerate — fall back to
     // "single org" semantics (no chooser, no auto-set). Never block
     // the dashboard on a probe failure.
@@ -68,7 +72,8 @@ async function resolveOrgChooserGate(
       await serverApi.post("auth/organization/set-active", {
         organizationId: orgs[0].id,
       });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/layout");
       // Couldn't auto-set — render the dashboard anyway; the api-side
       // resolveActiveOrganizationId fallback will pick the membership
       // for org-scoped queries.
@@ -89,7 +94,11 @@ async function resolveOrgChooserGate(
  */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) {
+    const controller = await serverApi.get<InstanceStatus>("system/instance", { cache: "no-store" }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/layout"); return null; });
+    if (controller && controller.role !== "active") return <InstanceRecovery initial={controller} />;
+    redirect("/login");
+  }
 
   // Org chooser gate. If the session has no explicit activeOrganizationId
   // and the user belongs to 2+ orgs, send them to /select-organization;
@@ -106,7 +115,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // lock releases would trap the operator on the in-progress launcher.
   // Other callers can keep using the cache.
   const deploymentInfo = await getDeploymentInfoOrNull({ skipCache: true });
-  if (!deploymentInfo) return <ApiUnavailable />;
+  if (!deploymentInfo) {
+    const controller = await serverApi.get<InstanceStatus>("system/instance", { cache: "no-store" }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/layout"); return null; });
+    return controller && controller.role !== "active" ? <InstanceRecovery initial={controller} /> : <ApiUnavailable />;
+  }
 
   // Mid-flight migration gate. The DB is being cut over — rendering
   // the normal UI would risk a 503'd write, and rendering the
@@ -137,7 +149,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const initialGithubData = await serverApi
     .get("github/home", { cache: "no-store" })
-    .catch(() => null);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/layout"); return null; });
 
   // Resolve the rail HERE, on the server, so the first painted sidebar is already
   // the right one. Doing it client-side from document.cookie would render the

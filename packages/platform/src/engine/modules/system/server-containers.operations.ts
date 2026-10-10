@@ -1,4 +1,5 @@
 /** Managed container operations over retained detection, repair, and replay services. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { OperationError } from "@repo/contracts";
 import { repos } from "@repo/db";
 import type { ExecutionContext } from "../../../context";
@@ -62,7 +63,8 @@ export const serverContainerResources: Pick<ServerDependencies["resources"], "li
   async scanContainers(ctx, id) {
     const server = await requireSelfHostedServer(ctx, id);
     await assertServerExecution(server);
-    const containers = await detectServerContainers(server).catch((error: unknown) => { throw new Error(`scan failed: ${(error as Error).message}`); });
+    const containers = await detectServerContainers(server).catch((error: unknown) => {
+      observeCaughtError(error, "platform/engine/modules/system/server-containers.operations"); throw new Error(`scan failed: ${(error as Error).message}`); });
     record(ctx, id);
     return { ok: true, containers };
   },
@@ -77,7 +79,7 @@ export const serverContainerStreams: NonNullable<ServerDependencies["containers"
   async start(ctx, id, input, signal) {
     const server = await authorizedServer(ctx, id, "write");
     signal?.throwIfAborted();
-    if (input.component === "mail" && !await repos.mailServer.get(id).catch(() => undefined))
+    if (input.component === "mail" && !await repos.mailServer.get(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-containers.operations"); return undefined; }))
       throw new OperationError("No mail server is provisioned on this server", 400, "MAIL_SERVER_NOT_PROVISIONED");
     const { session } = runContainerApply(server, input.component, input.intent ?? "update",
       () => authorizedServer(ctx, id, "write").then(() => {}));

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   db,
   createTransferReader,
@@ -390,6 +391,7 @@ export async function planProjectImport(
       : { tables: {}, serverIds: [], warnings: [] };
     assertActiveDeploymentOwnership(graph.tables);
   } catch (error) {
+    observeCaughtError(error, "api/modules/system/data-transfer/project-import");
     throw new ProjectImportError(
       error instanceof Error ? error.message : "The selected project snapshot is incomplete.",
     );

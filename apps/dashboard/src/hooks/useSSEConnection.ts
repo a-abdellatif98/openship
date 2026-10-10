@@ -9,6 +9,7 @@
  * Clean entry points - no need to call connection helpers directly!
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SSEMessage, useSSEStream } from './useSSEStream';
 import { createLogMessageProcessor, createBuildMessageProcessor, LogMessageCallbacks, BuildMessageCallbacks } from '@/lib/sseMessageProcessors';
@@ -168,7 +169,7 @@ export const useLogStream = (options: UseLogStreamOptions = {}): UseLogStreamRet
       });
     } catch (err: any) {
       if (connectionGenerationRef.current !== generation) return;
-      console.error('[useLogStream] Connection error:', err);
+      errorDiagnostics.error("dashboard/hooks/useSSEConnection", '[useLogStream] Connection error:', err);
       setError(err);
       onErrorRef.current?.(err);
       throw err;
@@ -683,7 +684,7 @@ export const useSSEConnection = <T = any>(
         body,
       });
     } catch (err: any) {
-      console.error('[useSSEConnection] Connection error:', err);
+      errorDiagnostics.error("dashboard/hooks/useSSEConnection", '[useSSEConnection] Connection error:', err);
       setError(err);
       setIsConnecting(false);
       onError?.(err);

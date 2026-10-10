@@ -18,6 +18,7 @@
  * instead of `served === false` turns "no signal" into a false alarm.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { PortProbeExecutor } from "./port-listen";
 
 export interface OutputProbeResult {
@@ -163,7 +164,8 @@ export async function probeStaticOutput(
       checked: true,
       ...parseHttp(out),
     };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/system/output-exists");
     return { found: false, hasIndex: false, checked: false };
   }
 }

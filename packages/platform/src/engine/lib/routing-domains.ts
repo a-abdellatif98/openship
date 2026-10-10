@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos, type Domain, type Project, type Service } from "@repo/db";
 import {
   isRemoteConnectionError,
@@ -376,7 +377,9 @@ export function buildProjectRouteDomains(opts: {
       }
 
       const routeSlug = endpoint.domain || managedSlug;
-      if (routeSlug && usesManagedRouting) {
+      // Cloud owns the managed hostname through its provider even though it
+      // does not use the local OpenResty/managed-edge routing path.
+      if (routeSlug && (usesManagedRouting || opts.certificateManagement === "provider")) {
         add(`${routeSlug}.${baseDomain}`, {
           domainType: "free",
           destination,
@@ -704,7 +707,7 @@ export function createTrackedSslProvider(
       // or prevents the existing issuance/recovery path from running.
       const dnsChallenge = ssl.certificateManagement !== "provider" &&
         (host.startsWith("*.") || domainRecord?.sslChallenge === "dns-01");
-      const onDisk = log || dnsChallenge ? await ssl.verifyCert(host).catch(() => null) : null;
+      const onDisk = log || dnsChallenge ? await ssl.verifyCert(host).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/routing-domains"); return null; }) : null;
       const noCertYet = onDisk?.reason === "missing";
       log?.(noCertYet
         ? `No HTTPS certificate found for ${host}; the HTTP route is configured while certificate issuance is in progress.`
@@ -728,6 +731,7 @@ export function createTrackedSslProvider(
           );
         }
       } catch (err) {
+        observeCaughtError(err, "platform/engine/lib/routing-domains");
         errorReason = safeErrorMessage(err);
         const unknown: SslResult = {
           domain: host,
@@ -741,11 +745,12 @@ export function createTrackedSslProvider(
         // itself failed, preserve the last known state until it can be checked.
         result = isRemoteConnectionError(err)
           ? unknown
-          : await ssl.verifyCert(host).catch(() => unknown);
+          : await ssl.verifyCert(host).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/routing-domains"); return unknown; });
         if (result.verified && result.reason !== "not_local") {
           try {
             await ssl.activateCert?.(host);
           } catch (activationError) {
+            observeCaughtError(activationError, "platform/engine/lib/routing-domains");
             errorReason = safeErrorMessage(activationError);
             result = { ...result, verified: false, reason: "read_error" };
           }
@@ -1065,7 +1070,7 @@ export async function auditRoutedDomainTls(opts: {
 }): Promise<string[]> {
   const { projectId, routes, routeWarnings, log } = opts;
   if (routes.length === 0) return [];
-  const rows = await repos.domain.listByProject(projectId).catch(() => null);
+  const rows = await repos.domain.listByProject(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/routing-domains"); return null; });
   if (!rows) return [];
   const domainByHostname = new Map(rows.map((row) => [row.hostname.toLowerCase(), row]));
   const skipped = routeWarningHostnames(routeWarnings);
@@ -1094,6 +1099,7 @@ export async function auditRoutedDomainTls(opts: {
         );
       }
     } catch (error) {
+      observeCaughtError(error, "platform/engine/lib/routing-domains");
       domainByHostname.delete(host);
       unconfirmed.push(`${host}: HTTPS status could not be confirmed: ${safeErrorMessage(error)}`);
     }

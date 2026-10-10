@@ -10,6 +10,7 @@
  * instead of re-running checks (see setup.ts).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "../types";
 import type { ComponentStatus } from "./types";
 import { containerCommand } from "./edge-container-executor";
@@ -299,7 +300,8 @@ async function enrichAvailable(
   try {
     const profile = await resolveEnvironment(executor);
     await enrichAvailableVersions(executor, profile, results);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/system/checks");
     /* leave components without an available version */
   }
 }

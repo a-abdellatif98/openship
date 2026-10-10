@@ -1,3 +1,4 @@
+import { errorReporter, type ErrorEvent } from "@repo/core/diagnostics";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -57,15 +58,25 @@ function findElement<P>(node: ReactNode, type: unknown): ReactElement<P> | undef
   }
 }
 
+const diagnostics: ErrorEvent[] = [];
+
 describe("billing page failure recovery", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await errorReporter.flush();
+    diagnostics.length = 0;
+    errorReporter.setEnabled(true);
+    errorReporter.setSink(events => { diagnostics.push(...events); });
     vi.clearAllMocks();
     mocks.getDeploymentInfo.mockResolvedValue({ selfHosted: false });
     mocks.getSession.mockResolvedValue({ user: { id: "user-a" }, session: { activeOrganizationId: "org-a" } });
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(async () => {
+    await errorReporter.flush();
+    errorReporter.setEnabled(false);
+    vi.restoreAllMocks();
+  });
 
   it.each([
     [500, undefined, "billing-unreachable"],
@@ -108,7 +119,8 @@ describe("billing page failure recovery", () => {
     const overview = findElement<{ state: unknown }>(page, BillingOverview)!;
 
     expect(overview.props.state).toBe(state);
-    expect(console.warn).not.toHaveBeenCalled();
+    await errorReporter.flush();
+    expect(diagnostics).toHaveLength(0);
   });
 
   it("passes the complimentary entitlement through to the plan comparison", async () => {
@@ -147,9 +159,10 @@ describe("billing page failure recovery", () => {
 
     await loadPage();
 
-    expect(console.warn).toHaveBeenCalledExactlyOnceWith("[billing] GET /billing/state failed", {
-      status: 503, code: "BILLING_NOT_CONFIGURED",
-    });
+    await errorReporter.flush();
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({ context: { statusCode: 503, code: "BILLING_NOT_CONFIGURED" } });
+    expect(JSON.stringify(diagnostics)).not.toMatch(/private-message|private message|private-token|private-provider-body|session-cookie/);
   });
 
   it("keeps the selected workspace available during billing recovery", async () => {
@@ -325,9 +338,10 @@ describe("billing page failure recovery", () => {
 
     await loadPage();
 
-    expect(console.warn).toHaveBeenCalledExactlyOnceWith("[billing] GET /billing/state failed", {
-      status: 500, code: "BILLING_API_ERROR",
-    });
+    await errorReporter.flush();
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({ context: { statusCode: 500, code: "BILLING_API_ERROR" } });
+    expect(JSON.stringify(diagnostics)).not.toMatch(/private-message|private message|private-token|private-provider-body|session-cookie/);
   });
 });
 

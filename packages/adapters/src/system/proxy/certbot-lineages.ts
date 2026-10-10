@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { readdir } from "node:fs/promises";
 import { posix as path } from "node:path";
 import type { CommandExecutor } from "../../types";
@@ -68,8 +69,8 @@ export async function certbotLineageDirs(
   certDir = "/etc/letsencrypt/live",
 ): Promise<string[]> {
   const names = executor
-    ? (await executor.exec(`ls -1 ${sq(certDir)} 2>/dev/null`).catch(() => "")).split("\n")
-    : await readdir(certDir).catch(() => [] as string[]);
+    ? (await executor.exec(`ls -1 ${sq(certDir)} 2>/dev/null`).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/proxy/certbot-lineages"); return ""; })).split("\n")
+    : await readdir(certDir).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/proxy/certbot-lineages"); return [] as string[]; });
   const dirs = names
     .filter((name) => isCertbotLineageName(name, hostname))
     .sort()

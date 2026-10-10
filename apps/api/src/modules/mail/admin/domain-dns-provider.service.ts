@@ -8,6 +8,7 @@
  * plan is a read-only preview, apply is the button.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   planRecords,
   provisionRecords,
@@ -84,7 +85,9 @@ export async function applyMailDomainDns(
   const inputs = await resolveMailDnsInputs(serverId, domain);
   const result = await provisionRecords(organizationId, domain, inputs);
   if (result.provisioned) {
-    await acknowledgeDomainDns(serverId, domain).catch(() => {});
+    await acknowledgeDomainDns(serverId, domain).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "api/modules/mail/admin/domain-dns-provider.service");
+    });
   }
   return result;
 }

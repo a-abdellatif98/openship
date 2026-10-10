@@ -8,6 +8,7 @@
  * the host that owns the selected project.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   DockerRuntime,
   getPlatform,
@@ -218,7 +219,7 @@ export async function runBuildCacheGcSweep(
     targets = collectBuildCacheTargets(await deps.listServers(), deps.hasLocalDockerRuntime());
   } catch (err) {
     summary.errors += 1;
-    console.error(`[build-cache-gc] target discovery failed: ${safeErrorMessage(err)}`);
+    errorDiagnostics.error("platform/engine/modules/deployments/build-cache-gc", `[build-cache-gc] target discovery failed: ${safeErrorMessage(err)}`, err);
     return summary;
   }
 
@@ -240,7 +241,7 @@ export async function runBuildCacheGcSweep(
       }
     } catch (err) {
       summary.errors += 1;
-      console.error(`[build-cache-gc] ${target.key} sweep failed: ${safeErrorMessage(err)}`);
+      errorDiagnostics.error("platform/engine/modules/deployments/build-cache-gc", `[build-cache-gc] ${target.key} sweep failed: ${safeErrorMessage(err)}`, err);
     }
   }
   return summary;

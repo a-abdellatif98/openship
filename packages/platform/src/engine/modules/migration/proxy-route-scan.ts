@@ -7,6 +7,7 @@
  * Read-only; never throws (a scan failure must not fail discovery).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { buildProxyRouteIndex, edgeProxy } from "@repo/adapters";
 import type { CommandExecutor, ProxySiteRoute, ProxyKind } from "@repo/adapters";
 import { safeErrorMessage } from "@repo/core";
@@ -34,6 +35,7 @@ export async function scanProxyRoutes(serverId: string, organizationId: string):
   try {
     return await withMigrationExecution(serverId, organizationId, scanProxyRoutesWithExecutor);
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/migration/proxy-route-scan");
     return failedScan(error);
   }
 }
@@ -56,6 +58,7 @@ export async function scanProxyRoutesWithExecutor(
       warnings: scan.warnings,
     };
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/migration/proxy-route-scan");
     return failedScan(error);
   }
 }

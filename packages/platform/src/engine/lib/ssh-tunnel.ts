@@ -13,6 +13,7 @@
  * connection is created per call - it multiplexes over the existing one.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import http from "node:http";
 import net from "node:net";
 import type { Duplex } from "node:stream";
@@ -139,7 +140,8 @@ export async function tunnelRequest(
   let tunnel: Duplex;
   try {
     tunnel = await tunnelConnect(serverId, "127.0.0.1", remotePort);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-tunnel");
     return null;
   }
 
@@ -215,7 +217,7 @@ export async function tunnelRequest(
       // the connection (handled by the "close"/"end" listener below).
     });
 
-    tunnel.on("error", () => finish(null));
+    tunnel.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "platform/engine/lib/ssh-tunnel"); return finish(null); });
     tunnel.on("close", () => {
       if (settled) return;
       // Only a response with no length framing at all is terminated by the
@@ -280,7 +282,8 @@ export async function tunnelStream(
   let tunnel: Duplex;
   try {
     tunnel = await tunnelConnect(serverId, "127.0.0.1", remotePort);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-tunnel");
     return null;
   }
 
@@ -347,7 +350,7 @@ export async function tunnelStream(
     };
 
     tunnel.on("data", onData);
-    tunnel.on("error", () => {
+    tunnel.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "platform/engine/lib/ssh-tunnel");
       clearTimeout(timeout);
       resolve(null);
     });
@@ -422,7 +425,7 @@ export async function tunnelForward(
     if (closed) { local.destroy(); return; }
     activeSockets.add(local);
     local.on("close", () => activeSockets.delete(local));
-    local.on("error", () => local.destroy());
+    local.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "platform/engine/lib/ssh-tunnel"); return local.destroy(); });
 
     // Open an SSH tunnel channel for this connection
     Promise.resolve().then(async () => {
@@ -446,7 +449,8 @@ export async function tunnelForward(
         local.on("close", () => remote.destroy());
         remote.on("close", () => local.destroy());
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-tunnel");
         local.destroy();
       });
   });
@@ -481,7 +485,7 @@ export async function tunnelForward(
     server.once("listening", listening);
     server.listen(preferredPort, localHost);
   }).catch(async error => { await close(); throw error; });
-  server.on("error", () => { void close(); });
+  server.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "platform/engine/lib/ssh-tunnel");  void close(); });
 
   return {
     localPort,

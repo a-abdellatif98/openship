@@ -16,6 +16,7 @@
  * Results are cached in-memory for a few minutes (registry rate limits).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { env } from "../config/env";
 import { safeFetch, type SafeFetchResponse } from "./safe-fetch";
 
@@ -104,7 +105,8 @@ async function fetchToken(challenge: string): Promise<string | null> {
     if (!res.ok) return null;
     const body = (await res.json()) as { token?: string; access_token?: string };
     return body.token ?? body.access_token ?? null;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/image-registry");
     return null;
   }
 }
@@ -130,7 +132,8 @@ async function headManifest(
       allowPrivate: !env.CLOUD_MODE,
       maxRedirects: 3,
     });
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/image-registry");
     return null;
   }
 }

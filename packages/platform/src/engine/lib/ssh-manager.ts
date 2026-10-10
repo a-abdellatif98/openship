@@ -25,6 +25,7 @@
  *   - Timers use unref() so they don't prevent graceful shutdown.
  */
 
+import { observedAllSettled, reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { readFileSync } from "node:fs";
 import { repos } from "@repo/db";
 import {
@@ -137,13 +138,15 @@ export async function buildSshConfig(
         keyPath = resolveSafeSshKeyPath(settings.sshKeyPath!, {
           extraRoots: operatorSshKeyRoots(),
         });
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-manager");
         return null;
       }
 
       try {
         config.privateKey = readFileSync(keyPath, "utf-8");
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-manager");
         return null;
       }
     }
@@ -449,7 +452,7 @@ export class SshConnectionManager {
     // API is containerized `createHostExecutor()` builds a NEW SshExecutor to the
     // host every call, so an unpooled path leaked one sshd session per call —
     // 8,000+ in hours, then OOM (#291). Every local row shares the one host channel.
-    const row = await repos.server.get(serverId).catch(() => undefined);
+    const row = await repos.server.get(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-manager"); return undefined; });
     if (row && (await isLocalHostRow(row))) {
       return this.acquireLocalHost(serverId, startedAt);
     }
@@ -766,7 +769,8 @@ export class SshConnectionManager {
         return this.acquire(serverId);
       }
       if (connection.idleTimer) clearTimeout(connection.idleTimer);
-      try { connection.unsubDisconnect?.(); } catch { /* best-effort */ }
+      try { connection.unsubDisconnect?.(); } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-manager"); /* best-effort */ }
       this.retired.set(observed, key);
       this.cacheConnection(key, fresh);
       if (key === HOST_CHANNEL_KEY) {
@@ -922,7 +926,7 @@ export class SshConnectionManager {
     // host-channel health, whose cooldown path still has to carry the REASON.
     const inCooldown = this.cooldownRemaining(serverId) > 0;
 
-    const server = await repos.server.get(serverId).catch(() => undefined);
+    const server = await repos.server.get(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-manager"); return undefined; });
     if (!server) return { reachable: false, code: "unknown" };
 
     // An isLocal row is THIS box (the auto-registered "This Server"). Its ssh*
@@ -983,6 +987,7 @@ export class SshConnectionManager {
         await this.withExecutor(serverId, executor => executor.exec("true", { timeout: timeoutMs }));
         return { reachable: true, code: "ok" };
       } catch (error) {
+        observeCaughtError(error, "platform/engine/lib/ssh-manager");
         return { reachable: false, code: "unreachable", hint: safeErrorMessage(error) };
       }
     }
@@ -1132,7 +1137,8 @@ export class SshConnectionManager {
     for (const conn of this.servers.values()) {
       if (conn.idleTimer) clearTimeout(conn.idleTimer);
       if (conn.unsubDisconnect) {
-        try { conn.unsubDisconnect(); } catch { /* best-effort */ }
+        try { conn.unsubDisconnect(); } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-manager"); /* best-effort */ }
       }
       executors.add(conn.executor);
     }
@@ -1140,15 +1146,16 @@ export class SshConnectionManager {
     this.retainCounts.clear();
     this.retired.clear();
 
-    await Promise.allSettled(
-      [...executors].map((exec) => this.disposeBounded(exec, disposeTimeoutMs)),
+    await observedAllSettled(
+      [...executors].map((exec) => this.disposeBounded(exec, disposeTimeoutMs)), "platform/engine/lib/ssh-manager",
     );
   }
 
   /** Dispose an executor, resolving after `timeoutMs` even if it hangs. */
   private disposeBounded(exec: CommandExecutor, timeoutMs: number): Promise<void> {
     if (!("dispose" in exec) || typeof exec.dispose !== "function") return Promise.resolve();
-    const disposed = Promise.resolve(exec.dispose()).catch(() => { /* teardown is best-effort */ });
+    const disposed = Promise.resolve(exec.dispose()).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-manager"); /* teardown is best-effort */ });
     const timeout = new Promise<void>((resolve) => {
       const t = setTimeout(resolve, timeoutMs);
       if (typeof t.unref === "function") t.unref();
@@ -1196,6 +1203,7 @@ export class SshConnectionManager {
           q.ops.shift();
           op.resolve(result);
         } catch (err) {
+          observeCaughtError(err, "platform/engine/lib/ssh-manager");
           q.ops.shift();
           op.reject(err instanceof Error ? err : new Error(safeErrorMessage(err)));
         }
@@ -1327,7 +1335,8 @@ export class SshConnectionManager {
 
     if (conn.idleTimer) clearTimeout(conn.idleTimer);
     if (conn.unsubDisconnect) {
-      try { conn.unsubDisconnect(); } catch { /* best-effort */ }
+      try { conn.unsubDisconnect(); } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-manager"); /* best-effort */ }
     }
     this.retainCounts.delete(serverId);
     // A BORROWED entry (a local row pointing at the shared host channel) must only

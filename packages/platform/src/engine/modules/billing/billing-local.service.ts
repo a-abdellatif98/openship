@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { CLOUD_CAPABILITIES } from "@repo/core";
 import type { ExecutionContext } from "../../../context";
 import { assertCloudTenantScope } from "../../lib/cloud/scope";
@@ -36,8 +37,8 @@ export async function proxyToCloudBilling(
       identity,
     );
   } catch (err) {
-    console.warn(
-      `[billing-local] cloud request threw for ${method} ${path}: ${(err as Error).message}`,
+    errorDiagnostics.warn("platform/engine/modules/billing/billing-local.service",
+      `[billing-local] cloud request threw for ${method} ${path}: ${(err as Error).message}`, err,
     );
     return {
       status: 502,
@@ -62,7 +63,8 @@ export async function proxyToCloudBilling(
   let payload: unknown;
   try {
     payload = await res.json();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/billing/billing-local.service");
     return {
       status: 502,
       payload: {
@@ -73,7 +75,7 @@ export async function proxyToCloudBilling(
   }
 
   if (res.status === 401) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/billing/billing-local.service",
       `[billing-local] SaaS returned 401 for ${method} /api/billing${path}; stored cloud session left intact.`,
     );
     return {

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -152,7 +153,8 @@ export function PersonalAccessTokens() {
       await navigator.clipboard.writeText(newToken);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/PersonalAccessTokens");
       /* clipboard blocked — user can select manually */
     }
   };

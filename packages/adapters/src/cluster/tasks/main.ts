@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -209,13 +210,15 @@ export async function runDatabaseTask(config: DatabaseTaskConfig, signal: AbortS
         "The database snapshot and its integrity manifest are saved in the backup destination.",
       );
     } catch (error) {
-      await index.save({ ...entry, phase: "failed", error: taskError(error) }).catch(() => {});
+      await index.save({ ...entry, phase: "failed", error: taskError(error) }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/cluster/tasks/main");
+      });
       throw error;
     }
     try {
       await prune(config, index, store);
     } catch (error) {
-      console.error(`Backup saved; older archive cleanup needs attention: ${taskError(error)}`);
+      errorDiagnostics.error("adapters/cluster/tasks/main", `Backup saved; older archive cleanup needs attention: ${taskError(error)}`, error);
     }
   } finally {
     store.client.destroy();

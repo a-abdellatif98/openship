@@ -352,7 +352,7 @@
     "failed": "Échec",
     "starting": "Démarrage",
     "restarting": "Redémarrage",
-    "unknown": "Inconnu"
+    "unknown": "État indisponible"
   },
   "routingRetry": {
     "title": "Le routage du domaine demande votre attention",

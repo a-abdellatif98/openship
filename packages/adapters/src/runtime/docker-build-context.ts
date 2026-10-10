@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { spawn } from "node:child_process";
 import { access, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -105,7 +106,7 @@ function spawnGit(
 
     armIdle(); // start the clock; every stdout/stderr chunk resets it
 
-    child.on("error", (err) => {
+    child.on("error", (err) => { observeCaughtError(err, "adapters/runtime/docker-build-context");
       clearTimeout(idleTimer);
       reject(err);
     });
@@ -156,7 +157,8 @@ async function loadDockerignoreMatcher(rootPath: string): Promise<IgnoreMatcher 
   try {
     const contents = await readFile(join(rootPath, ".dockerignore"), "utf-8");
     return ignore().add(contents.split(/\r?\n/).map(anchorDockerignorePattern));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/runtime/docker-build-context");
     return undefined; // no .dockerignore
   }
 }
@@ -252,7 +254,7 @@ async function resolveBuildContextDir(treeDir: string, contextSubdir: string): P
   const target = resolveWithinDirectory(treeDir, contextSubdir);
   if (!contextSubdir) return target;
 
-  const stats = await stat(target).catch(() => null);
+  const stats = await stat(target).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker-build-context"); return null; });
   if (!stats?.isDirectory()) {
     throw new Error(
       `Build context "${contextSubdir}" is not a directory in this source. Check the service's build path.`,
@@ -367,7 +369,7 @@ async function firstExistingCandidate(dir: string, candidates: string[]): Promis
     const candidatePath = join(dir, ...candidate.split("/"));
     const exists = await access(candidatePath)
       .then(() => true)
-      .catch(() => false);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker-build-context"); return false; });
     if (exists) {
       return candidate;
     }
@@ -559,11 +561,15 @@ export async function prepareSourceTree(
       contextDir,
       dockerignorePruned: pruneDockerignore,
       cleanup: async () => {
-        await rm(contextDir, { recursive: true, force: true }).catch(() => {});
+        await rm(contextDir, { recursive: true, force: true }).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/docker-build-context");
+        });
       },
     };
   } catch (error) {
-    await rm(contextDir, { recursive: true, force: true }).catch(() => {});
+    await rm(contextDir, { recursive: true, force: true }).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/docker-build-context");
+    });
     throw error;
   }
 }
@@ -646,7 +652,7 @@ export async function resolveServiceDockerfile(
         generatedRecipeRefused: !requireRepositoryDockerfile,
         rootDockerfileExists: await access(join(contextDir, "Dockerfile"))
           .then(() => true)
-          .catch(() => false),
+          .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker-build-context"); return false; }),
       }),
     );
   }
@@ -697,7 +703,7 @@ export async function resolveServiceDockerfile(
   const requiresBuildKit = hasRepositoryDockerfile
     ? await readFile(join(buildContextDir, ...dockerfileName.split("/")), "utf-8")
         .then(dockerfileNeedsBuildKit)
-        .catch(() => false)
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/docker-build-context"); return false; })
     : false;
   const ignoreContextPath =
     opts?.dockerignorePruned === false

@@ -32,6 +32,7 @@
  * delegate through the API's import endpoint rather than writing vhosts by hand.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Command } from "commander";
 import chalk from "chalk";
 import { intro, outro, select, isCancel, note, text, password, confirm, log } from "@clack/prompts";
@@ -177,6 +178,7 @@ async function runRepair(mode: RepairMode): Promise<never> {
     const res = await repairEdgeConflict(mode, apiPort(), onLog);
     reportRepair(res);
   } catch (e) {
+    observeCaughtError(e, "cli/commands/edge");
     sp?.fail("Edge repair failed");
     fail(e);
   }
@@ -255,6 +257,7 @@ async function scanSites(): Promise<void> {
       info("\n  Import them with `openship edge migrate` (takes over :80/:443, keeps them serving).");
     }
   } catch (e) {
+    observeCaughtError(e, "cli/commands/edge");
     sp?.fail("Scan failed");
     fail(e);
   }
@@ -335,7 +338,8 @@ async function apiLivePing(): Promise<boolean> {
   try {
     const res = await getRemoteClient().http.raw("/health", { signal: AbortSignal.timeout(1500) });
     return res.ok;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "cli/commands/edge");
     return false;
   }
 }
@@ -571,7 +575,8 @@ async function panelTrafficOverview(): Promise<void> {
         requests += b.requests || 0;
         bwOut += b.bandwidthOut || 0;
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "cli/commands/edge");
       rows.push({ domain: d.hostname, port: d.port != null ? `:${d.port}` : "—", requests: "Unavailable", out: "Unavailable" });
       continue;
     }
@@ -690,6 +695,7 @@ async function panelRules(entry: DomainEntry): Promise<void> {
       if (act === "add") await panelAddRule(entry);
       else if (act === "rm") await panelRemoveRule(entry, relevant);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/edge");
       renderPanelError(e);
     }
   }
@@ -772,6 +778,7 @@ async function panelDomainActions(entry: DomainEntry): Promise<void> {
       else if (act === "rules") await panelRules(entry);
       else if (act === "rm" && (await panelRemoveDomain(entry))) return;
     } catch (e) {
+      observeCaughtError(e, "cli/commands/edge");
       renderPanelError(e);
     }
   }
@@ -806,6 +813,7 @@ async function panelDomains(): Promise<void> {
       try {
         await panelRegisterDomain();
       } catch (e) {
+        observeCaughtError(e, "cli/commands/edge");
         renderPanelError(e);
       }
       continue;
@@ -828,7 +836,7 @@ function edgeHeader(diag: EdgeDiagnosis | null, apiLive: boolean, domainsLabel: 
 async function edgePanel(): Promise<void> {
   intro(`${chalk.bgCyan(chalk.black(" Openship "))}${chalk.dim(" edge")}`);
   for (;;) {
-    const diag = IS_LINUX ? await diagnoseEdge().catch(() => null) : null;
+    const diag = IS_LINUX ? await diagnoseEdge().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "cli/commands/edge"); return null; }) : null;
     const apiLive = await apiLivePing();
 
     // The edge CLI is a trusted local tool: on a desktop / loopback box the API is
@@ -842,6 +850,7 @@ async function edgePanel(): Promise<void> {
       try {
         domainsLabel = String((await loadDomains()).length);
       } catch (e) {
+        observeCaughtError(e, "cli/commands/edge");
         if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
           needsAuth = true;
           domainsLabel = chalk.yellow("auth required");
@@ -901,6 +910,7 @@ async function edgePanel(): Promise<void> {
       else if (action === "sites") await panelSites();
       else if (action === "monitoring") await panelMonitoring();
     } catch (e) {
+      observeCaughtError(e, "cli/commands/edge");
       renderPanelError(e);
     }
   }
@@ -932,6 +942,7 @@ const rulesList = new Command("list")
         ["id", "path", "domain", "enabled", "rules"],
       );
     } catch (e) {
+      observeCaughtError(e, "cli/commands/edge");
       fail(e);
     }
   });
@@ -979,6 +990,7 @@ const rulesAdd = new Command("add")
       sp?.succeed(`Added rule ${rule.id}`);
       if (isJsonMode()) printJson(rule);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/edge");
       sp?.fail("Add failed");
       fail(e);
     }
@@ -995,6 +1007,7 @@ const rulesRm = new Command("rm")
       sp?.succeed(`Deleted rule ${ruleId}`);
       if (isJsonMode()) printJson({ success: true });
     } catch (e) {
+      observeCaughtError(e, "cli/commands/edge");
       sp?.fail("Delete failed");
       fail(e);
     }
@@ -1043,6 +1056,7 @@ const domainsList = new Command("list")
         ["id", "hostname", "type", "primary", "verified", "ssl"],
       );
     } catch (e) {
+      observeCaughtError(e, "cli/commands/edge");
       fail(e);
     }
   });
@@ -1129,6 +1143,7 @@ async function runDomainAdd(hostname: string, opts: DomainAddOpts): Promise<void
       if (res.records) printRecords(res.records);
     }
   } catch (e) {
+    observeCaughtError(e, "cli/commands/edge");
     sp?.fail("Register failed");
     fail(e);
   }
@@ -1150,6 +1165,7 @@ async function runDomainRm(hostname: string, opts: { project: string }): Promise
     sp?.succeed(`Removed ${host}`);
     if (isJsonMode()) printJson({ success: true, id: match.id, hostname: host });
   } catch (e) {
+    observeCaughtError(e, "cli/commands/edge");
     sp?.fail("Remove failed");
     fail(e);
   }
@@ -1213,6 +1229,7 @@ const logsCommand = new Command("logs")
       else printLogRows(rows);
 
     } catch (e) {
+      observeCaughtError(e, "cli/commands/edge");
       fail(e);
     }
   });
@@ -1256,6 +1273,7 @@ async function runTraffic(opts: TrafficOpts): Promise<void> {
       );
     }
   } catch (e) {
+    observeCaughtError(e, "cli/commands/edge");
     fail(e);
   }
 }
@@ -1313,6 +1331,7 @@ async function runGeo(opts: GeoOpts): Promise<void> {
     const statuses = Object.entries(g.statuses ?? {});
     if (statuses.length) info(`\n  Statuses:  ${statuses.map(([k, v]) => `${k}=${fmtInt(v)}`).join("   ")}`);
   } catch (e) {
+    observeCaughtError(e, "cli/commands/edge");
     fail(e);
   }
 }
@@ -1356,7 +1375,8 @@ async function detectExistingInstall(): Promise<{
       signal: AbortSignal.timeout(2000),
     });
     apiLive = res.ok;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "cli/commands/edge");
     // not live — leave apiLive false
   }
   return { present: svc.installed || method !== null || apiLive, method, running: svc.running, apiLive };
@@ -1373,7 +1393,8 @@ async function ensureEdgeBestEffort(): Promise<void> {
     } else if (!diag.healthy) {
       info(chalk.dim("        Edge isn't serving — `openship edge up` repairs it."));
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "cli/commands/edge");
     // best-effort only
   }
 }
@@ -1470,6 +1491,7 @@ async function provisionMonitoring(opts: InstallOpts): Promise<never> {
   try {
     await runMonitoringInstall(opts);
   } catch (e) {
+    observeCaughtError(e, "cli/commands/edge");
     fail(e);
   }
   process.exit(0);

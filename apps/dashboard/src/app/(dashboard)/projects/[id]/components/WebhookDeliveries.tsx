@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useState } from "react";
@@ -34,7 +35,8 @@ export function WebhookDeliveries({
         const page = await fetchPage(nextCursor);
         setRows((prev) => (nextCursor ? [...prev, ...page.deliveries] : page.deliveries));
         setCursor(page.nextCursor);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/WebhookDeliveries");
         if (!nextCursor) setRows([]);
       } finally {
         setter(false);

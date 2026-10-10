@@ -10,6 +10,7 @@
  *   GET  /api/cloud/status          - check connection state
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { AppError, safeErrorMessage } from "@repo/core";
 import type { Context } from "hono";
 import { repos } from "@repo/db";
@@ -30,7 +31,7 @@ export async function disconnect(c: Context) {
   // so every member-level GitHub grant is now moot — prune them.
   await repos.resourceGrant
     .deleteAllGitHubGrants(ctx.organizationId)
-    .catch(() => 0);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/cloud/cloud-local.controller"); return 0; });
   audit.recordAsync(auditContextFrom(c, ctx.organizationId, ctx.userId), {
     eventType: "cloud.disconnect",
     resourceType: "cloud",
@@ -61,7 +62,7 @@ export async function connectFinalize(c: Context) {
   const ctx = getRequestContext(c);
   const body = await c.req
     .json<{ code?: string; codeVerifier?: string }>()
-    .catch(() => ({} as { code?: string; codeVerifier?: string }));
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/cloud/cloud-local.controller"); return ({} as { code?: string; codeVerifier?: string }); });
   if (!body.code) {
     return c.json({ error: "code is required" }, 400);
   }
@@ -80,8 +81,8 @@ export async function connectFinalize(c: Context) {
     return c.json({ ok: true });
   } catch (err) {
     if (err instanceof AppError) throw err;
-    console.error(
-      `[cloud-connect-finalize] unexpected error: ${safeErrorMessage(err)}`,
+    errorDiagnostics.error("api/modules/cloud/cloud-local.controller",
+      `[cloud-connect-finalize] unexpected error: ${safeErrorMessage(err)}`, err,
     );
     return c.json({ error: safeErrorMessage(err) }, 500);
   }

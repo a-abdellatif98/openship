@@ -1,3 +1,4 @@
+import { observedAllSettled } from "@repo/core/diagnostics";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Pool, PoolClient } from "pg";
 import type { Driver } from "./connection";
@@ -113,7 +114,7 @@ export function createAdvisoryLocks(options: {
         frame.active = false;
         // Promise.all can reject while another nested callback is still running.
         // Keep its ancestor locks and connection until every started child exits.
-        await Promise.allSettled(frame.children);
+        await observedAllSettled(frame.children, "db/advisory-lock-factory");
         if (!inherited) {
           try {
             const result = await session.client.query<{ pg_advisory_unlock: boolean }>(
@@ -134,7 +135,9 @@ export function createAdvisoryLocks(options: {
     // owners of each other's key, so serialize those callbacks explicitly.
     const result = inherited ? run() : (session.tails.get(key) ?? Promise.resolve()).then(run);
     if (!inherited) {
-      const tail = result.then(() => {}, () => {});
+      const tail = result.then(() => {}, () => {
+      /* diagnostics-ignore: The original result is returned to the caller; this branch only releases queue bookkeeping. */
+});
       session.tails.set(key, tail);
       void tail.then(() => {
         if (session.tails.get(key) === tail) session.tails.delete(key);
@@ -144,7 +147,7 @@ export function createAdvisoryLocks(options: {
       parent.children.add(result);
       void result.then(
         () => parent.children.delete(result),
-        () => parent.children.delete(result),
+        () => { /* diagnostics-ignore: The original result is returned to the caller; this branch only releases queue bookkeeping. */ return parent.children.delete(result); },
       );
     }
     return result;

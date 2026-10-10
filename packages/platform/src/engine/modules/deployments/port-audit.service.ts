@@ -8,6 +8,7 @@
  * does is record `checked:false` so the dashboard stays silent.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { waitForPortListening, type BuildLogger, type RuntimeAdapter } from "@repo/adapters";
 import type { PortCheckResult } from "../../lib/deployment-runtime";
 
@@ -56,6 +57,7 @@ export async function auditPorts(
     }
     return results;
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/deployments/port-audit.service");
     // Acquiring the executor (or anything unexpected) failed — advisory only,
     // so degrade to "not checked" instead of surfacing an error.
     logger.log(`Port check skipped (${errMsg(err)}).\n`, "warn");

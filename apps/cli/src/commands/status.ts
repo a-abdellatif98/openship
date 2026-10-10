@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { exitCommand, rethrowCommandExit } from "../lib/command-exit";
 /**
  * `openship status` — what's running on THIS machine + the active context's API.
@@ -62,6 +63,7 @@ export const statusCommand = new Command("status")
         const h = await getRemoteClient().http.request<Health>("/health", { signal: AbortSignal.timeout(8000) });
         console.log(chalk.dim(`\n  API: ${apiUrl} — `) + chalk.green(h.status ?? "ok") + "\n");
       } catch (e) {
+        observeCaughtError(e, "cli/commands/status");
       rethrowCommandExit(e);
         const msg = e instanceof ApiError ? e.message : (e as Error).message;
         console.log(chalk.dim(`\n  API: ${apiUrl} — `) + chalk.red("not reachable") + chalk.dim(`  ${msg}\n`));
@@ -80,6 +82,7 @@ export const statusCommand = new Command("status")
       health = await getRemoteClient().http.request<Health>("/health", { signal: AbortSignal.timeout(8000) });
       envInfo = await getRemoteClient().http.request<HealthEnv>("/health/env", { signal: AbortSignal.timeout(8000) });
     } catch (e) {
+      observeCaughtError(e, "cli/commands/status");
       rethrowCommandExit(e);
       reachable = false;
       unreachableMsg = e instanceof ApiError ? e.message : (e as Error).message;

@@ -47,6 +47,7 @@
  *   <cacheDir>/<tag>.<pid>.sha256 ← scratch sidecar, removed after extract
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
@@ -211,6 +212,7 @@ export async function fetchAndExtractRelease(
     try {
       renameSync(scratchDir, targetDir);
     } catch (err) {
+      observeCaughtError(err, "platform/engine/lib/release-download");
       // Another worker may have won the race; if the target now
       // exists, accept it and clean up our scratch.
       if (existsSync(targetDir)) {
@@ -259,7 +261,8 @@ export function assertPublicHttps(url: string, envOverride: string): void {
   let host: string;
   try {
     host = new URL(url).hostname;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/release-download");
     throw new ReleaseDownloadError({ reason: `Malformed URL: ${url}`, envOverride });
   }
   // Delegate to the centralized guard (complete v4/v6/v4-mapped/CGNAT/metadata
@@ -269,6 +272,7 @@ export function assertPublicHttps(url: string, envOverride: string): void {
   try {
     assertPublicHostLiteral(host);
   } catch (e) {
+    observeCaughtError(e, "platform/engine/lib/release-download");
     throw new ReleaseDownloadError({
       reason: e instanceof SsrfError ? e.message : `Refusing dist URL targeting a private/loopback host: ${host}`,
       url,
@@ -380,6 +384,7 @@ async function assertTarEntriesSafe(
         throw new ReleaseDownloadError({ reason: `Refusing tarball entry type ${entry.type}`, envOverride });
       if (entry.linkpath) assertSafeLinkTarget(entry.path, entry.linkpath, rootResolved, envOverride);
     } catch (error) {
+      observeCaughtError(error, "platform/engine/lib/release-download");
       invalid = error instanceof Error ? error : new Error(String(error));
     }
   } });
@@ -469,6 +474,7 @@ async function readArchive(
       signal: AbortSignal.timeout(TAR_TIMEOUT_MS),
     });
   } catch (error) {
+    observeCaughtError(error, "platform/engine/lib/release-download");
     throw new ReleaseDownloadError({
       reason: `Could not read release archive: ${error instanceof Error ? error.message : String(error)}`,
       envOverride,

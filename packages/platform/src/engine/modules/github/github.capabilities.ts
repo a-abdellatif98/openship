@@ -22,6 +22,7 @@
  * value. Nothing secret crosses this boundary.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { env, localGitHubAppConfiguration } from "@repo/platform/engine/config/env";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
 import { CHAINS, type GitHubTokenSource } from "@repo/platform/engine/modules/github/github.token";
@@ -65,13 +66,13 @@ export async function resolveGitHubCapabilities(
   // The instance-wide git identity (device sign-in / pasted token) occupies ONE
   // storage slot, so "configured" is the same fact for both rows — they differ only
   // in how you'd establish it.
-  const settings = platform === "selfhosted" ? await repos.instanceSettings.get().catch(() => null) : null;
+  const settings = platform === "selfhosted" ? await repos.instanceSettings.get().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.capabilities"); return null; }) : null;
   const personalSettings = platform === "saas" ? await repos.settings.findByUser(ctx.userId) : null;
   const identityConfigured = Boolean(settings?.ghDeviceTokenEncrypted);
   const identityMethod = settings?.ghDeviceTokenMethod ?? null;
   const customAppConfigured =
     platform === "selfhosted" &&
-    (await repos.gitSource.listActiveByOrganization(ctx.organizationId).catch(() => [])).length > 0;
+    (await repos.gitSource.listActiveByOrganization(ctx.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/github.capabilities"); return []; })).length > 0;
 
   // `gh-cli` in the chain is what carries the instance identity, so its presence
   // there is the real test of whether these two rows can work at all — not a

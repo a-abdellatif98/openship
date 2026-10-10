@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,7 +37,8 @@ export function ServerContainerUpdates({ serverId }: { serverId: string }) {
   const load = useCallback(async () => {
     try {
       setRows(await systemApi.listServerContainers(serverId));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/servers/[serverId]/_components/container-updates");
       setRows([]);
     } finally {
       setLoading(false);
@@ -87,7 +89,9 @@ export function ServerContainerUpdates({ serverId }: { serverId: string }) {
     void systemApi
       .getServerById(serverId)
       .then((s) => setProjectCount(s.projectCount ?? 0))
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/servers/[serverId]/_components/container-updates");
+      });
   }, [serverId]);
 
   const scan = useCallback(async () => {
@@ -95,7 +99,8 @@ export function ServerContainerUpdates({ serverId }: { serverId: string }) {
     try {
       await systemApi.scanServerContainers(serverId);
       await load();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/servers/[serverId]/_components/container-updates");
       // Best-effort: a transient probe failure leaves the cached rows in place
       // (the server never wipes a row it couldn't re-confirm), so keep showing them.
     } finally {

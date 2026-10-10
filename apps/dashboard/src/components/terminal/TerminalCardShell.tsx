@@ -13,6 +13,7 @@ import { Icon as UiIcon } from "@repo/ui/icons";
  */
 
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 interface TerminalCardShellProps {
     /** Titlebar label, e.g. the project or service name. */
@@ -25,6 +26,8 @@ interface TerminalCardShellProps {
     status?: ReactNode;
     /** Centered, non-interactive body overlay for empty/idle/connecting states. */
     overlay?: ReactNode;
+    /** Connection feedback above existing output, without covering the terminal. */
+    notice?: ReactNode;
     /** Appended to the outer wrapper. */
     className?: string;
     /** The xterm mount (and anything else that fills the body). */
@@ -37,11 +40,12 @@ export function TerminalCardShell({
     toolbar,
     status,
     overlay,
+    notice,
     className,
     children,
 }: TerminalCardShellProps) {
     return (
-        <div className={`flex min-w-0 flex-col h-full min-h-[460px] ${className ?? ""}`}>
+        <div className={cn("flex min-w-0 flex-col h-full min-h-[460px]", className)}>
             <div className="flex-1 flex flex-col min-h-0">
                 <div className="@container bg-card rounded-2xl overflow-hidden flex-1 flex flex-col min-h-0">
                     {/* Titlebar */}
@@ -63,6 +67,8 @@ export function TerminalCardShell({
                             <div className="ms-auto flex shrink-0 items-center gap-2 sm:gap-3">{status}</div>
                         ) : null}
                     </div>
+
+                    {notice ? <div className="px-4 sm:px-5">{notice}</div> : null}
 
                     {/* Body */}
                     <div className="relative flex-1 p-4 min-h-0">

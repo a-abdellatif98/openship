@@ -1,5 +1,6 @@
 "use client";
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import React, { useCallback } from "react";
 import { isValidCustomHostname } from "@repo/core";
 import { getApiErrorMessage, projectsApi } from "@/lib/api";
@@ -82,7 +83,7 @@ const DomainSettings: React.FC<DomainSettingsProps> = ({
         ...(typeof primaryPort === "number" ? { port: primaryPort } : {}),
       });
     } catch (error) {
-      console.error("Failed to persist deploy domains:", error);
+      errorDiagnostics.error("dashboard/app/(dashboard)/(deployment)/deploy/[slug]/components/DomainSettings", "Failed to persist deploy domains:", error);
       showToast(getApiErrorMessage(error, t.deploy.domainSettings.saveFailed), "error", t.deploy.domainSettings.toastTitle);
     }
   }, [hasServer, projectId, setEndpoints, showToast]);

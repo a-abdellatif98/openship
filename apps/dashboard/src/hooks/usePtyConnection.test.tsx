@@ -115,6 +115,33 @@ describe("terminal connection ownership (#668)", () => {
     expect(Socket.instances).toHaveLength(2);
   });
 
+  it("cancels a pending ticket without letting its late response open a shell", async () => {
+    const pending = deferred<{ token: string }>();
+    ticket.mockReturnValueOnce(pending.promise);
+    await render({ kind: "service", id: "current" });
+    await act(async () => connection.disconnect());
+    await act(async () => pending.resolve({ token: "cancelled-ticket" }));
+    expect(Socket.instances).toHaveLength(0);
+    expect(connection.isConnecting).toBe(false);
+    await act(async () => connection.reconnect());
+    expect(Socket.instances).toHaveLength(1);
+    expect(Socket.instances[0].protocols).not.toContain("openship.terminal.v1+cancelled-ticket");
+    await act(async () => Socket.instances[0].ready());
+    expect(connection.isConnected).toBe(true);
+  });
+
+  it("cancels reconnect backoff without starting another attempt", async () => {
+    await render({ kind: "service", id: "current" });
+    await act(async () => Socket.instances[0].ready());
+    await act(async () => Socket.instances[0].onclose?.({ code: 1006 }));
+    expect(connection.reconnectAttempts).toBe(1);
+    await act(async () => connection.disconnect());
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(ticket).toHaveBeenCalledOnce();
+    expect(connection.isConnecting).toBe(false);
+    expect(connection.isConnected).toBe(false);
+  });
+
   it("ignores a ticket that finishes after switching targets", async () => {
     const stale = deferred<{ token: string }>();
     ticket.mockReturnValueOnce(stale.promise);

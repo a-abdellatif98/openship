@@ -1,4 +1,6 @@
 "use client";
+import { reportCaughtError } from "@repo/core/diagnostics";
+
 
 import { useState, useRef, type FormEvent } from "react";
 import { SUPPORT_EMAIL } from "@repo/core";
@@ -96,6 +98,7 @@ export function ContactForm({ source = "contact" }: { source?: "support" | "cont
       setMessage("");
       attempt.current = null;
     } catch (err) {
+      reportCaughtError(err, "web/components/contact-form");
       setStatus("error");
       setErrorText(err instanceof Error && err.name !== "TimeoutError" && err.name !== "TypeError"
         ? err.message

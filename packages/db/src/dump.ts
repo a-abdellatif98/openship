@@ -24,6 +24,7 @@
  * NOT a backup tool. Use the existing backup module for that.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { sql, eq, inArray, count, getTableColumns } from "drizzle-orm";
 import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
 import { db, getDriver, type DatabaseTransaction } from "./client";
@@ -770,6 +771,8 @@ const TABLES: ReadonlyArray<TableSpec> = [
  * whole-instance export that claims to carry "every migration-managed table".
  */
 export const EXCLUDED_TABLES: Record<string, string> = {
+  instance_controller: "installation-local control-plane authority and device connection; never copied or wiped",
+  instance_handoff: "durable installation-local handoff journal; never copied or wiped",
   cloud_server_deletion: "Provider deletion receipts belong to the installation that confirmed cleanup",
   cloud_support_ticket: "Private Cloud support requests; never export one customer's correspondence to another installation",
   cloud_support_message: "Private Cloud support correspondence and mail delivery state",
@@ -1617,7 +1620,7 @@ export async function restoreSubgraphInTransaction(
     if (droppedCols.size > 0) {
       // Version skew, not a fault — the receiver's schema predates these
       // columns. Log once per table so it's diagnosable without failing.
-      console.warn(
+      errorDiagnostics.warn("db/dump",
         `[restore] ${spec.sqlName}: dropped ${droppedCols.size} unknown column(s) not in this build's schema: ${[...droppedCols].join(", ")}`,
       );
     }

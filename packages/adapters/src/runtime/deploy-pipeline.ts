@@ -25,6 +25,7 @@
  * Self-hosted: activate creates container, resolveTargetUrl + routing wire Nginx.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { DeployConfig, LogCallback, RouteConfig, SslResult } from "../types";
 import type { PromptPayload } from "@repo/core";
 import type { BuildLogger } from "./build-pipeline";
@@ -318,6 +319,7 @@ export async function runDeployPipeline(
         `timed out after ${teardownTimeoutMs}ms (the container runtime never answered)`,
       );
     } catch (err) {
+      observeCaughtError(err, "adapters/runtime/deploy-pipeline");
       logger.log(`Warning: ${what}: ${safeErrorMessage(err)}\n`, "warn");
     }
   };
@@ -480,6 +482,7 @@ export async function runDeployPipeline(
       ...(routeWarnings.length ? { routeWarnings } : {}),
     };
   } catch (err) {
+    observeCaughtError(err, "adapters/runtime/deploy-pipeline");
     const msg = safeErrorMessage(err);
     const errorCode = err instanceof DeployError ? err.code : undefined;
     const errorDetails = err instanceof DeployError ? err.details : undefined;
@@ -527,6 +530,7 @@ export async function runDeployPipeline(
           `timed out after ${teardownTimeoutMs}ms restarting the previous deployment`,
         );
       } catch (revertErr) {
+        observeCaughtError(revertErr, "adapters/runtime/deploy-pipeline");
         logger.log(
           `Warning: failed to restart previous deployment: ${safeErrorMessage(revertErr)}\n`,
           "warn",

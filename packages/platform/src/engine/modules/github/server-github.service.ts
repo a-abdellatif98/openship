@@ -22,6 +22,7 @@
  * clone-token pipe; they are decrypted only at deploy time and never logged.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import ssh2 from "ssh2";
 
 import { repos } from "@repo/db";
@@ -225,7 +226,8 @@ export async function resolveServerGitCredential(opts: {
     if (!row.tokenEncrypted) return null;
     try {
       return { token: decrypt(row.tokenEncrypted) };
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/github/server-github.service");
       return null;
     }
   }
@@ -240,7 +242,8 @@ export async function resolveServerGitCredential(opts: {
           knownHosts: GITHUB_KNOWN_HOSTS,
         },
       };
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/github/server-github.service");
       return null;
     }
   }
@@ -267,7 +270,7 @@ export async function resolveServerGitCredential(opts: {
  */
 export async function canResolveServerGitCredential(serverId: string): Promise<boolean> {
   if (env.CLOUD_MODE) return false;
-  const row = await repos.serverGithubAuth.getByServer(serverId).catch(() => null);
+  const row = await repos.serverGithubAuth.getByServer(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/server-github.service"); return null; });
   return !!row && hasStoredCredential(row);
 }
 
@@ -305,7 +308,9 @@ export async function disconnectServerGithub(ctx: RequestContext, serverId: stri
     if (k.githubKeyId != null) {
       // Best-effort — a revoked/expired token or deleted repo shouldn't block
       // clearing our own state.
-      await revokeDeployKey(ctx, k.owner, k.repo, k.githubKeyId).catch(() => {});
+      await revokeDeployKey(ctx, k.owner, k.repo, k.githubKeyId).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/github/server-github.service");
+      });
     }
   }
   await repos.githubDeployKey.deleteByServer(serverId);

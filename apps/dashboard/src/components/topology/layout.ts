@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 export type TopologyPositions = Record<string, { x: number; y: number }>;
 
 /** Layout is a local preference. Never store service config, env, or fake resources. */
@@ -30,7 +31,8 @@ export function readTopologyPositions(key: string): TopologyPositions {
 export function saveTopologyPositions(key: string, positions: TopologyPositions): void {
   try {
     localStorage.setItem(key, JSON.stringify(positions));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/components/topology/layout");
     /* Canvas remains usable without local storage. */
   }
 }

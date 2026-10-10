@@ -9,6 +9,7 @@
  * cancel endpoint can wake every phase, not just docker build.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 
 const CANCELLATION_POLL_MS = 1_000;
@@ -66,7 +67,8 @@ export function registerDeploymentExecution(deploymentId: string): AbortSignal {
           execution.keepProvisioned = cancellation?.keepProvisioned === true;
           controller.abort();
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/deployment-cancellation");
         // A transient status read must not fail the deploy. The next poll retries;
         // normal lifecycle guards still prevent overwriting a cancelled row.
       } finally {
@@ -108,7 +110,7 @@ export function bindDeploymentBuildCancellation(
     pending ??= Promise.resolve().then(cancelBuild).catch(error => {
       // A failed interruption is not evidence that the worker stopped. Its
       // normal execution/finally must still finish before releasing the lease.
-      console.error("[DEPLOY] Build interruption failed; waiting for the worker to stop:", error);
+      errorDiagnostics.error("platform/engine/modules/deployments/deployment-cancellation", "[DEPLOY] Build interruption failed; waiting for the worker to stop:", error);
     });
   };
   signal?.addEventListener("abort", cancel, { once: true });
@@ -151,7 +153,7 @@ export async function completeDeploymentExecution(
       releaseDeploymentExecution(deploymentId, signal);
       return;
     } catch (err) {
-      console.error(
+      errorDiagnostics.error("platform/engine/modules/deployments/deployment-cancellation",
         `[DEPLOY] Failed to acknowledge worker completion for ${deploymentId}; retrying in ${retryMs / 1_000}s:`,
         err,
       );
@@ -203,7 +205,8 @@ export async function waitForDeploymentQuiescence(
   for (;;) {
     try {
       if (!(await repos.deployment.hasLiveBuildExecution(deploymentId, projectId))) return true;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/deployment-cancellation");
       // An unreadable lease is never proof of quiescence. Keep polling inside
       // the same bounded window, then return the safe pending outcome.
     }

@@ -9,6 +9,7 @@ import {
 } from "@repo/core";
 import { api } from "./client";
 import { endpoints } from "./endpoints";
+import type { PermissionOperations } from "@repo/contracts";
 
 /**
  * Resource-grant types + client. Canonical home for the grant shapes shared by
@@ -84,7 +85,7 @@ export const permissionsApi = {
     body: { email: string; role: string; grants: PickerGrant[] },
     options?: { linkOnly?: boolean },
   ) =>
-    api.post(
+    api.post<{ data: Awaited<ReturnType<PermissionOperations["inviteWithGrants"]>> }>(
       endpoints.permissions.inviteWithGrants,
       body,
       options?.linkOnly

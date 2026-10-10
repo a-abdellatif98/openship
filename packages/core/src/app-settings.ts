@@ -10,6 +10,7 @@
  */
 
 /** How an installed app surfaces its management UI. */
+import { reportCaughtError as observeCaughtError } from "./diagnostics/reporter";
 export type AppManagement =
   | { kind: "schema" }
   | { kind: "custom"; href: string };
@@ -162,7 +163,8 @@ export function validateSetting(field: AppSettingField, raw: string): string | n
     let re: RegExp | null = null;
     try {
       re = new RegExp(field.pattern);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "core/app-settings");
       re = null; // a malformed author pattern never blocks the user
     }
     if (re && !re.test(raw)) return field.patternError ?? `${field.label} has an invalid format`;

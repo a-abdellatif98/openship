@@ -1,3 +1,4 @@
+import { reportCaughtError } from "@repo/core/diagnostics";
 import { resourcesSource, type ResourceFrontmatter } from "@/lib/source";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -21,7 +22,8 @@ function formatDate(raw: string): string {
       day: "numeric",
       year: "numeric",
     });
-  } catch {
+  } catch (error) {
+    reportCaughtError(error, "web/app/(site)/resources/[...slug]/page");
     return raw;
   }
 }
@@ -33,7 +35,8 @@ function formatDateShort(raw: string): string {
       day: "numeric",
       year: "numeric",
     });
-  } catch {
+  } catch (error) {
+    reportCaughtError(error, "web/app/(site)/resources/[...slug]/page");
     return raw;
   }
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -105,9 +106,9 @@ export function JobForm({
     setOtherJobs([]);
     void (async () => {
       const [chn, trg, jobs] = await Promise.all([
-        notificationsApi.listChannels().then((r) => r.channels).catch(() => [] as NotificationChannel[]),
-        jobsApi.triggerEvents().then((r) => r.data).catch(() => [] as JobTriggerEvent[]),
-        jobsApi.list().then((r) => r.data ?? []).catch(() => [] as JobView[]),
+        notificationsApi.listChannels().then((r) => r.channels).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/jobs/JobForm"); return [] as NotificationChannel[]; }),
+        jobsApi.triggerEvents().then((r) => r.data).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/jobs/JobForm"); return [] as JobTriggerEvent[]; }),
+        jobsApi.list().then((r) => r.data ?? []).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/jobs/JobForm"); return [] as JobView[]; }),
       ]);
       if (!active) return;
       setChannels(chn);
@@ -168,7 +169,8 @@ export function JobForm({
   const pasteEnv = async () => {
     try {
       importEnv(await navigator.clipboard.readText());
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/jobs/JobForm");
       showToast(c.envPasteEmpty, "error", j.toast.title);
     }
   };

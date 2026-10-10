@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { needsCloudPlan } from "@/lib/billing-presentation";
@@ -70,7 +71,8 @@ function CreditPacks({ state }: { state: BillingState }) {
       .then((res) => {
         if (!cancelled) setPacks([...res.data].sort((a, b) => a.sortOrder - b.sortOrder));
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/billing/BillingTopups");
         if (!cancelled) setError(t.billing.topups.loadError);
       })
       .finally(() => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 /**
@@ -85,6 +86,7 @@ export function HealthTab({ serverId }: { serverId: string }) {
       setComponentsErr(null);
       setComponentsLastUpdated(Date.now());
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/emails/_components/admin/health-tab");
       setComponentsErr(err instanceof Error ? err.message : t.emailsAdmin.health.healthCheckFailed);
     }
   }, [serverId]);
@@ -95,6 +97,7 @@ export function HealthTab({ serverId }: { serverId: string }) {
       setDns(r);
       setDnsErr(null);
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/emails/_components/admin/health-tab");
       setDnsErr(err instanceof Error ? err.message : t.emailsAdmin.health.scanFailed);
     }
   }, [serverId]);
@@ -472,6 +475,7 @@ function DaemonRow({
         );
       }
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/emails/_components/admin/health-tab");
       const failMsg =
         action === "start" ? h.toast.startFailed : action === "stop" ? h.toast.stopFailed : h.toast.restartFailed;
       const failTitleTpl =

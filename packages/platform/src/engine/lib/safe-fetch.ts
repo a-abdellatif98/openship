@@ -11,6 +11,7 @@
  * target whose host is influenced by user/remote input.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import http from "node:http";
 import https from "node:https";
 import { SsrfError, resolvePinnedHost } from "./ssrf-guard";
@@ -88,7 +89,8 @@ async function fetchHop(
   let url: URL;
   try {
     url = new URL(rawUrl);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/safe-fetch");
     throw new SsrfError(`Malformed URL: ${rawUrl}`);
   }
   const isHttps = url.protocol === "https:";
@@ -151,12 +153,12 @@ async function fetchHop(
             bytes: async () => body,
           });
         });
-        r.on("error", (e) => {
+        r.on("error", (e) => { observeCaughtError(e, "platform/engine/lib/safe-fetch");
           reject(e);
         });
       },
     );
-    req.on("error", (e) => {
+    req.on("error", (e) => { observeCaughtError(e, "platform/engine/lib/safe-fetch");
       reject(e);
     });
     if (opts.body !== undefined) req.write(opts.body);

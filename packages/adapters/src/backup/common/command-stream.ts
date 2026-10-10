@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { PassThrough } from "node:stream";
 import { finished } from "node:stream/promises";
 import type { CommandExecutor } from "../../types";
@@ -12,7 +13,7 @@ type RawCommand = Awaited<ReturnType<NonNullable<CommandExecutor["rawExec"]>>>;
 /** Shared capture lifecycle for SSH and the workspace command transport. */
 export function captureCommandOutput(child: RawCommand, opts?: ExecuteCommandOpts) {
   const stdout = new PassThrough({ highWaterMark: 1024 * 1024 });
-  stdout.on("error", () => {});
+  stdout.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/backup/common/command-stream"); });
   const consumer = watchArtifactConsumer(stdout, "Backup command");
   let stderr = "";
   let idle: ReturnType<typeof setTimeout> | undefined;
@@ -80,7 +81,8 @@ export function captureCommandOutput(child: RawCommand, opts?: ExecuteCommandOpt
     } catch (error) {
       try {
         child.kill();
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/backup/common/command-stream");
         /* channel already closed */
       }
       child.stdout.unpipe(stdout);
@@ -98,6 +100,8 @@ export function captureCommandOutput(child: RawCommand, opts?: ExecuteCommandOpt
       stdout.off("drain", touch);
     }
   })();
-  void awaitExit.catch(() => {});
+  void awaitExit.catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "adapters/backup/common/command-stream");
+  });
   return { stdout, awaitExit };
 }

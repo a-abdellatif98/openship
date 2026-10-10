@@ -25,6 +25,7 @@
  * Tests live in test/lib/ssh-key-path.test.ts.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve, sep } from "node:path";
@@ -169,12 +170,14 @@ export function sshKeyPathProblem(raw: string): string | null {
   try {
     resolved = resolveSafeSshKeyPath(raw, { extraRoots: operatorSshKeyRoots() });
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/ssh-key-path");
     return err instanceof Error ? err.message : `sshKeyPath is not usable: ${raw}`;
   }
 
   try {
     accessSync(resolved, constants.R_OK);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-key-path");
     return `sshKeyPath is not readable by Openship — no such file, or no permission: ${resolved}`;
   }
 

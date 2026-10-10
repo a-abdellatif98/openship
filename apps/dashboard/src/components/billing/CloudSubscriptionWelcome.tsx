@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { useBillingScope } from "@/components/billing/BillingWorkspaceContext";
@@ -76,7 +77,8 @@ function CheckoutWelcome({
     try {
       const acknowledged = readAcknowledged(storageKey).filter((id) => id !== purchaseKey);
       localStorage.setItem(storageKey, JSON.stringify([...acknowledged, purchaseKey].slice(-20)));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/billing/CloudSubscriptionWelcome");
       // Storage is optional; dismissing must work in restricted browsers too.
     }
   }

@@ -14,6 +14,7 @@
  * error. Self-hosted only (there is no OpenResty to read on cloud).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos, type Project } from "@repo/db";
 import {
   PROXY_DIRECTIVES,
@@ -127,7 +128,7 @@ export async function readProjectEdgeConfig(project: Project): Promise<EdgeConfi
 
   if (project.workspaceId) return { reachable: false, saved, hosts: [] };
 
-  const domains = await repos.domain.listByProject(project.id).catch(() => []);
+  const domains = await repos.domain.listByProject(project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/edge-config.service"); return []; });
   const hostnames = [...new Set(domains.map((d) => d.hostname.toLowerCase()))].sort();
   if (hostnames.length === 0) return { reachable: false, saved, hosts: [] };
 
@@ -141,15 +142,15 @@ export async function readProjectEdgeConfig(project: Project): Promise<EdgeConfi
     const version = proxy.ours
       ? await detectOpenRestyPaths(exec)
           .then((p) => p.nginxVersion ?? null)
-          .catch(() => null)
+          .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/edge-config.service"); return null; })
       : null;
     const hosts: EdgeConfigHostState[] = [];
     for (const hostname of hostnames) {
-      const site = await proxy.siteFor(hostname).catch(() => null);
+      const site = await proxy.siteFor(hostname).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/edge-config.service"); return null; });
       hosts.push(buildHostState(hostname, site, saved, version));
     }
     return { kind: proxy.kind, ours: proxy.ours, version, hosts };
-  }).catch(() => null);
+  }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/edge-config.service"); return null; });
 
   if (!read) return { reachable: false, saved, hosts: [] };
   return {

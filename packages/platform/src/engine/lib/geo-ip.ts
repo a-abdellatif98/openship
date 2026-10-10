@@ -12,6 +12,7 @@
  * Everything is best-effort: a missing DB, no network, or a private/loopback IP
  * just yields `null`, and the UI falls back to a neutral glyph.
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { open, type Reader, type CountryResponse } from "maxmind";
 import { isIP } from "node:net";
 import { existsSync } from "node:fs";
@@ -56,7 +57,8 @@ async function resolveDbPath(): Promise<string | null> {
   for (const p of candidatePaths()) {
     try {
       if (existsSync(p)) return p;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/geo-ip");
       /* ignore and try next */
     }
   }
@@ -70,7 +72,8 @@ async function resolveDbPath(): Promise<string | null> {
     await mkdir(dirname(CACHE_PATH), { recursive: true });
     await writeFile(CACHE_PATH, buf);
     return CACHE_PATH;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/geo-ip");
     return null;
   }
 }
@@ -83,7 +86,8 @@ function getReader(): Promise<Reader<CountryResponse> | null> {
     try {
       resolvedReader = await open<CountryResponse>(path);
       return resolvedReader;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/geo-ip");
       return null;
     }
   })();
@@ -99,7 +103,7 @@ export async function primeGeo(timeoutMs = 1500): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      getReader().catch(() => null),
+      getReader().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/geo-ip"); return null; }),
       new Promise<void>((r) => { timer = setTimeout(r, timeoutMs); timer.unref(); }),
     ]);
   } finally {
@@ -114,7 +118,8 @@ export function countryForIp(host: string | null | undefined): string | null {
   if (!host || !resolvedReader || isIP(host) === 0) return null;
   try {
     return resolvedReader.get(host)?.country?.iso_code ?? null;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/geo-ip");
     return null;
   }
 }

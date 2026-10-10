@@ -203,8 +203,8 @@
 			},
 			"environmentApply": {
 				"title": "应用环境更改",
-        "applying": "正在应用更改…",
-        "applied": "环境变量更改已应用",
+				"applying": "正在应用更改…",
+				"applied": "环境变量更改已应用",
 				"hint": "无需重新构建即可将已保存的变量应用到此服务。服务将重新启动。",
 				"saveFirst": "请先保存更改，再将其应用到此服务。",
 				"restartBlocked": "{name} 有已保存的环境更改，普通重启无法应用这些更改。请在“环境”选项卡中查看并应用。",
@@ -370,6 +370,46 @@
 			},
 			"orBuildFromSource": "或从源码构建",
 			"imageHint": "留空则从下方的 Dockerfile 构建。"
+		},
+		"connection": {
+			"terminal": "终端",
+			"statusTitle": "无法获取服务状态",
+			"statusHint": "Openship 无法确认当前状态。您的服务可能仍在运行。",
+			"checkingTitle": "正在检查服务",
+			"checkingHint": "正在等待服务器响应。您也可以立即尝试打开终端。",
+			"startingTitle": "正在等待服务",
+			"startingHint": "服务运行后即可使用终端。",
+			"stoppedTitle": "没有运行中的服务",
+			"openTerminal": "打开终端",
+			"serviceSettings": "服务设置",
+			"connectingTitle": "正在打开终端",
+			"connectingHint": "正在与 {name} 建立安全连接。",
+			"reconnectingTitle": "正在重新连接",
+			"reconnectingHint": "正在尝试恢复会话。之前的输出会保留在这里。",
+			"attempt": "第 {attempt} 次尝试",
+			"connected": "已连接",
+			"cancel": "取消",
+			"reconnect": "重新连接",
+			"closedTitle": "会话已结束",
+			"closedHint": "打开新会话以继续。",
+			"exitCode": "退出代码 {code}",
+			"exitSignal": "信号 {signal}",
+			"pausedTitle": "连接已暂停",
+			"pausedHint": "准备好打开 Shell 时，请重新连接。",
+			"errorTitle": "终端不可用",
+			"errors": {
+				"auth": "无法验证您的访问权限。请重新登录或检查权限。",
+				"connect": "Openship 无法连接到服务的 Shell。请在服务器恢复连接后重试。",
+				"notFound": "此服务不可用，或您没有访问权限。",
+				"notDeployed": "没有可连接的运行中容器。请检查服务状态后重试。",
+				"notSupported": "此服务的运行环境不支持交互式终端。",
+				"maxSessions": "请关闭不使用的终端会话，然后重新连接。",
+				"idleTimeout": "会话因长时间无操作而结束。请重新连接以继续。",
+				"sessionCap": "此会话已达到时间限制。请重新连接以继续。",
+				"server": "无法打开终端。请重试。",
+				"maxReconnects": "无法恢复连接。您可以尝试重新连接。",
+				"transport": "连接已中断。您的服务可能仍在运行。"
+			}
 		}
 	}
 }

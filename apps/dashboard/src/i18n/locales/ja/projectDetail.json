@@ -203,8 +203,8 @@
 			},
 			"environmentApply": {
 				"title": "環境の変更を適用",
-        "applying": "変更を適用中…",
-        "applied": "環境変数の変更を適用しました",
+				"applying": "変更を適用中…",
+				"applied": "環境変数の変更を適用しました",
 				"hint": "再ビルドせずに保存済みの変数をこのサービスに適用します。サービスは再起動されます。",
 				"saveFirst": "このサービスに適用する前に変更を保存してください。",
 				"restartBlocked": "{name} には、通常の再起動では適用できない環境の変更が保存されています。「環境」タブで確認して適用してください。",
@@ -370,6 +370,46 @@
 			},
 			"orBuildFromSource": "またはソースからビルド",
 			"imageHint": "下の Dockerfile からビルドする場合は空のままにします。"
+		},
+		"connection": {
+			"terminal": "ターミナル",
+			"statusTitle": "サービスの状態を確認できません",
+			"statusHint": "Openship は現在の状態を確認できませんでした。サービスは稼働している可能性があります。",
+			"checkingTitle": "サービスを確認中",
+			"checkingHint": "サーバーの応答を待っています。今すぐターミナルへの接続を試すこともできます。",
+			"startingTitle": "サービスを待機中",
+			"startingHint": "サービスが稼働するとターミナルを利用できます。",
+			"stoppedTitle": "稼働中のサービスがありません",
+			"openTerminal": "ターミナルを開く",
+			"serviceSettings": "サービス設定",
+			"connectingTitle": "ターミナルを開いています",
+			"connectingHint": "{name} への安全な接続を確立しています。",
+			"reconnectingTitle": "再接続中",
+			"reconnectingHint": "セッションの復元を試みています。以前の出力はここに保持されます。",
+			"attempt": "試行 {attempt}",
+			"connected": "接続済み",
+			"cancel": "キャンセル",
+			"reconnect": "再接続",
+			"closedTitle": "セッション終了",
+			"closedHint": "続行するには新しいセッションを開いてください。",
+			"exitCode": "終了コード {code}",
+			"exitSignal": "シグナル {signal}",
+			"pausedTitle": "接続を一時停止しました",
+			"pausedHint": "シェルを開く準備ができたら再接続してください。",
+			"errorTitle": "ターミナルを利用できません",
+			"errors": {
+				"auth": "アクセス権を確認できませんでした。再度ログインするか、権限を確認してください。",
+				"connect": "Openship はサービスのシェルに接続できませんでした。サーバーへの接続が回復してから再試行してください。",
+				"notFound": "このサービスは利用できないか、アクセス権がありません。",
+				"notDeployed": "接続できる稼働中のコンテナがありません。サービスの状態を確認して再試行してください。",
+				"notSupported": "このサービスのランタイムは対話型ターミナルに対応していません。",
+				"maxSessions": "使用していないターミナルセッションを閉じてから再接続してください。",
+				"idleTimeout": "操作がなかったためセッションが終了しました。続行するには再接続してください。",
+				"sessionCap": "セッションの制限時間に達しました。続行するには再接続してください。",
+				"server": "ターミナルを開けませんでした。再試行してください。",
+				"maxReconnects": "接続を復元できませんでした。再接続を試すことができます。",
+				"transport": "接続が中断されました。サービスは稼働している可能性があります。"
+			}
 		}
 	}
 }

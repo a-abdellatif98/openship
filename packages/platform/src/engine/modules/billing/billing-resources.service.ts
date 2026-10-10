@@ -1,4 +1,5 @@
 /** Display telemetry is independent of checkout, entitlements and provisioning. */
+import { observedAllSettled, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { z } from "zod";
 import { Oblien } from "@repo/adapters";
 import { type PlanTierId } from "@repo/core";
@@ -99,7 +100,7 @@ export async function getBillingResources(organizationId: string, workspaceId?: 
     const signal = AbortSignal.timeout(12_000);
     const computeTo = new Date(Math.min(now.getTime(), end.getTime()));
     const edgeTo = new Date(Math.min(now.getTime(), monthly.to.getTime()));
-    const [compute, edge] = await Promise.allSettled([
+    const [compute, edge] = await observedAllSettled([
       (async () => {
         getOblienClient();
         const client = timedClient({ clientId: env.OBLIEN_CLIENT_ID!, clientSecret: env.OBLIEN_CLIENT_SECRET!, baseUrl: env.OBLIEN_API_URL }, signal);
@@ -109,12 +110,12 @@ export async function getBillingResources(organizationId: string, workspaceId?: 
         return { cpuHours: totals.vcpu_hours, memoryGbHours: totals.gb_hours, diskIoGb: totals.disk_io_gb, networkGb: totals.network_gb };
       })(),
       readEdge(namespace, monthly.from, edgeTo, signal),
-    ]);
+    ], "platform/engine/modules/billing/billing-resources.service");
     if (compute.status === "fulfilled") empty.compute = { ...empty.compute, status: "available", ...compute.value };
     if (edge.status === "fulfilled") empty.edge = { ...empty.edge, status: "available", ...edge.value };
     for (const [name, result] of [["compute", compute], ["edge", edge]] as const) {
       // Provider errors may contain tokens or customer data. Log no raw payload.
-      if (result.status === "rejected") console.warn(`[billing:resources] ${name} metrics unavailable`, { organizationId });
+      if (result.status === "rejected") errorDiagnostics.warn("platform/engine/modules/billing/billing-resources.service", `[billing:resources] ${name} metrics unavailable`, { organizationId });
     }
     return empty;
   })();

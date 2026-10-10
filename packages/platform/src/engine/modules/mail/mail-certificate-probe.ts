@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { X509Certificate } from "node:crypto";
 import type { CommandExecutor } from "@repo/adapters";
 import {
@@ -60,7 +61,8 @@ function certificateInfo(
       },
       matches: !!cert.checkHost(hostname) && new Date(cert.validFrom).getTime() <= Date.now(),
     };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail-certificate-probe");
     return { certificate: null, matches: false };
   }
 }
@@ -129,6 +131,7 @@ export async function checkMailCertificate(
     );
     return parseMailCertificateProbe(hostname, output);
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/mail/mail-certificate-probe");
     return {
       hostname,
       checkedAt: new Date().toISOString(),

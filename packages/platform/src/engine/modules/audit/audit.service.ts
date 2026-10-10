@@ -1,4 +1,5 @@
 /** Retained audit filtering, presentation, and recording controls. */
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { AUDIT_CATEGORIES, categoryForAuditEvent, eventTypesForCategory, isAuditCategoryId } from "@repo/core";
 import { ValidationError, AuditSettingsInput, type AuditQuery } from "@repo/contracts";
@@ -24,9 +25,9 @@ function parseDate(raw: string | undefined): Date | undefined {
  */
 async function resolveSearchResourceIds(organizationId: string, term: string): Promise<string[]> {
   const [projects, servers, domains] = await Promise.all([
-    repos.project.searchIdsByName(organizationId, term).catch(() => []),
-    repos.server.searchIdsByName(organizationId, term).catch(() => []),
-    repos.domain.searchIdsByHostname(organizationId, term).catch(() => []),
+    repos.project.searchIdsByName(organizationId, term).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/audit/audit.service"); return []; }),
+    repos.server.searchIdsByName(organizationId, term).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/audit/audit.service"); return []; }),
+    repos.domain.searchIdsByHostname(organizationId, term).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/audit/audit.service"); return []; }),
   ]);
   return Array.from(new Set([...projects, ...servers, ...domains]));
 }
@@ -110,7 +111,7 @@ async function attachResourceNames(rows: AuditRow[]): Promise<Map<string, string
             break;
         }
       } catch (err) {
-        console.warn(`[audit] could not resolve ${type} names`, err);
+        errorDiagnostics.warn("platform/engine/modules/audit/audit.service", `[audit] could not resolve ${type} names`, err);
       }
     }),
   );
@@ -139,8 +140,8 @@ async function resolveClientNames(ids: string[]): Promise<Map<string, string>> {
   }
 
   const [apps, tokens] = await Promise.all([
-    oauthIds.length ? repos.oauth.listApplicationsByClientIds(oauthIds).catch(() => []) : [],
-    patIds.length ? repos.personalAccessToken.listNamesByIds(patIds).catch(() => []) : [],
+    oauthIds.length ? repos.oauth.listApplicationsByClientIds(oauthIds).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/audit/audit.service"); return []; }) : [],
+    patIds.length ? repos.personalAccessToken.listNamesByIds(patIds).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/audit/audit.service"); return []; }) : [],
   ]);
   for (const a of apps) names.set(`oauth:${a.clientId}`, a.name);
   for (const t of tokens) names.set(`pat:${t.id}`, t.name);

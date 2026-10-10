@@ -7,6 +7,7 @@
  * stay in the service — this module only answers "is this path allowed".
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import path from "node:path";
 import { realpath } from "node:fs/promises";
 
@@ -47,14 +48,16 @@ const LOCAL_ROOT_DENY_EXACT = ["/", "/var", "/var/lib", "/var/lib/openship"];
 async function resolveDeep(target: string): Promise<string> {
   try {
     return await realpath(target);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/backup-destinations/local-path");
     let parent = target;
     while (parent !== path.dirname(parent)) {
       parent = path.dirname(parent);
       try {
         const real = await realpath(parent);
         return path.join(real, target.slice(parent.length));
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/backup-destinations/local-path");
         // keep walking up
       }
     }

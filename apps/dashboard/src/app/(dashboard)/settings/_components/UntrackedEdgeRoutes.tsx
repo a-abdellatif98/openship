@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -59,7 +60,8 @@ export function UntrackedEdgeRoutes() {
         const me = res.data?.members?.find((m) => m.userId === session?.user?.id);
         setIsOwner(me?.role === "owner");
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/UntrackedEdgeRoutes");
         if (!cancelled) setIsOwner(false);
       });
     return () => {

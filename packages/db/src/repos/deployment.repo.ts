@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { ilike, type SQL, eq, and, asc, desc, gte, lte, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { generateId, AppError, DEPLOYMENT_HISTORY_STATUSES, type DeploymentHistoryQuery, type ResourceValues } from "@repo/core";
 import { isDeepStrictEqual } from "node:util";
@@ -908,8 +909,8 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
         // marker built from the RAW error would be just as unstorable as the
         // logs it replaces, and the salvage write below would fail too.
         const detail = detailOf(err);
-        console.error(
-          `[db] build_session ${id}: log payload rejected (${detail}) — keeping status "${status}" without it`,
+        errorDiagnostics.error("db/repos/deployment.repo",
+          `[db] build_session ${id}: log payload rejected (${detail}) — keeping status "${status}" without it`, err,
         );
         try {
           await write([
@@ -920,7 +921,8 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
             },
           ]);
           return;
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "db/repos/deployment.repo");
           // Even the marker didn't land — the status still has to.
         }
         await write(null);

@@ -1,4 +1,5 @@
 /** HTTP envelopes over the shared authorized service operations. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import type { OperationResult } from "@repo/platform";
 import { getPlatformKernel } from "@repo/platform/engine/lib/platform";
@@ -133,7 +134,7 @@ export async function revealEnv(c: Context) {
       operationContext(c),
       param(c, "id"),
       param(c, "serviceId"),
-      await c.req.json().catch(() => ({})),
+      await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/services/service.controller"); return ({}); }),
     ),
   );
   return c.json({ success: true, environment: data });
@@ -236,6 +237,7 @@ export async function runtimeLogStream(c: Context) {
         await stream.writeSSE(event);
       }
     } catch (error) {
+      observeCaughtError(error, "api/modules/services/service.controller");
       if (!abort.signal.aborted)
         await stream.writeSSE({
           event: "error",

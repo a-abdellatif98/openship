@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { Icon as UiIcon } from "@repo/ui/icons";
@@ -49,7 +50,8 @@ export function DeploymentLogsPanel({
       if (!text) return;
       await copyText(text);
       if (currentTerminal.current === terminal) setCopied(true);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/import-project/DeploymentLogsPanel");
       showToast(t.projectSettings.advanced.projectMenu.copyFailed, "error");
     }
   };

@@ -1,4 +1,6 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { getRestApiBaseUrl } from "./urls";
+import { reportClientError } from "../error-reporting";
 
 /**
  * Standard API client for the Openship dashboard.
@@ -56,6 +58,7 @@ export class ApiError extends Error {
     public status: number,
     public statusText: string,
     public body: unknown,
+    public requestId?: string,
   ) {
     super(`API ${status}: ${statusText}`);
     this.name = "ApiError";
@@ -99,6 +102,7 @@ export function getApiErrorMessage(
   err: unknown,
   fallback = "Request failed",
 ): string {
+  reportClientError(err);
   // Before the generic Error arm: an abort's own message is the browser's
   // internal wording, never something to show.
   if (isAbortError(err)) return REQUEST_TIMEOUT_MESSAGE;
@@ -324,14 +328,14 @@ async function doFetch<T>(
     _networkRecoveryHandler?.();
 
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
+      const text = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/lib/api/client"); return ""; });
       let parsed: unknown = text;
       try {
         parsed = JSON.parse(text);
       } catch {
         /* keep as string */
       }
-      throw new ApiError(res.status, res.statusText, parsed);
+      throw new ApiError(res.status, res.statusText, parsed, res.headers.get("X-Request-ID") ?? undefined);
     }
 
     /* 204 No Content */
@@ -344,6 +348,8 @@ async function doFetch<T>(
 
     return (await res.text()) as T;
   } catch (err) {
+    reportClientError(err, { operation: "api.request", method: init.method ?? "GET", route: url.pathname,
+      ...(isAbortError(err) ? { category: "timeout" as const } : isNetworkError(err) ? { category: "network" as const } : {}) });
     // Network-level failures: server unreachable (TypeError) or request timeout (AbortError).
     // Through the exported predicates, so the banner and `getApiErrorMessage`
     // classify the same throw the same way.

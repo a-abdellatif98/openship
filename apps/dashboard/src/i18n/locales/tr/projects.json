@@ -352,7 +352,7 @@
     "failed": "Başarısız",
     "starting": "Başlatılıyor",
     "restarting": "Yeniden başlatılıyor",
-    "unknown": "Bilinmiyor"
+    "unknown": "Durum alınamıyor"
   },
   "routingRetry": {
     "title": "Alan adı yönlendirmesi ilgi bekliyor",

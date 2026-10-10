@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { exitCommand, rethrowCommandExit } from "../lib/command-exit";
 /**
  * SYSTEM / LIFECYCLE commands — self-hosted only.
@@ -35,6 +36,7 @@ async function guarded(fn: () => Promise<void>): Promise<void> {
     requireSelfHost(await fetchCaps());
     await fn();
   } catch (e) {
+    observeCaughtError(e, "cli/commands/system");
     fail(e);
   }
 }
@@ -301,7 +303,7 @@ migrationCommand
 
 migrationCommand
   .command("start")
-  .description("Migrate this instance onto your own server")
+  .description("Earlier migration endpoint; use Settings → Instance → Instance location to move")
   .requiredOption("--server-id <id>", "Target server id")
   .option("--hostname <host>", "Custom domain pointing at the server")
   .option("--slug <slug>", "Free <slug>.opsh.io subdomain")

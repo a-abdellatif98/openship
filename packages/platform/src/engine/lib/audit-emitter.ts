@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { observeCloudAudit } from "../modules/cloud-analytics/lifecycle";
 import type { ExecutionContext } from "@repo/platform";
@@ -62,7 +63,7 @@ export const audit = {
         sourceClientId: event.sourceClientId ?? ctx.sourceClientId ?? null,
       });
     } catch (err) {
-      console.error("[audit] failed to record event", event.eventType, err);
+      errorDiagnostics.error("platform/engine/lib/audit-emitter", "[audit] failed to record event", event.eventType, err);
     }
   },
 

@@ -20,6 +20,7 @@
  * worse than no control.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useState } from "react";
 
 import { useI18n } from "@/components/i18n-provider";
@@ -60,7 +61,8 @@ export function MailModeSetting() {
         const me = res.data?.members?.find((m) => m.userId === session?.user?.id);
         setIsOwner(me?.role === "owner");
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/MailModeSetting");
         if (!cancelled) setIsOwner(false);
       });
     return () => {
@@ -78,7 +80,9 @@ export function MailModeSetting() {
         setMode(s.productModeEffective === "mail" ? "mail" : "platform");
         setFromEnv(!s.productMode && s.productModeEffective === "mail");
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/MailModeSetting");
+      });
     return () => {
       cancelled = true;
     };
@@ -102,7 +106,8 @@ export function MailModeSetting() {
         } else {
           window.location.reload();
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/MailModeSetting");
         setMode(previous);
         showToast(copy.errorToast, "error", copy.title);
       } finally {

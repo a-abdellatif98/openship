@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import * as githubService from "../github/github.service";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
 import type { RepoFile } from "../../lib/stack-detector";
@@ -25,7 +26,8 @@ export function createGitHubReader(
     try {
       const file = await githubService.getFileContent(ctx, owner, repo, path, { branch });
       return file?.content;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/project-reader");
       return undefined;
     }
   };
@@ -44,7 +46,8 @@ export function createGitHubReader(
               type: file.type === "dir" ? "dir" : "file",
             }))
           : [];
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/project-reader");
         return [];
       }
     },

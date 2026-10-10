@@ -14,6 +14,7 @@
  * `retain()` for each live tunnel and `release()`s on stop, pinning the
  * connection for the tunnel's whole lifetime.
  */
+import { observedAllSettled, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { tunnelForward, type ForwardHandle } from "./ssh-tunnel";
 import { sshManager } from "./ssh-manager";
@@ -75,7 +76,7 @@ export function startTunnel(args: {
     if (stopping) return Promise.reject(new AppError("Tunnels are closing", 503, "PLATFORM_CLOSING"));
     const check = Promise.resolve().then(args.assertAccess);
     accessChecks.add(check);
-    void check.then(() => accessChecks.delete(check), () => accessChecks.delete(check));
+    void check.then(() => accessChecks.delete(check), () => { /* diagnostics-ignore: The original promise is returned to the caller; this branch only clears tracking. */ return accessChecks.delete(check); });
     return check;
   } : undefined;
   const work = withKeyedMutex(`tunnel:${args.tunnelId}`, async () => {
@@ -112,8 +113,11 @@ export function startTunnel(args: {
       const check = async () => {
         try {
           await assertAccess();
-        } catch {
-          if (live.get(t.tunnelId) === t) await stopTunnel(t.tunnelId).catch(() => {});
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-tunnel-manager");
+          if (live.get(t.tunnelId) === t) await stopTunnel(t.tunnelId).catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-tunnel-manager");
+          });
           return;
         }
         if (live.get(t.tunnelId) === t) {
@@ -133,7 +137,7 @@ export function startTunnel(args: {
   starts.add(work);
   void work.then(
     () => starts.delete(work),
-    () => starts.delete(work),
+    () => { /* diagnostics-ignore: The original promise is returned to the caller; this branch only clears tracking. */ return starts.delete(work); },
   );
   return work;
 }
@@ -174,12 +178,14 @@ export function stopAllTunnels(): Promise<void> {
   if (stoppingPromise) return stoppingPromise;
   stopping = true;
   return stoppingPromise = (async () => {
-    await Promise.allSettled([...starts]);
+    await observedAllSettled([...starts], "platform/engine/lib/ssh-tunnel-manager");
     const ids = [...live.keys()];
-    await Promise.all(ids.map((id) => stopTunnel(id).catch(() => {})));
+    await Promise.all(ids.map((id) => stopTunnel(id).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/ssh-tunnel-manager");
+    })));
     // A periodic check or accepted socket may already be reading the database.
     // Let it finish before the owner closes authorization/storage resources.
-    while (accessChecks.size) await Promise.allSettled([...accessChecks]);
+    while (accessChecks.size) await observedAllSettled([...accessChecks], "platform/engine/lib/ssh-tunnel-manager");
   })().finally(() => {
     stopping = false;
     stoppingPromise = undefined;
@@ -209,7 +215,7 @@ export function registerTunnelAutostart(): void {
           remotePort: row.remotePort,
           remoteHost: row.remoteHost,
           preferredPort: row.localPort ?? row.remotePort,
-        }).catch((err) => console.warn(`[startup] tunnel ${row.id} failed to open:`, err));
+        }).catch((err) => errorDiagnostics.warn("platform/engine/lib/ssh-tunnel-manager", `[startup] tunnel ${row.id} failed to open:`, err));
       }
     },
   });

@@ -4,6 +4,7 @@
  * or suspend workspaces locally. Failed synchronization returns 503; provider
  * delivery retries durably; entitlement polling also refreshes the current state.
  */
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 export interface BillingWebhookResponse { status: number; payload: Record<string, unknown> }
 import { db, schema, repos, eq, type Database } from "@repo/db";
 import { createAuditEventRepo, createAuditSettingsRepo } from "@repo/db/repos";
@@ -226,7 +227,7 @@ export async function handleOblienWebhook(
       await requestPaidWorkspaceProvisioning(orgId, owner.workspaceId);
     }
   } catch (error) {
-    console.warn(`[oblien-webhook] synchronization failed for org ${orgId}: ${safeErrorMessage(error)}`);
+    errorDiagnostics.warn("platform/engine/modules/billing/oblien-webhook.service", `[oblien-webhook] synchronization failed for org ${orgId}: ${safeErrorMessage(error)}`, error);
     return { status: 503, payload: { error: "Billing synchronization temporarily unavailable" } };
   }
   return { status: 200, payload: { received: true } };

@@ -50,6 +50,7 @@
  * costs at most one extra minute of detection latency.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { activeDeploymentForProject } from "@repo/platform/engine/lib/active-deployment";
 import { repos, type Deployment, type Project, type Service, type ServiceIncident } from "@repo/db";
 import {
@@ -574,7 +575,7 @@ export function runCurrentHealthScan(
   CURRENT_HEALTH_SCAN_IN_FLIGHT.set(organizationId, scan);
   void scan.then(
     () => CURRENT_HEALTH_SCAN_IN_FLIGHT.delete(organizationId),
-    () => CURRENT_HEALTH_SCAN_IN_FLIGHT.delete(organizationId),
+    () => { /* diagnostics-ignore: The original scan/sweep promise is returned and its rejection is observed; this branch maintains sequencing. */ return CURRENT_HEALTH_SCAN_IN_FLIGHT.delete(organizationId); },
   );
   return scan;
 }
@@ -582,9 +583,11 @@ export function runCurrentHealthScan(
 function enqueueSweep(opts?: HealthSweepOptions): Promise<HealthWatchSummary> {
   const next = sweepChain.then(
     () => sweepOnce(opts),
-    () => sweepOnce(opts),
+    () => { /* diagnostics-ignore: The original scan/sweep promise is returned and its rejection is observed; this branch maintains sequencing. */ return sweepOnce(opts); },
   );
-  sweepChain = next.catch(() => {});
+  sweepChain = next.catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/monitoring/health-watch");
+  });
   return next;
 }
 
@@ -640,7 +643,7 @@ async function sweepOnce(opts?: HealthSweepOptions): Promise<HealthWatchSummary>
     const candidate = project.activeDeploymentId ? activeDeps.get(project.activeDeploymentId) : undefined;
     const dep = activeDeploymentForProject(project, candidate);
     if (candidate && !dep) {
-      console.warn(`[health-watch] Ignoring invalid active-deployment binding for project ${project.id}`);
+      errorDiagnostics.warn("platform/engine/modules/monitoring/health-watch", `[health-watch] Ignoring invalid active-deployment binding for project ${project.id}`);
       continue;
     }
     // Nothing deployed, or the operator turned it off. Both are permanent until
@@ -684,7 +687,7 @@ async function sweepOnce(opts?: HealthSweepOptions): Promise<HealthWatchSummary>
 
   if (unresolved.length > 0) {
     summary.unresolved = unresolved.length;
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/monitoring/health-watch",
       `[health-watch] not watched, unresolvable deploy target: ${unresolved.join("; ")}`,
     );
   }
@@ -846,7 +849,7 @@ async function sweepOnce(opts?: HealthSweepOptions): Promise<HealthWatchSummary>
       else await stopAllContainerEventWatchers();
     } catch (err) {
       summary.errors++;
-      console.error(`[health-watch] event watcher renewal failed: ${safeErrorMessage(err)}`);
+      errorDiagnostics.error("platform/engine/modules/monitoring/health-watch", `[health-watch] event watcher renewal failed: ${safeErrorMessage(err)}`, err);
     }
   }
 
@@ -908,8 +911,8 @@ async function publishUnknownCandidates(
     } catch (err) {
       ctx.summary.errors++;
       ctx.swept.delete(candidate.project.id);
-      console.error(
-        `[health-watch] ${candidate.project.slug}: could not resolve workloads: ${safeErrorMessage(err)}`,
+      errorDiagnostics.error("platform/engine/modules/monitoring/health-watch",
+        `[health-watch] ${candidate.project.slug}: could not resolve workloads: ${safeErrorMessage(err)}`, err,
       );
     }
   }
@@ -979,8 +982,8 @@ async function sweepServerGroup(ctx: GroupContext): Promise<void> {
     if (ctx.currentOnly) {
       if (handle.listed && reason !== GROUP_DEADLINE_REASON) {
         summary.errors++;
-        console.error(
-          `[health-watch] ${serverId ?? "local docker"}: current scan failed after the daemon answered: ${reason}`,
+        errorDiagnostics.error("platform/engine/modules/monitoring/health-watch",
+          `[health-watch] ${serverId ?? "local docker"}: current scan failed after the daemon answered: ${reason}`, err,
         );
       } else if (networkUnavailable) {
         summary.offline++;
@@ -1005,8 +1008,8 @@ async function sweepServerGroup(ctx: GroupContext): Promise<void> {
     // rejections, so nothing else the daemon does arrives here as an exception.
     if (handle.listed && reason !== GROUP_DEADLINE_REASON) {
       summary.errors++;
-      console.error(
-        `[health-watch] ${serverId ?? "local docker"}: sweep failed after the daemon answered: ${reason}`,
+      errorDiagnostics.error("platform/engine/modules/monitoring/health-watch",
+        `[health-watch] ${serverId ?? "local docker"}: sweep failed after the daemon answered: ${reason}`, err,
       );
       return;
     }
@@ -1024,7 +1027,7 @@ async function sweepServerGroup(ctx: GroupContext): Promise<void> {
       // was never registered). Nothing to dedup against, so don't notify at all —
       // an undeduped alert here would repeat every minute.
       summary.errors++;
-      console.error(`[health-watch] local docker unreachable: ${reason}`);
+      errorDiagnostics.error("platform/engine/modules/monitoring/health-watch", `[health-watch] local docker unreachable: ${reason}`, err);
       return;
     }
     try {
@@ -1041,7 +1044,7 @@ async function sweepServerGroup(ctx: GroupContext): Promise<void> {
       if (transition === "opened") summary.opened++;
     } catch (inner) {
       summary.errors++;
-      console.error(`[health-watch] could not record unreachable server: ${safeErrorMessage(inner)}`);
+      errorDiagnostics.error("platform/engine/modules/monitoring/health-watch", `[health-watch] could not record unreachable server: ${safeErrorMessage(inner)}`, inner);
     }
   } finally {
     // Tears down the SSH loopback bridge; a no-op on the socket transport. On a
@@ -1054,8 +1057,8 @@ async function sweepServerGroup(ctx: GroupContext): Promise<void> {
       // failed observation, and reporting the sweep as failed would hide one that worked.
       // But it is the one failure in this file that LEAKS — an ssh child process and its
       // fd — and swallowed without a word it leaked once a minute with nothing to see.
-      console.error(
-        `[health-watch] ${serverId ?? "local docker"}: transport did not close cleanly: ${safeErrorMessage(err)}`,
+      errorDiagnostics.error("platform/engine/modules/monitoring/health-watch",
+        `[health-watch] ${serverId ?? "local docker"}: transport did not close cleanly: ${safeErrorMessage(err)}`, err,
       );
     }
   }
@@ -1149,8 +1152,8 @@ async function readServerGroup(
         workloads = await resolveWorkloads(candidate, ctx.serviceRows.get(candidate.project.id) ?? [], live);
       } catch (err) {
         summary.errors++;
-        console.error(
-          `[health-watch] ${candidate.project.slug}: could not resolve workloads: ${safeErrorMessage(err)}`,
+        errorDiagnostics.error("platform/engine/modules/monitoring/health-watch",
+          `[health-watch] ${candidate.project.slug}: could not resolve workloads: ${safeErrorMessage(err)}`, err,
         );
         // Not swept after all — don't let a failed read retire its incidents.
         ctx.swept.delete(candidate.project.id);
@@ -1203,7 +1206,8 @@ async function readServerGroup(
           ctx.inspectedByServer.set(serverKey, inspected + 1);
           try {
             sample = await sampler(workload.containerId);
-          } catch {
+          } catch (diagnosticFailure) {
+            observeCaughtError(diagnosticFailure, "platform/engine/modules/monitoring/health-watch");
             // An inspect that fails on a container the list view just showed is a
             // transient — treat it as no information, never as a fault. Counted,
             // because a box where this is the steady state is a box we are not
@@ -1253,8 +1257,8 @@ async function readServerGroup(
           publishHealthSnapshot(candidate, workload, "unknown");
           summary.indeterminate++;
         }
-        console.error(
-          `[health-watch] ${candidate.project.slug}/${workload.serviceName}: ${safeErrorMessage(err)}`,
+        errorDiagnostics.error("platform/engine/modules/monitoring/health-watch",
+          `[health-watch] ${candidate.project.slug}/${workload.serviceName}: ${safeErrorMessage(err)}`, err,
         );
       }
     });

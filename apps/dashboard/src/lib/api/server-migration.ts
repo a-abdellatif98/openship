@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { api, getApiBaseUrl } from "./client";
 import { endpoints } from "./endpoints";
 import type { MigrationServiceRoutes, MigrationSourceInput, ServerDetail } from "@repo/contracts";
@@ -99,6 +100,7 @@ export const dockerMigrationApi = {
             signal: abort.signal,
           });
         } catch (e) {
+          observeCaughtError(e, "dashboard/lib/api/server-migration");
           clearTimeout(watchdog);
           reject(asError(e));
           return;
@@ -106,7 +108,7 @@ export const dockerMigrationApi = {
         if (!res.ok || !res.body) {
           // Watchdog stays armed across this read: a hop that stalls a stream stalls
           // an error body too, and aborting here just falls back to the status text.
-          const detail = await res.text().catch(() => res.statusText);
+          const detail = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/lib/api/server-migration"); return res.statusText; });
           clearTimeout(watchdog);
           reject(new Error(detail));
           return;
@@ -116,7 +118,9 @@ export const dockerMigrationApi = {
         const contentType = res.headers.get("content-type") ?? "";
         if (!contentType.includes("text/event-stream")) {
           clearTimeout(watchdog);
-          void res.body.cancel().catch(() => {});
+          void res.body.cancel().catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "dashboard/lib/api/server-migration");
+          });
           reject(new ScanStreamStalledError(`200 response was "${contentType || "untyped"}"`));
           return;
         }
@@ -128,7 +132,8 @@ export const dockerMigrationApi = {
           if (settled) return;
           settled = true;
           clearTimeout(watchdog);
-          try { void reader.cancel(); } catch { /* noop */ }
+          try { void reader.cancel(); } catch (diagnosticFailure) {
+            observeCaughtError(diagnosticFailure, "dashboard/lib/api/server-migration"); /* noop */ }
           fn();
         };
         try {
@@ -163,6 +168,7 @@ export const dockerMigrationApi = {
           // like this too, so it carries the same "retry unstreamed" signal.
           if (!settled) reject(new ScanStreamStalledError("stream ended without a result"));
         } catch (e) {
+          observeCaughtError(e, "dashboard/lib/api/server-migration");
           clearTimeout(watchdog);
           if (!settled) reject(asError(e));
         }
@@ -333,7 +339,8 @@ export const dockerMigrationApi = {
           headers: { Accept: "text/event-stream" },
           signal: controller.signal,
         });
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/lib/api/server-migration");
         return;
       }
       if (!res.ok || !res.body) return;
@@ -369,7 +376,8 @@ export const dockerMigrationApi = {
             }
           }
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/lib/api/server-migration");
         /* aborted / dropped — the getMigration poll keeps state fresh */
       }
     })();

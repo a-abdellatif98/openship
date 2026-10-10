@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useSyncExternalStore } from "react";
 
 /**
@@ -13,7 +14,8 @@ function read(): boolean {
   if (typeof window === "undefined") return false;
   try {
     return window.localStorage.getItem(KEY) === "1";
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/lib/demo-mode");
     return false;
   }
 }
@@ -22,7 +24,8 @@ function read(): boolean {
 export function setDemoMode(on: boolean): void {
   try {
     window.localStorage.setItem(KEY, on ? "1" : "0");
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/lib/demo-mode");
     /* private mode / storage disabled — ignore */
   }
   window.dispatchEvent(new Event(EVENT));

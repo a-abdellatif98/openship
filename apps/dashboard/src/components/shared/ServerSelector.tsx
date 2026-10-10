@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useRef, useState } from "react";
 import type { ServerDetail } from "@repo/contracts";
 import { Icon } from "@repo/ui/icons";
@@ -144,7 +145,9 @@ export function useServerSelection({
     let active = true;
     void settingsApi.get().then(
       (settings) => { if (active) setPreference({ contextKey, serverId: settings.defaultServerId }); },
-      () => { if (active) setPreference({ contextKey, serverId: null }); },
+      (diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/shared/ServerSelector");
+ if (active) setPreference({ contextKey, serverId: null }); },
     );
     return () => { active = false; };
   }, [enabled, readOnly, useSavedDefault, contextKey]);

@@ -15,6 +15,7 @@
  * reusing the same GitHub Releases shape the CLI/desktop self-update use.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -28,7 +29,8 @@ import { safeFetch } from "./safe-fetch";
 const __dirname = (() => {
   try {
     return resolve(fileURLToPath(import.meta.url), "..");
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/release-resolver");
     return process.cwd();
   }
 })();
@@ -160,6 +162,7 @@ export async function resolveReleaseDist(spec: ReleaseDistSpec): Promise<Release
     const res = await fetchAndExtractRelease({ repo: src.repo, asset, tag, cacheDir });
     return { dir: res.path, version, asset, origin: "downloaded" };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/release-resolver");
     throw new ReleaseDistMissingError(spec.name, cachedTarget, { cause: err });
   }
 }
@@ -233,7 +236,8 @@ export async function fetchLatestRelease(repo: string): Promise<GithubReleasePay
     }).finally(() => clearTimeout(timer));
     if (!res.ok) return null;
     return (await res.json()) as GithubReleasePayload;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/release-resolver");
     return null;
   }
 }
@@ -318,7 +322,8 @@ async function fetchVersionFromUrl(url: string): Promise<ResolvedReleaseVersion 
       }
     }
     return resolvedVersion(body);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/release-resolver");
     return null;
   }
 }

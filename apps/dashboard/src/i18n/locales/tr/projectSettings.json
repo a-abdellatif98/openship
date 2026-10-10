@@ -895,7 +895,8 @@
       "error": "Hata",
       "inactive": "Pasif",
       "external": "Harici TLS",
-      "manual": "Manuel sertifika"
+      "manual": "Manuel sertifika",
+      "unknown": "Bilinmiyor"
     },
     "typeCustom": "Özel alan adı",
     "typeFree": "Ücretsiz alt alan adı",
@@ -1113,7 +1114,8 @@
         "manual_certificate": "Bu alan adı yüklenmiş bir sertifika kullanıyor. Geçerli bir yenisini yükleyip tekrar kontrol edin. Openship bunu otomatik yenilemez.",
         "managed_certificate": "TLS, harici vekil sunucunuz veya Openship Cloud tarafından yönetiliyor. Sağlayıcının yapılandırmasını kontrol edin.",
         "route_missing": "Yapılandırılmış bu rota henüz uygulanmadı. Uygulamak için yönlendirmeyi yeniden deneyin. Otomatik yönlendirme denemesi planlanmamış.",
-        "manual_dns": "Bu sertifika manuel TXT doğrulaması kullanıyor. Yeni bir TXT kaydını onaylamak için HTTPS kurulumunu açın veya otomatik yenileme için bağlı bir DNS sağlayıcısı seçin."
+        "manual_dns": "Bu sertifika manuel TXT doğrulaması kullanıyor. Yeni bir TXT kaydını onaylamak için HTTPS kurulumunu açın veya otomatik yenileme için bağlı bir DNS sağlayıcısı seçin.",
+        "managed_owner": "Bu ana makine adı ve sertifikası, sahibi olan hizmet tarafından yönetilir. O hizmetin alan adı ayarlarını kontrol edin."
       }
     },
     "wildcard": {

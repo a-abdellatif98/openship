@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   createPlatform,
   currentManagedCommandTracking,
@@ -182,7 +183,8 @@ export function resolveDeploymentStaticRoot(
   const outputDirectory = meta.staticServeOutputDir ?? project.outputDirectory ?? "";
   try {
     return resolveStaticOutputPath(deployment.containerId!.trim(), outputDirectory);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/deployment-runtime");
     return null;
   }
 }
@@ -727,7 +729,7 @@ export async function resolveTargetPlatform(
   // Only the id is wanted, and only as bookkeeping: null and non-null both resolve to
   // the same pooled host channel below, so a missing row degrades into "no borrow
   // marker", never into a different machine.
-  const localRow = await findLocalServer().catch(() => null);
+  const localRow = await findLocalServer().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/deployment-runtime"); return null; });
   const executor = await acquireLocalHostExecutor(localRow?.id);
   return createWithRetainedConnection(executor, () => createPlatform({
     target: "selfhosted",
@@ -896,9 +898,9 @@ async function acquireLocalHostExecutor(serverId?: string): Promise<CommandExecu
     // meant to be found in. The reason carries the remedy.
     if (lastLoggedRefusal !== err.message) {
       lastLoggedRefusal = err.message;
-      console.warn(
+      errorDiagnostics.warn("platform/engine/lib/deployment-runtime",
         `[host-channel] host operations unavailable on this box (${err.code}). ` +
-          `${HOST_CHANNEL_UNAFFECTED} ${err.message}`,
+          `${HOST_CHANNEL_UNAFFECTED} ${err.message}`, err,
       );
     }
     return executor;
@@ -960,7 +962,9 @@ async function createServerExecutor({ server, isLocal }: { server: OrgServer; is
     // domains, tunnels, the servers list) agrees — not just this resolver.
     // One-time, idempotent, best-effort; never blocks or fails the deploy.
     if (!server.isLocal) {
-      repos.server.update(server.id, { isLocal: true }).catch(() => {});
+      repos.server.update(server.id, { isLocal: true }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/deployment-runtime");
+      });
     }
     // POOLED, not a fresh `createHostExecutor()`. This executor outlives the call
     // (the deploy holds it), so it can't be scoped with `withHostExecutor` — but
@@ -1156,6 +1160,7 @@ export async function withDeploymentRuntime<T>(
   try {
     return await fn(runtime, serverId);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/deployment-runtime");
     throw asHostUnreachable(err);
   } finally {
     disposeRuntime(runtime);
@@ -1182,10 +1187,13 @@ export function disposeRuntime(runtime: RuntimeAdapter | null | undefined): void
 function release(layer: { dispose?: () => Promise<void> } | null | undefined): void {
   if (!layer || ownedByProcessPlatform(layer)) return;
   try {
-    const completion = trackBackgroundWork(Promise.resolve(layer.dispose?.()).catch(() => {}));
+    const completion = trackBackgroundWork(Promise.resolve(layer.dispose?.()).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/deployment-runtime");
+    }));
     currentManagedCommandTracking()?.defer(completion);
   }
-  catch { /* Teardown must not replace the operation's error. */ }
+  catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/deployment-runtime"); /* Teardown must not replace the operation's error. */ }
 }
 
 /**
@@ -1306,6 +1314,7 @@ export async function withDeploymentPlatform<T>(
       hostPortTarget: resolved.hostPortTarget,
     });
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/deployment-runtime");
     throw asHostUnreachable(err);
   } finally {
     disposePlatform(resolved);

@@ -8,6 +8,7 @@
  * into one normalized `DiscoveredStack`. Nothing here mutates the server.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { DockerContainerDetail } from "@repo/adapters";
 import { safeErrorMessage, withTimeout } from "@repo/core";
 import { repos } from "@repo/db";
@@ -87,7 +88,8 @@ async function readComposeDeclarations(
       [...paths].map(async ([p, project]) => {
         try {
           return [project, await executor.readFile(p)] as const;
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/docker-inspect.service");
           return [project, undefined] as const;
         }
       }),
@@ -104,7 +106,8 @@ async function readComposeDeclarations(
         const key = declaredKey(project, svc.name);
         if (!declared.has(key)) declared.set(key, svc);
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/docker-inspect.service");
       // Invalid YAML — skip; inspect data still reconstructs the service.
     }
   }
@@ -166,6 +169,7 @@ export async function discoverServerStack(
         `timed out after ${REACHABILITY_TIMEOUT_MS / 1000}s connecting to the Docker daemon`,
       );
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/migration/docker-inspect.service");
       throw new Error(`Docker daemon is not reachable on this server. ${safeErrorMessage(err)}`);
     }
 
@@ -215,7 +219,7 @@ export async function discoverServerStack(
         // its own bug. Not this machine ⇒ our stack is not in this list ⇒ exclude
         // nothing. Applies in FLAT mode too: flat exists to adopt an Openship-managed
         // WORKLOAD as a plain project, and the control plane is not a workload.
-        const self = await repos.server.get(serverId).catch(() => undefined);
+        const self = await repos.server.get(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/docker-inspect.service"); return undefined; });
         const ownIds =
           self?.isLocal === true ? new Set(findOwnStack(containers).map((c) => c.id)) : new Set<string>();
         if (ownIds.size > 0) step(`Excluding Openship's own ${ownIds.size} container(s)…`);
@@ -334,8 +338,11 @@ export async function discoverServerStack(
             await withMigrationExecution(serverId, organizationId, (exec) =>
                 pruneOrphanManifestArtifacts(exec, { organizationId, liveProjectIds }),
               )
-              .catch(() => {});
-          } catch {
+              .catch((diagnosticFailure) => {
+                observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/docker-inspect.service");
+              });
+          } catch (diagnosticFailure) {
+            observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/docker-inspect.service");
             /* best-effort — never fail discovery on a prune hiccup */
           }
         }
@@ -346,11 +353,11 @@ export async function discoverServerStack(
           // recovery snapshot (cheap `test -f`, no read — the dump is read only at
           // re-import time, for one project).
           const { manifestById, snapshotIds } = await withMigrationExecution(serverId, organizationId, async (exec) => {
-              const manifest = await readManifest(exec).catch(() => null);
+              const manifest = await readManifest(exec).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/docker-inspect.service"); return null; });
               const snap = new Set<string>();
               await Promise.all(
                 projectIds.map(async (id) => {
-                  if (await projectSnapshotExists(exec, id).catch(() => false)) snap.add(id);
+                  if (await projectSnapshotExists(exec, id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/docker-inspect.service"); return false; })) snap.add(id);
                 }),
               );
               return {
@@ -360,7 +367,7 @@ export async function discoverServerStack(
                 snapshotIds: snap,
               };
             })
-            .catch(() => ({ manifestById: null, snapshotIds: new Set<string>() }));
+            .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/migration/docker-inspect.service"); return ({ manifestById: null, snapshotIds: new Set<string>() }); });
           const knownHereIds = new Set<string>();
           await Promise.all(
             projectIds.map(async (id) => {
@@ -429,6 +436,7 @@ export async function revealContainerEnv(
       REACHABILITY_TIMEOUT_MS,
       `timed out after ${REACHABILITY_TIMEOUT_MS / 1000}s connecting to the Docker daemon`,
     ).catch((err) => {
+      observeCaughtError(err, "platform/engine/modules/migration/docker-inspect.service");
       throw new Error(`Docker daemon is not reachable on this server. ${safeErrorMessage(err)}`);
     });
 

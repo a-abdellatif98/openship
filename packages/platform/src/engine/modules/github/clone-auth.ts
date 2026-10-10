@@ -39,6 +39,7 @@
  * several are available at once.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { type BuildStrategy } from "@repo/core";
 import type { AmbientGitVia, CommandExecutor } from "@repo/adapters";
 import { tokenFor, requireTokenFor, type TokenContext } from "./github.token";
@@ -109,7 +110,7 @@ async function resolveLocalCredential(
         ctx.organizationId,
         tokenCtx.owner,
         tokenCtx.installationId,
-      ).catch(() => null)
+      ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/github/clone-auth"); return null; })
     : null;
   if (!customSource) {
     const ghToken = await getLocalGhToken();

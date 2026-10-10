@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -202,8 +203,8 @@ function McpAuthorizeInner() {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      orgClient.list().catch(() => ({ data: [] as Org[] })),
-      orgClient.getFullOrganization().catch(() => ({ data: null })),
+      orgClient.list().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/mcp/authorize/page"); return ({ data: [] as Org[] }); }),
+      orgClient.getFullOrganization().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/mcp/authorize/page"); return ({ data: null }); }),
     ]).then(([listRes, activeRes]) => {
       if (cancelled) return;
       const list = listRes.data ?? [];
@@ -230,7 +231,8 @@ function McpAuthorizeInner() {
           .filter((l): l is string => typeof l === "string" && l.length > 0);
         setGithubAccounts(logins);
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/mcp/authorize/page");
         if (!cancelled) setGithubAccounts([]);
       });
     return () => {
@@ -267,7 +269,8 @@ function McpAuthorizeInner() {
         setGithubAccounts([]);
         dispatch({ type: "pickTemplate", id: "agent" });
         setOrgId(next);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/mcp/authorize/page");
         setError(m.switchOrgError);
       } finally {
         setOrgSwitching(false);

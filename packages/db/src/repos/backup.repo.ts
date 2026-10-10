@@ -8,6 +8,7 @@
  *   restore      — restore history (sibling of run)
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   and,
   desc,
@@ -173,7 +174,7 @@ async function persistTransition(
   // dropped is exactly the information someone debugging a disagreeing run needs, and the
   // payload writes below are pointless once the core one did not land.
   if (Array.isArray(core_result) && core_result.length === 0) {
-    console.warn(
+    errorDiagnostics.warn("db/repos/backup.repo",
       `[db] ${label} ${id}: refused transition to "${status}" — the row is already in a ` +
         `terminal state. Whoever finished it first owns the verdict; this write was dropped.`,
     );
@@ -192,8 +193,8 @@ async function persistTransition(
     await write(rest, false);
     return true;
   } catch (err) {
-    console.error(
-      `[db] ${label} ${id}: payload rejected (${detailOf(err)}) — status "${status}" is persisted; salvaging per column`,
+    errorDiagnostics.error("db/repos/backup.repo",
+      `[db] ${label} ${id}: payload rejected (${detailOf(err)}) — status "${status}" is persisted; salvaging per column`, err,
     );
   }
 
@@ -207,11 +208,12 @@ async function persistTransition(
         try {
           await write({ [key]: `[unstorable: ${detail}]` }, false);
           continue;
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "db/repos/backup.repo");
           // fall through to the log below
         }
       }
-      console.error(`[db] ${label} ${id}: column ${key} rejected (${detail}) — left unset`);
+      errorDiagnostics.error("db/repos/backup.repo", `[db] ${label} ${id}: column ${key} rejected (${detail}) — left unset`, err);
     }
   }
   return true;

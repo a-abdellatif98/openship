@@ -11,6 +11,7 @@
  * NOT re-implement the folder/mkdir/atomic-write logic — call these helpers.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   HOST_STATE_DIR,
   privilegedExecutor,
@@ -110,7 +111,7 @@ async function mkdirOpenship(e: CommandExecutor): Promise<void> {
  */
 function unreadable<T>(name: string, err: unknown, fallback: T): T {
   const reason = err instanceof Error ? err.message : String(err);
-  console.warn(
+  errorDiagnostics.warn("platform/engine/lib/openship-server-store",
     `[openship-server-store] cannot read ${OPENSHIP_DIR}/${name} — reporting it as absent: ${reason}`,
   );
   return fallback;
@@ -200,6 +201,7 @@ export async function openshipFileExists(exec: CommandExecutor, name: string): P
     if (blocked) return unreadable(name, blocked, false);
     return (await p.executor.exec(`test -f ${sq(path)} && echo yes || echo no`)).trim() === "yes";
   } catch (err) {
+    observeCaughtError(err, "platform/engine/lib/openship-server-store");
     return unreadable(name, err, false);
   }
 }

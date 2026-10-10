@@ -37,6 +37,7 @@
  * dashboard rendering a remote sign-in screen against an API that wanted no login.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { env } from "@repo/platform/engine/config/env";
 
 /** The canonical mode set. Shared with the env parser and the write validator so
@@ -76,7 +77,8 @@ export async function getAuthMode(): Promise<AuthMode> {
     const settings = await repos.instanceSettings.get();
     const stored = settings?.authMode;
     resolved = AUTH_MODES.includes(stored as AuthMode) ? (stored as AuthMode) : "local";
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/auth-mode");
     resolved = "local";
   }
 

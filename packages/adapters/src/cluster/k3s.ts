@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   AppError,
   clusterRuntimeFirewallScript,
@@ -91,7 +92,8 @@ async function action<T>(
   let data: T & { error?: string; code?: string };
   try {
     data = JSON.parse(output.trim());
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/cluster/k3s");
     throw failure(
       "The server returned an invalid runtime setup response. Check SSH command access and retry.",
     );
@@ -172,7 +174,8 @@ export const k3sTools = {
           joinToken,
           { mode: 0o600 },
         );
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/cluster/k3s");
         throw failure(
           "The private join credential could not be transferred to this server. Check SSH file access and retry.",
         );
@@ -185,7 +188,8 @@ export const k3sTools = {
     let value: string;
     try {
       value = (await privileged.readFile("/var/lib/rancher/k3s/server/node-token")).trim();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/cluster/k3s");
       throw failure(
         "The control server's secure join credential is not ready. Retry setup after checking its service logs.",
       );
@@ -324,10 +328,12 @@ export const k3sTools = {
         );
       }
     } catch (error) {
+      observeCaughtError(error, "adapters/cluster/k3s");
       let diagnostic = "";
       try {
         diagnostic = await kubectl(`get pods -n ${sq(namespace)} -o wide`);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/cluster/k3s");
         /* original SSH/API error is retained */
       }
       issue = failure(
@@ -342,6 +348,7 @@ export const k3sTools = {
           if (current && JSON.parse(current).metadata?.labels?.["openship.io/runtime"] === ctx.id)
             await kubectl(`delete namespace ${sq(namespace)} --wait=true --timeout=90s`, 105_000);
         } catch (error) {
+          observeCaughtError(error, "adapters/cluster/k3s");
           const detail =
             error instanceof Error
               ? error.message

@@ -94,7 +94,10 @@ describe("self-app route repair authorization (#879)", () => {
           }),
         );
         const events = [];
-        for await (const event of client.projects.retryRoutingStream(project.id))
+        const idempotencyKey = `${project.id}-${client === native ? "native" : "http"}`;
+        for await (const event of client.projects.retryRoutingStream(project.id, {
+          idempotencyKey,
+        }))
           events.push(event);
         expect(events.map((event) => event.event)).toEqual(["session", "log", "complete"]);
         expect(JSON.parse(events.at(-1)!.data).status).toBe("completed");
@@ -107,7 +110,27 @@ describe("self-app route repair authorization (#879)", () => {
             verifyDomains: expect.any(Function),
           }),
         );
+        const sessionId = JSON.parse(events[0].data).sessionId;
+        const replay = [];
+        for await (const event of client.projects.retryRoutingStream(project.id, { sessionId }))
+          replay.push(event);
+        expect(replay).toEqual(events);
+        const repeatedStart = [];
+        for await (const event of client.projects.retryRoutingStream(project.id, {
+          idempotencyKey,
+        }))
+          repeatedStart.push(event);
+        expect(repeatedStart).toEqual(events);
       }
+      expect(repair).toHaveBeenCalledTimes(4);
+      const noSession = await app.request(`/api/projects/${project.id}/routing/retry/stream`, {
+        headers: {
+          authorization: `Bearer ${owner.token}`,
+          "x-organization-id": ctx.organizationId,
+        },
+      });
+      expect(noSession.status).toBe(400);
+      expect((await noSession.json()).code).toBe("ROUTING_RETRY_SESSION_REQUIRED");
       expect(repair).toHaveBeenCalledTimes(4);
     },
   );

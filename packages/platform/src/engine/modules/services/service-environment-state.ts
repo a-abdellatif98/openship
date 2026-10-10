@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { DockerRuntime, splitRuntimeEnv } from "@repo/adapters";
 import {
   AppError,
@@ -250,6 +251,7 @@ export async function getServiceEnvironment(
       .sort();
     view.status = view.changedKeys.length ? "pending" : "synced";
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/services/service-environment-state");
     view.status =
       error instanceof AppError && error.code === "SERVICE_NOT_DEPLOYED"
         ? "not-deployed"

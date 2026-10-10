@@ -1,5 +1,6 @@
 "use client";
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon, IconArtwork } from "@repo/ui/icons";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -102,7 +103,7 @@ export function IconPickerModal({
                 setTotal(response.total || 0);
             }
         } catch (error) {
-            console.error('Error searching icons:', error);
+            errorDiagnostics.error("dashboard/components/ui/IconPickerModal", 'Error searching icons:', error);
         } finally {
             setIsSearching(false);
             isLoadingMoreRef.current = false;

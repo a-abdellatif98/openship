@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useState, useEffect, useRef } from "react";
 import { projectsApi } from "@/lib/api";
 import { type Project } from "@/constants/mock";
@@ -56,7 +57,8 @@ export function useDashboardHome(initialData?: any) {
         if (Array.isArray(maybeOther)) {
           setOtherOrgs(maybeOther);
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/hooks/useDashboardHome");
         /* silent */
       } finally {
         if (active) setLoading(false);

@@ -42,6 +42,7 @@
  * forms a dual-stack listener surfaces ("::ffff:127.x.x.x").
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 /** Exact addresses we accept without further parsing. */
@@ -69,7 +70,8 @@ export function isLoopbackPeer(peer: string | null | undefined): boolean {
 export function peerAddress(c: Context): string | null {
   try {
     return getConnInfo(c).remote.address ?? null;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/middleware/loopback-peer");
     return null;
   }
 }

@@ -1,3 +1,4 @@
+import { reportError } from "@repo/core/diagnostics";
 import { Value } from "@sinclair/typebox/value";
 import {
   TerminalTargetSchema,
@@ -126,7 +127,9 @@ export function createRemoteTerminalOperations(http: HttpClient): TerminalOperat
       rejectClosed = reject;
     });
     // Failure before readiness has no returned session on which to observe closed.
-    void closed.catch(() => {});
+    void closed.catch(() => {
+      /* diagnostics-ignore: Terminal finish rejects the caller promises; close/ping cleanup is expected after disconnection. */
+});
 
     function finish(error?: unknown, exit?: TerminalExit) {
       if (settled) return;
@@ -137,6 +140,7 @@ export function createRemoteTerminalOperations(http: HttpClient): TerminalOperat
       socket.removeEventListener("message", message);
       socket.removeEventListener("close", disconnected);
       if (error !== undefined) {
+        reportError(error, { source: "sdk", kind: "operation", component: "sdk-terminal", handled: true });
         rejectReady(error);
         rejectClosed(error);
       } else if (exit) resolveClosed(exit);
@@ -145,6 +149,8 @@ export function createRemoteTerminalOperations(http: HttpClient): TerminalOperat
       try {
         socket.close(1000, "client_close");
       } catch {
+      /* diagnostics-ignore: Terminal finish rejects the caller promises; close/ping cleanup is expected after disconnection. */
+
         /* Already closed. */
       }
     }
@@ -153,6 +159,8 @@ export function createRemoteTerminalOperations(http: HttpClient): TerminalOperat
         try {
           socket.send(JSON.stringify({ type: "close" }));
         } catch {
+      /* diagnostics-ignore: Terminal finish rejects the caller promises; close/ping cleanup is expected after disconnection. */
+
           /* Transport already failed. */
         }
       }
@@ -221,6 +229,8 @@ export function createRemoteTerminalOperations(http: HttpClient): TerminalOperat
           try {
             send(JSON.stringify({ type: "ping" }));
           } catch {
+      /* diagnostics-ignore: Terminal finish rejects the caller promises; close/ping cleanup is expected after disconnection. */
+
             transportError();
           }
         }, 25_000);

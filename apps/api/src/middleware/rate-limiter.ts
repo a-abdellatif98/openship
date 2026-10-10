@@ -36,6 +36,7 @@ function resolveSubjectId(c: Context, subject: "ip" | "user" | "org" | "global")
     const ctx = getRequestContext(c);
     return subject === "user" ? ctx.userId : ctx.organizationId;
   } catch {
+    // diagnostics-ignore: missing context is the supported pre-auth IP fallback, not an authorization failure.
     // Pre-auth or auth-missing route — fall back to IP. The policy
     // SHOULD use ip for unauthed routes; this fallback is a safety net.
     const ip = c.var.clientIp;
@@ -61,7 +62,7 @@ async function enforce(c: Context, policyId: PolicyId): Promise<Response | null>
   // buckets under one loopback key when no client IP is trustable).
   const isAuthGate = policyId === "auth-tight" || policyId === "auth-loose";
   if (
-    !isAuthGate &&
+    !isAuthGate && policyId !== "diagnostics" &&
     !env.TRUST_PROXY &&
     !env.OPENSHIP_PUBLIC_URL &&
     isLoopbackPeer(peerAddress(c))
@@ -171,7 +172,7 @@ export async function rateLimiter(c: Context, next: Next): Promise<void | Respon
     getRequestContext(c);
     policy = "default-authed";
   } catch {
-    /* no ctx — anon route */
+    // diagnostics-ignore: public routes intentionally have no authenticated context.
   }
   const rejected = await enforce(c, policy);
   if (rejected) return rejected;

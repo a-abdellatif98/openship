@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,6 +17,7 @@ import type { Dictionary } from "@/i18n";
 import type { DomainDiagnostics } from "@repo/contracts";
 import { usePlatform } from "@/context/PlatformContext";
 import { useCloud } from "@/context/CloudContext";
+import { useCloudResourceKey } from "@/context/CloudResourceContext";
 import PublicEndpointsCard from "@/components/routing/PublicEndpointsCard";
 import DnsRecordCard from "@/components/domains/DnsRecordCard";
 import DnsChallengePanel from "@/components/domains/DnsChallengePanel";
@@ -120,7 +122,7 @@ interface DomainSummaryItem {
 }
 
 interface DomainDiagnosis extends Omit<DomainDiagnostics, "reason" | "retryAction"> {
-  reason: DomainDiagnostics["reason"] | "route_missing";
+  reason: DomainDiagnostics["reason"] | "route_missing" | "managed_owner";
   retryAction: DomainDiagnostics["retryAction"] | "retry_routing";
   message: string | null;
   attempts: number;
@@ -244,6 +246,18 @@ function resolveDomainDiagnosis(domain: any, project: any): DomainDiagnosis | un
     attempts: typeof domain?.verifyAttempts === "number" ? domain.verifyAttempts : 0,
     lastCheckedAt: typeof domain?.lastCheckedAt === "string" ? domain.lastCheckedAt : null,
   };
+  if (domain?.managedByOwner) {
+    const expired = domain.sslExpiresAt && new Date(domain.sslExpiresAt).getTime() <= Date.now();
+    if (domain.verified && !expired && ["active", "external"].includes(domain.sslStatus)) return undefined;
+    return {
+      ...metadata,
+      state: expired || ["error", "expired"].includes(domain.sslStatus) || domain.status === "failed" ? "failed" : "waiting",
+      reason: "managed_owner",
+      retryAction: null,
+      nextRetryAt: null,
+      automaticRetry: "not_applicable",
+    };
+  }
   if (!domain) {
     const waiting = !project.activeDeploymentId || project.awaitingDecision;
     return {
@@ -287,6 +301,8 @@ function resolveDomainDiagnosis(domain: any, project: any): DomainDiagnosis | un
 
 function resolveDomainSsl(hostname: string, domain: any, baseDomain: string, t: Dictionary): { label: string; tone: DomainTone } {
   const s = t.projectSettings.domains.ssl;
+  if (domain?.managedByOwner && domain.sslStatus == null)
+    return { label: s.unknown, tone: "neutral" };
   if (hostname.endsWith(`.${baseDomain}`)) {
     return { label: s.includedByHost, tone: "success" };
   }
@@ -352,6 +368,13 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
   // capability (copy from the shared registry).
   const freeNeedsCloud = () => requireCloud("managed-project-domain", { domain: baseDomain });
   const openEdgeModal = useEdgeModal();
+  const resourceKey = useCloudResourceKey();
+  const routingLogStorageKey = `openship:routing-log:dismissed:${resourceKey}:${id}`;
+  const seenRoutingSession = useRef<string | null>(null);
+  const routingSessionId = useRef<string | null>(null);
+  const rememberRoutingSession = useCallback((sessionId: string) => {
+    routingSessionId.current = sessionId;
+  }, []);
   const [routingOperation, setRoutingOperation] = useState<{
     id: number;
     opts: SystemPrepareOptions;
@@ -396,25 +419,37 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
     return "project-routing-retry";
   }, []);
   const closeRoutingLog = useCallback(() => {
+    if (routingSessionId.current) {
+      try { sessionStorage.setItem(routingLogStorageKey, routingSessionId.current); } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DomainSettings"); /* optional preference */ }
+    }
     routingOperationRef.current = null;
     setRoutingOperation(null);
-  }, []);
-  useEffect(closeRoutingLog, [id, closeRoutingLog]);
+  }, [routingLogStorageKey]);
+  useEffect(() => {
+    seenRoutingSession.current = null;
+    routingSessionId.current = null;
+    routingOperationRef.current = null;
+    setRoutingOperation(null);
+  }, [id, resourceKey]);
   useEffect(() => {
     if (routingOperation)
       routingLogRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
   }, [routingOperation]);
   const openRoutingRetry = useRoutingRetryModal(presentRoutingRetry);
   const openVerifyModal = useVerifyModal(presentRoutingRetry);
-  const retryRouting = () =>
-    openRoutingRetry(String(id), {
-      onDone: () =>
-        setProjectData((current) =>
-          current.id === id && current.activeDeploymentId === projectData.activeDeploymentId
-            ? { ...current, routingUnsynced: false, routingWarning: undefined }
-            : current,
-        ),
-    });
+  const retryRouting = () => openRoutingRetry(String(id), { onSession: rememberRoutingSession });
+  useEffect(() => {
+    const sessionId = projectData.routingRetry?.sessionId;
+    if (projectData.id !== id || !sessionId || seenRoutingSession.current === sessionId) return;
+    seenRoutingSession.current = sessionId;
+    if (routingOperationRef.current) return;
+    try { if (sessionStorage.getItem(routingLogStorageKey) === sessionId) return; } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DomainSettings"); /* optional preference */ }
+    // Reopening the page reads the retained session, even if it finished while
+    // the page was loading. GET can never start another route/certificate write.
+    openRoutingRetry(String(id), { attachSessionId: sessionId, onSession: rememberRoutingSession });
+  }, [id, resourceKey, projectData.id, projectData.routingRetry?.sessionId, routingLogStorageKey, openRoutingRetry, rememberRoutingSession]);
 
   const automaticChecksPending = domainsData.domains.some(
     (domain) => domain.diagnostics?.nextRetryAt,
@@ -436,7 +471,8 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
               primary: domain.isPrimary,
             })),
           );
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DomainSettings");
         // A failed status read preserves the last known state; it is not a
         // failed verification and must not change the domain's status.
       } finally {
@@ -471,7 +507,8 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
         classification: res.classification,
         reachable: res.reachable ?? null,
       });
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DomainSettings");
       setEdge({ loading: false, ready: false });
     }
   }, [id, selfHosted, isCloudProject]);
@@ -951,7 +988,8 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
         } else {
           setPreviewedRecords([]);
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DomainSettings");
         // Preview is best-effort — a failed lookup just hides the panel.
         // The user can still click Connect and see records via the
         // canonical /connect path's response.
@@ -1094,7 +1132,7 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
         setPendingVerifyDomains([]);
       }
     } catch (err) {
-      console.error("Failed to add domain:", err);
+      errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/DomainSettings", "Failed to add domain:", err);
       showToast(getApiErrorMessage(err) || t.projectSettings.domains.toast.addDomainFailed, "error", t.projectSettings.domains.toast.addDomainFailedTitle);
     } finally {
       setIsSubmitting(false);
@@ -1138,7 +1176,7 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
         );
       }
     } catch (err) {
-      console.error("Failed to verify domain:", err);
+      errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/DomainSettings", "Failed to verify domain:", err);
       showToast(
         getApiErrorMessage(err) || t.projectSettings.domains.toast.verifyFailed,
         "error",
@@ -1199,7 +1237,8 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
       .then((res) => {
         if (!cancelled) setPortChecks(res.data ?? []);
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DomainSettings");
         if (!cancelled) setPortChecks([]);
       });
     return () => {
@@ -1235,7 +1274,8 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
       .then((res) => {
         if (!cancelled) setOutputChecks(res.data ?? []);
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DomainSettings");
         if (!cancelled) setOutputChecks([]);
       });
     return () => {
@@ -1294,7 +1334,7 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
         );
       }
     } catch (error) {
-      console.error("Failed to renew SSL:", error);
+      errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/DomainSettings", "Failed to renew SSL:", error);
       // Surface the REAL server-side reason (e.g. "certbot: command not found",
       // ACME DNS/reachability errors) instead of a generic string — the API
       // returns it on the ApiError body and getApiErrorMessage walks it out.
@@ -1328,7 +1368,7 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
         );
       }
     } catch (error) {
-      console.error("Failed to recheck SSL:", error);
+      errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/DomainSettings", "Failed to recheck SSL:", error);
       showToast(getApiErrorMessage(error, interpolate(t.projectSettings.domains.toast.sslRecheckFailed, { hostname })), "error", t.projectSettings.domains.toast.sslTitle);
     } finally {
       setRecheckingDomainId(null);
@@ -1349,7 +1389,7 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
       setKeyPem("");
       invalidateProjectCaches(id);
     } catch (error) {
-      console.error("Failed to upload certificate:", error);
+      errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/DomainSettings", "Failed to upload certificate:", error);
       showToast(
         getApiErrorMessage(error, interpolate(t.projectSettings.domains.toast.certUploadFailed, { hostname })),
         "error",
@@ -1551,7 +1591,9 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
           ),
         );
         await refreshServices();
-        await Promise.resolve().then(() => onRoutesChanged?.()).catch(() => {});
+        await Promise.resolve().then(() => onRoutesChanged?.()).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DomainSettings");
+        });
         if (id) invalidateProjectCaches(id);
         showToast("Route removed.", "success", t.projectSettings.domains.toast.domainsTitle);
         setRemoveTarget(null);
@@ -1601,14 +1643,16 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
       }
       await refreshServices();
       invalidateProjectCaches(id);
-      await Promise.resolve().then(() => onRoutesChanged?.()).catch(() => {});
+      await Promise.resolve().then(() => onRoutesChanged?.()).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DomainSettings");
+      });
       showToast(t.projectSettings.domains.toast.routingUpdated, "success", t.projectSettings.domains.toast.domainsTitle);
       // First exposed route on an edge-less project → deploy to install
       // OpenResty + show the takeover modal (navigates to the build screen).
       if (wasEdgeless && patch.exposed) await publishFirstRoute();
       return true;
     } catch (error) {
-      console.error("Failed to update service route:", error);
+      errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/components/DomainSettings", "Failed to update service route:", error);
       showToast(getApiErrorMessage(error, t.projectSettings.domains.toast.routeUpdateFailed), "error");
       return false;
     } finally {
@@ -1708,6 +1752,9 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
     );
   })();
 
+  const routingClaimsByHostname = new Map(
+    (projectData.routingClaims ?? []).map((claim) => [claim.hostname.toLowerCase(), { ...claim, managedByOwner: true }]),
+  );
   // Every configured endpoint gets its own card, including additional domains
   // on the same port and paused services that still need management.
   const serviceRouteCards: Array<{ service: Service; summary: DomainSummaryItem }> = (() => {
@@ -1717,6 +1764,7 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
         const candidate = domainRowsByHostname.get(hostname.toLowerCase());
         const domain =
           candidate?.serviceId && candidate.serviceId !== service.id ? null : candidate;
+        const statusSource = domain ?? routingClaimsByHostname.get(hostname.toLowerCase());
         return [
           {
             service,
@@ -1738,8 +1786,8 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
               isPrimary: domain?.isPrimary ?? false,
               needsVerify: !!domain && domain.verified === false,
               externalIngress: domain?.externalIngress === true,
-              ...describeDomainStatus(domain, projectData, t, service.enabled && service.exposed),
-              ssl: resolveDomainSsl(hostname, domain, baseDomain, t),
+              ...describeDomainStatus(statusSource, projectData, t, service.enabled && service.exposed),
+              ssl: resolveDomainSsl(hostname, statusSource, baseDomain, t),
             },
           },
         ];
@@ -3073,6 +3121,9 @@ function DomainOverviewCard({
   const { t, locale } = useI18n();
   const d = t.projectSettings.domains;
   const canVerify = domain.needsVerify && !!domain.domainId && !!onVerify;
+  const canRetryRouting = !domain.domainId && !!onRetryRouting;
+  const showDiagnosisAction = !!onRetryDiagnosis && !canRetryRouting
+    && !(canVerify && domain.diagnosis?.retryAction === "verify");
   const [diagnosisOpen, setDiagnosisOpen] = useState(false);
   const [recordsOpen, setRecordsOpen] = useState(false);
   const [records, setRecords] = useState<DnsRecord[] | null>(null);
@@ -3095,7 +3146,8 @@ function DomainOverviewCard({
     setRecordsError(false);
     try {
       setRecords(await loadRecords());
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DomainSettings");
       setRecordsError(true);
     } finally {
       setRecordsLoading(false);
@@ -3249,7 +3301,7 @@ function DomainOverviewCard({
                 })}
               </p>
             ) : null}
-            {onRetryDiagnosis ? (
+            {showDiagnosisAction ? (
               <button
                 type="button"
                 onClick={onRetryDiagnosis}
@@ -3298,7 +3350,7 @@ function DomainOverviewCard({
           </div>
         ) : null}
 
-        {!domain.domainId && onRetryRouting ? (
+        {canRetryRouting ? (
           <button
             type="button"
             onClick={onRetryRouting}

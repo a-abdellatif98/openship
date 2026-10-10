@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Terminal } from "@xterm/xterm";
 import type { SearchAddon } from "@xterm/addon-search";
@@ -26,6 +27,7 @@ export function useTerminalSearch(terminal: Terminal | null) {
       terminal.loadAddon(searchAddon);
       setLoaded({ terminal, addon: searchAddon });
     }).catch(error => {
+      observeCaughtError(error, "dashboard/components/terminal/useTerminalSearch");
       if (!disposed) setError(error instanceof Error ? error : new Error(String(error)));
     });
     return () => {

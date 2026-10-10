@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -129,7 +130,8 @@ export function PortAdvisoryModal({
                     }
                     setResolvedKeys((r) => [...r, keyOf(check, isCompose)]);
                     showToast(interpolate(pa.applied, { port: String(newPort) }), "success");
-                  } catch {
+                  } catch (diagnosticFailure) {
+                    observeCaughtError(diagnosticFailure, "dashboard/components/import-project/PortAdvisoryModal");
                     showToast(pa.changeError, "error");
                   }
                 }}

@@ -13,6 +13,7 @@
  * modules/jobs/job.registry.ts).
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos, tryAcquireAdvisoryLock, type OrphanedResource } from "@repo/db";
 import {
   DockerRuntime,
@@ -374,9 +375,11 @@ async function runOrphanSweepLocked(): Promise<{ reclaimed: number; deferred: nu
         deferred++;
       }
     } catch (err) {
-      await repos.orphanedResource.bumpAttempt(o.id).catch(() => {});
+      await repos.orphanedResource.bumpAttempt(o.id).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/orphan-gc-schedule");
+      });
       deferred++;
-      console.error(`[orphan-gc] ${o.resourceType} ${o.ref} failed:`, safeErrorMessage(err));
+      errorDiagnostics.error("platform/engine/modules/projects/orphan-gc-schedule", `[orphan-gc] ${o.resourceType} ${o.ref} failed:`, safeErrorMessage(err), err);
     }
   }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Icon } from "@repo/ui/icons";
@@ -56,7 +57,8 @@ function TwoFactorControls({ account }: { account: ReturnType<typeof authClient.
             result.data?.some((account) => account.providerId === "credential") ?? false,
           );
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/TwoFactorSetting");
         if (alive) setLoadError(copy.loadFailed);
       });
     return () => {
@@ -125,6 +127,7 @@ function TwoFactorControls({ account }: { account: ReturnType<typeof authClient.
         setConfirmation("");
       }
     } catch (error) {
+      observeCaughtError(error, "dashboard/app/(dashboard)/settings/_components/TwoFactorSetting");
       setError(error instanceof Error ? error.message : copy.failed);
     } finally {
       setWorking(false);
@@ -135,7 +138,8 @@ function TwoFactorControls({ account }: { account: ReturnType<typeof authClient.
     try {
       await navigator.clipboard.writeText(value);
       showToast(copy.copied, "success", copy.title);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/TwoFactorSetting");
       showToast(copy.copyFailed, "error", copy.title);
     }
   }

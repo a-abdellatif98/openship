@@ -1,3 +1,5 @@
+import { errorReporter } from "@repo/core/diagnostics";
+import { installNodeErrorReporting, withErrorContext } from "@repo/core/diagnostics/node";
 import { Command, CommanderError, Option } from "commander";
 import { err, isJsonMode, setJsonMode } from "./lib/output";
 import { initializeNativeClient } from "./lib/native-client";
@@ -74,6 +76,7 @@ import { attachCompletion } from "./commands/completion";
 declare const __CLI_VERSION__: string;
 
 const program = new Command();
+installNodeErrorReporting("cli");
 const sdkCommands = new Set([
   projectCommand, appCommand, serviceCommand, domainCommand, deployCommand,
   deploymentCommand, logsCommand, initCommand, serverCommand, systemCommand,
@@ -222,12 +225,13 @@ async function main() {
     if (interrupted) return;
     if (error instanceof CommandExit) process.exitCode = error.code;
     else if (error instanceof CommanderError) process.exitCode = error.exitCode;
-    else { err(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }
+    else { err(error instanceof Error ? error.message : String(error), error); process.exitCode = 1; }
   } finally {
     try { await closeNativeClient(); }
-    catch (error) { err(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }
+    catch (error) { err(error instanceof Error ? error.message : String(error), error); process.exitCode = 1; }
     if (native) { process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", terminate); }
+    await errorReporter.flush(500);
   }
 }
 
-void main();
+void withErrorContext({ source: "cli", kind: "operation", component: "cli" }, main, true);

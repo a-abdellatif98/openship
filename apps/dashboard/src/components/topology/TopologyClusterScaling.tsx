@@ -1,5 +1,6 @@
 "use client";
 
+import { observedAllSettled, reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect, useRef, useState } from "react";
@@ -80,7 +81,7 @@ function ClusterScaling({ project, disabled, resources, onDeploy, onClusterState
     setLoading(true);
     setError(null);
     setCatalogError(null);
-    void Promise.allSettled([projectClusterApi.get(project.id), computeClustersApi.list()]).then(
+    void observedAllSettled([projectClusterApi.get(project.id), computeClustersApi.list()], "dashboard/components/topology/TopologyClusterScaling").then(
       (results) => {
         if (!current) return;
         const state = results[0];
@@ -207,7 +208,9 @@ function ClusterScaling({ project, disabled, resources, onDeploy, onClusterState
       // A lost response can have saved the target. Read once; never replay or deploy implicitly.
       try {
         updateTarget(await projectClusterApi.get(project.id));
-      } catch {}
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/topology/TopologyClusterScaling");
+      }
     } finally {
       if (!navigating) {
         pending.current = false;

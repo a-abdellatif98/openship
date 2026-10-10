@@ -20,6 +20,7 @@
  * enforces it in switch-back.service.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import { repos } from "@repo/db";
 import { getRequestContext } from "../../../lib/request-context";
@@ -165,7 +166,7 @@ export async function start(c: Context) {
       return c.json({ error: err.message, code: err.code }, 503);
     }
     const message = err instanceof Error ? err.message : "Migration failed.";
-    console.error("[migration.start] failed:", err);
+    errorDiagnostics.error("api/modules/system/migration/migration.controller", "[migration.start] failed:", err);
     return c.json({ error: message }, 500);
   }
 }
@@ -197,7 +198,7 @@ export async function startCloud(c: Context) {
 
   const body = await c.req
     .json<{ allowNonEmptyTarget?: boolean }>()
-    .catch(() => ({} as { allowNonEmptyTarget?: boolean }));
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/system/migration/migration.controller"); return ({} as { allowNonEmptyTarget?: boolean }); });
 
   try {
     const result = await migrateInstanceToCloud({
@@ -232,7 +233,7 @@ export async function startCloud(c: Context) {
       return c.json({ error: err.message, code: err.code }, 503);
     }
     const message = err instanceof Error ? err.message : "Cloud migration failed.";
-    console.error("[migration.startCloud] failed:", err);
+    errorDiagnostics.error("api/modules/system/migration/migration.controller", "[migration.startCloud] failed:", err);
     return c.json({ error: message }, 500);
   }
 }
@@ -264,7 +265,7 @@ export async function startTunnel(c: Context) {
 
   const body = await c.req
     .json<{ slug?: string }>()
-    .catch(() => ({} as { slug?: string }));
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/system/migration/migration.controller"); return ({} as { slug?: string }); });
   if (!body.slug || typeof body.slug !== "string") {
     return c.json({ error: "Body must include a non-empty slug string." }, 400);
   }
@@ -302,7 +303,7 @@ export async function startTunnel(c: Context) {
       return c.json({ error: err.message, code: err.code }, 503);
     }
     const message = err instanceof Error ? err.message : "Tunnel migration failed.";
-    console.error("[migration.startTunnel] failed:", err);
+    errorDiagnostics.error("api/modules/system/migration/migration.controller", "[migration.startTunnel] failed:", err);
     return c.json({ error: message }, 500);
   }
 }
@@ -327,7 +328,7 @@ export async function switchBack(c: Context) {
 
   const body = await c.req
     .json<{ abandonRemote?: boolean }>()
-    .catch(() => ({} as { abandonRemote?: boolean }));
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/system/migration/migration.controller"); return ({} as { abandonRemote?: boolean }); });
 
   try {
     const result = await switchBackToSingleUser({
@@ -358,7 +359,7 @@ export async function switchBack(c: Context) {
       return c.json({ error: err.message, code: err.code }, 503);
     }
     const message = err instanceof Error ? err.message : "Switch-back failed.";
-    console.error("[migration.switchBack] failed:", err);
+    errorDiagnostics.error("api/modules/system/migration/migration.controller", "[migration.switchBack] failed:", err);
     return c.json({ error: message }, 500);
   }
 }

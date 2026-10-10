@@ -4,7 +4,6 @@ import {
   issueTicket,
   serviceTerminalWsHandler,
 } from "./service-terminal.controller";
-import { repos } from "@repo/db";
 
 /**
  * Service-level interactive terminal routes.
@@ -45,20 +44,3 @@ r.public(
   },
   serviceTerminalWsHandler,
 );
-
-// Boot-time sweep: any audit rows left open by a prior crash are
-// finalized as 'server_error'. Their underlying PTY streams (Docker
-// exec / Oblien WS) are dead with the process anyway.
-void repos.serviceTerminalSession
-  .closeAllActive("server_error")
-  .then((n) => {
-    if (n > 0) {
-      // eslint-disable-next-line no-console
-      console.log(
-        `[service-terminal] swept ${n} orphan session row(s) from previous run`,
-      );
-    }
-  })
-  .catch(() => {
-    /* sweep failure is non-fatal */
-  });

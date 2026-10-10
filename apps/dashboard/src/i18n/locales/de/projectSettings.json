@@ -761,7 +761,8 @@
       "provisioning": "Wartet auf Zertifikat",
       "expired": "Abgelaufen",
       "error": "Fehler",
-      "inactive": "Inaktiv"
+      "inactive": "Inaktiv",
+      "unknown": "Unbekannt"
     },
     "typeCustom": "Benutzerdefinierte Domain",
     "typeFree": "Kostenlose Subdomain",
@@ -934,7 +935,8 @@
         "manual_certificate": "Diese Domain verwendet ein hochgeladenes Zertifikat. Lade einen gültigen Ersatz hoch und prüfe ihn erneut. Openship erneuert es nicht automatisch.",
         "managed_certificate": "TLS wird von deinem externen Proxy oder Openship Cloud verwaltet. Prüfe die Konfiguration dieses Anbieters.",
         "route_missing": "Diese konfigurierte Route wurde noch nicht angewendet. Wiederhole die Routing-Aktion. Es ist kein automatischer Routing-Versuch geplant.",
-        "manual_dns": "Dieses Zertifikat verwendet die manuelle TXT-Verifizierung. Öffne die HTTPS-Einrichtung, um einen neuen TXT-Eintrag zu bestätigen, oder wähle einen verbundenen DNS-Anbieter für die automatische Erneuerung."
+        "manual_dns": "Dieses Zertifikat verwendet die manuelle TXT-Verifizierung. Öffne die HTTPS-Einrichtung, um einen neuen TXT-Eintrag zu bestätigen, oder wähle einen verbundenen DNS-Anbieter für die automatische Erneuerung.",
+        "managed_owner": "Dieser Hostname und sein Zertifikat werden vom zugehörigen Dienst verwaltet. Prüfe die Domain-Einstellungen dieses Dienstes."
       }
     },
     "records": {

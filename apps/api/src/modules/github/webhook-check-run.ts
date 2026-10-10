@@ -2,6 +2,7 @@
  * GitHub webhook check_run events.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { triggerDeployment } from "@repo/platform/engine/modules/deployments/build.service";
 import { webhookActorCtx } from "./webhook-shared";
@@ -40,7 +41,7 @@ export async function handleCheckRun(
     return { success: true, event: "check_run", message: "Missing check_run.id" };
   }
 
-  const sd = await repos.serviceDeployment.findByCheckRunId(checkRunId).catch(() => null);
+  const sd = await repos.serviceDeployment.findByCheckRunId(checkRunId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/github/webhook-check-run"); return null; });
   if (!sd) {
     return {
       success: true,
@@ -49,7 +50,7 @@ export async function handleCheckRun(
     };
   }
 
-  const dep = await repos.deployment.findById(sd.deploymentId).catch(() => null);
+  const dep = await repos.deployment.findById(sd.deploymentId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/github/webhook-check-run"); return null; });
   if (!dep) {
     return {
       success: true,
@@ -58,7 +59,7 @@ export async function handleCheckRun(
     };
   }
 
-  const project = await repos.project.findById(dep.projectId).catch(() => null);
+  const project = await repos.project.findById(dep.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/github/webhook-check-run"); return null; });
   if (!project) {
     return {
       success: true,
@@ -67,7 +68,7 @@ export async function handleCheckRun(
     };
   }
 
-  const owner = await resolveOrgOwner(project.organizationId).catch(() => null);
+  const owner = await resolveOrgOwner(project.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/github/webhook-check-run"); return null; });
   if (!owner) {
     return {
       success: true,
@@ -98,7 +99,7 @@ export async function handleCheckRun(
       commitShaBefore: dep.commitShaBefore ?? undefined,
     },
   ).catch((err) => {
-    console.error(
+    errorDiagnostics.error("api/modules/github/webhook-check-run",
       `[GitHub Webhook] check_run rerequested for sd=${sd.id} failed:`,
       err,
     );

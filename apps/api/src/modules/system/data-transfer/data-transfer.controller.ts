@@ -13,6 +13,7 @@
  * their own personal org (GHSA-rwq6-r63g-3c8h).
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import type { SSEStreamingApi } from "hono/streaming";
 import { PkCollisionError } from "@repo/db";
@@ -87,7 +88,7 @@ function readPassphrase(v: unknown): string | undefined {
 }
 
 async function readJsonBody<T>(c: Context): Promise<T | null> {
-  return c.req.json<T>().catch(() => null);
+  return c.req.json<T>().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/system/data-transfer/data-transfer.controller"); return null; });
 }
 
 async function readFileFinalizeInput(c: Context): Promise<{
@@ -112,7 +113,7 @@ export async function exportInstanceHandler(c: Context) {
   const ctx = getRequestContext(c);
   await assertInstanceAdmin(ctx);
 
-  const body = ((await c.req.json<ExportBody>().catch(() => ({}))) ?? {}) as ExportBody;
+  const body = ((await c.req.json<ExportBody>().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/system/data-transfer/data-transfer.controller"); return ({}); })) ?? {}) as ExportBody;
 
   let file: DataTransferFile;
   try {
@@ -165,7 +166,7 @@ export async function previewInstanceExportHandler(c: Context) {
 export async function createDirectReceiveSessionHandler(c: Context) {
   const ctx = getRequestContext(c);
   await assertInstanceAdmin(ctx);
-  const body = ((await c.req.json<CreateReceiveBody>().catch(() => ({}))) ??
+  const body = ((await c.req.json<CreateReceiveBody>().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/system/data-transfer/data-transfer.controller"); return ({}); })) ??
     {}) as CreateReceiveBody;
   if (typeof body.apiBase !== "string") {
     return c.json(
@@ -315,7 +316,7 @@ async function writeTransferStreamResult<T>(
       error: "The data transfer failed unexpectedly.",
       code: "DATA_TRANSFER_FAILED",
     };
-    if (!classified) console.error("[data-transfer] streamed operation failed:", error);
+    if (!classified) errorDiagnostics.error("api/modules/system/data-transfer/data-transfer.controller", "[data-transfer] streamed operation failed:", error);
     await stream.writeSSE({ event: "error", data: JSON.stringify(failure) });
     return null;
   }
@@ -460,7 +461,7 @@ export async function finalizeDirectChunkUploadStreamHandler(c: Context) {
 export async function sendDirectTransferHandler(c: Context) {
   const ctx = getRequestContext(c);
   await assertInstanceAdmin(ctx);
-  const body = ((await c.req.json<SendDirectBody>().catch(() => ({}))) ?? {}) as SendDirectBody;
+  const body = ((await c.req.json<SendDirectBody>().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/system/data-transfer/data-transfer.controller"); return ({}); })) ?? {}) as SendDirectBody;
   if (typeof body.code !== "string") {
     return c.json({ error: "Missing receive code.", code: "INVALID_DIRECT_TRANSFER_CODE" }, 400);
   }
@@ -478,7 +479,7 @@ export async function sendDirectTransferHandler(c: Context) {
 export async function sendDirectTransferStreamHandler(c: Context) {
   const ctx = getRequestContext(c);
   await assertInstanceAdmin(ctx);
-  const body = ((await c.req.json<SendDirectBody>().catch(() => ({}))) ?? {}) as SendDirectBody;
+  const body = ((await c.req.json<SendDirectBody>().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/system/data-transfer/data-transfer.controller"); return ({}); })) ?? {}) as SendDirectBody;
   if (typeof body.code !== "string") {
     return c.json({ error: "Missing receive code.", code: "INVALID_DIRECT_TRANSFER_CODE" }, 400);
   }
@@ -496,7 +497,8 @@ export async function receiveDirectTransferHandler(c: Context) {
   let envelope: DirectTransferEnvelope;
   try {
     envelope = await c.req.json<DirectTransferEnvelope>();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/modules/system/data-transfer/data-transfer.controller");
     return c.json(
       { error: "Invalid encrypted transfer body.", code: "INVALID_DIRECT_TRANSFER_CODE" },
       400,
@@ -518,7 +520,8 @@ export async function importInstanceHandler(c: Context) {
   let body: ImportBody;
   try {
     body = await c.req.json<ImportBody>();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/modules/system/data-transfer/data-transfer.controller");
     return c.json({ error: "Invalid JSON body.", code: "INVALID_JSON" }, 400);
   }
   if (!body?.file) {

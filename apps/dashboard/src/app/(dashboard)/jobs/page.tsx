@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useState } from "react";
@@ -59,7 +60,7 @@ export default function JobsPage() {
       // whole page, so their fetch degrades to empty on error.
       const [res, bs] = await Promise.all([
         jobsApi.list(),
-        jobsApi.backupSchedules().catch(() => ({ data: [] as BackupScheduleView[] })),
+        jobsApi.backupSchedules().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/jobs/page"); return ({ data: [] as BackupScheduleView[] }); }),
       ]);
       setJobs(res?.data ?? []);
       setBackupSchedules(bs?.data ?? []);

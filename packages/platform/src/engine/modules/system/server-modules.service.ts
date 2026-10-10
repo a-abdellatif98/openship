@@ -9,6 +9,7 @@
  * This is the server/infra sibling of updates.service.ts (which is project-only).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos, type Server } from "@repo/db";
 import {
   resolveEnvironment,
@@ -115,7 +116,8 @@ function rethrowIfHostUnavailable(err: unknown): null {
 async function probeVersion(executor: CommandExecutor, def: ModuleDef): Promise<string | null> {
   try {
     return def.parseVersion(await executor.exec(def.versionCommand)) ?? null;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-modules.service");
     return null;
   }
 }
@@ -132,6 +134,7 @@ async function detectModule(
     .exec(def.presenceProbe)
     .then(() => true)
     .catch((err: unknown) => {
+      observeCaughtError(err, "platform/engine/modules/system/server-modules.service");
       rethrowIfHostUnavailable(err);
       return false;
     });
@@ -223,15 +226,19 @@ export async function scanServer(server: Server): Promise<ServerModuleView[]> {
       // Superseded → drop any row a previous scan left. A box that was bare when
       // it was last scanned and now runs the container edge would otherwise keep
       // showing a version, and an update prompt, for a config nothing loads.
-      const superseded = await def.supersededBy?.(executor).catch(() => null);
+      const superseded = await def.supersededBy?.(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-modules.service"); return null; });
       if (superseded) {
-        await repos.serverModuleStatus.remove(server.id, name).catch(() => {});
+        await repos.serverModuleStatus.remove(server.id, name).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-modules.service");
+        });
         continue;
       }
       const view = await detectModule(executor, def).catch(rethrowIfHostUnavailable);
       if (view) {
         views.push(view);
-        await upsertView(server, view).catch(() => {});
+        await upsertView(server, view).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-modules.service");
+        });
       }
     }
   });
@@ -249,14 +256,16 @@ export async function applyServerModule(
   const def = MODULE_DEFS[moduleName];
   if (!def) throw new Error(`unknown module: ${moduleName}`);
 
-  await repos.serverModuleStatus.setInProgress(server.id, moduleName, true).catch(() => {});
+  await repos.serverModuleStatus.setInProgress(server.id, moduleName, true).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-modules.service");
+  });
   try {
     return await sshManager.withExecutor(server.id, async (executor) => {
       // Checked here too, not just in the scan: a row cached before the box moved
       // to the container edge still renders an Update button, and the CLI and API
       // can call this directly. Applying would rewrite a config nothing loads and
       // stamp it current.
-      const superseded = await def.supersededBy?.(executor).catch(() => null);
+      const superseded = await def.supersededBy?.(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-modules.service"); return null; });
       if (superseded) {
         throw new Error(`${moduleName} migrations do not apply here: ${superseded}`);
       }
@@ -275,12 +284,16 @@ export async function applyServerModule(
         postApply: def.postApply,
       });
       // Refresh the cached row from the post-apply reality.
-      const view = await detectModule(executor, def).catch(() => null);
-      if (view) await upsertView(server, view).catch(() => {});
+      const view = await detectModule(executor, def).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-modules.service"); return null; });
+      if (view) await upsertView(server, view).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-modules.service");
+      });
       return result;
     });
   } finally {
-    await repos.serverModuleStatus.setInProgress(server.id, moduleName, false).catch(() => {});
+    await repos.serverModuleStatus.setInProgress(server.id, moduleName, false).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-modules.service");
+    });
   }
 }
 
@@ -293,7 +306,8 @@ export async function scanInstanceModules(): Promise<{ servers: number; behind: 
     try {
       const views = await scanServer(server);
       behind += views.filter((v) => v.behind).length;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-modules.service");
       // Unreachable server / probe failure → skip, try next.
     }
   }

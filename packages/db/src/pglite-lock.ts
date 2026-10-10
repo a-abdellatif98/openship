@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { openSync, writeSync, closeSync, readFileSync, unlinkSync, statSync } from "fs";
 import { dirname, basename, join } from "path";
 import { hostname } from "os";
@@ -66,12 +67,14 @@ function machineId(): { id: string; stable: boolean } {
         try {
           id = readFileSync(p, "utf8").trim();
           if (id) break;
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "db/pglite-lock");
           /* try the next source */
         }
       }
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "db/pglite-lock");
     /* platform lookup failed — fall back to hostname below */
   }
   // `stable` is true ONLY when a real platform UUID / machine-id was read. A
@@ -147,7 +150,8 @@ export interface AcquireLockOptions {
 function readLock(lockPath: string): LockRecord | "unreadable" | "initializing" | "invalid" {
   let text: string;
   try { text = readFileSync(lockPath, "utf8"); }
-  catch { return "unreadable"; }
+  catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "db/pglite-lock"); return "unreadable"; }
   try {
     const parsed = JSON.parse(text) as Partial<LockRecord> | null;
     if (
@@ -178,6 +182,7 @@ function isProcessAlive(pid: number): boolean {
     process.kill(pid, 0); // signal 0 = liveness probe; sends nothing
     return true;
   } catch (err) {
+    observeCaughtError(err, "db/pglite-lock");
     // ESRCH = no such process (dead). EPERM = exists but not ours (alive).
     return (err as NodeJS.ErrnoException).code === "EPERM";
   }
@@ -186,7 +191,8 @@ function isProcessAlive(pid: number): boolean {
 function tryRemove(lockPath: string): void {
   try {
     unlinkSync(lockPath);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "db/pglite-lock");
     /* already gone, or a racing peer removed it — either way, fine */
   }
 }
@@ -327,13 +333,14 @@ export function createPgliteLock(options: { registerExitHook?: boolean; ownerId?
       // acceptably bounded to the dev `--watch` flow this is gated to.
       if (canTakeover && holder.pid !== process.pid && !takeoverAttempted) {
         takeoverAttempted = true;
-        console.warn(
+        errorDiagnostics.warn("db/pglite-lock",
           `[db] lock held by pid ${holder.pid}; taking over (dev --watch reload) — ` +
             `terminating the stale holder.`,
         );
         try {
           process.kill(holder.pid, "SIGTERM");
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "db/pglite-lock");
           /* already gone / not ours — the loop below re-evaluates */
         }
         const graceUntil = Date.now() + DEV_LOCK_TAKEOVER_GRACE_MS;
@@ -341,7 +348,8 @@ export function createPgliteLock(options: { registerExitHook?: boolean; ownerId?
         if (isProcessAlive(holder.pid)) {
           try {
             process.kill(holder.pid, "SIGKILL");
-          } catch {
+          } catch (diagnosticFailure) {
+            observeCaughtError(diagnosticFailure, "db/pglite-lock");
             /* already gone */
           }
           const hardUntil = Date.now() + DEV_LOCK_HARD_KILL_MS;

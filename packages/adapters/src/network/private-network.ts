@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "../types";
 import { sq } from "../runtime/git-clone";
 import {
@@ -236,7 +237,8 @@ async function runJson<T>(
     output = await executor.exec(`python3 -c ${sq(script)} ${sq(JSON.stringify(input))}`, {
       timeout,
     });
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/network/private-network");
     throw new PrivateNetworkError(
       "Couldn't run the network check. Verify SSH access and install Python 3 and iproute2.",
       "NETWORK_EXECUTION_FAILED",
@@ -245,7 +247,8 @@ async function runJson<T>(
   let data: T & { error?: string; code?: string };
   try {
     data = JSON.parse(output);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/network/private-network");
     throw new PrivateNetworkError(
       "The host returned an invalid network report.",
       "NETWORK_REPORT_INVALID",

@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { AppError, safeErrorMessage } from "@repo/core";
@@ -163,7 +164,7 @@ async function runCloudWorkspaceActivity<T>(
     } catch (error) {
       // Persisted completion is retried by recovery; it never unlocks another
       // activity or turns a successful deployment into a failed one.
-      console.warn(`[cloud-activity] release pending for ${row.id}: ${safeErrorMessage(error)}`);
+      errorDiagnostics.warn("platform/engine/lib/cloud-workspace-lock", `[cloud-activity] release pending for ${row.id}: ${safeErrorMessage(error)}`, error);
     }
   }
 }

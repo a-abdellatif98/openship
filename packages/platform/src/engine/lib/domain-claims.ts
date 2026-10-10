@@ -23,7 +23,8 @@
  * later with nothing to restore it (#566).
  */
 
-import type { Domain } from "@repo/db";
+import { repos, type Domain } from "@repo/db";
+import type { ProjectRoutingClaim } from "@repo/contracts";
 
 import { mailHostRoutableByProject } from "./mail-host-claim";
 
@@ -69,4 +70,32 @@ export async function routableWithoutOwnership(
     if (await claim(hostname, projectId, row)) return true;
   }
   return false;
+}
+
+/** Read only the public status of authorized foreign hostnames. Never adopt their
+ * rows: deleting this project must not delete the owning subsystem's certificates. */
+export async function readProjectRoutingClaims(
+  projectId: string,
+  hostnames: Iterable<string>,
+): Promise<ProjectRoutingClaim[]> {
+  const claims = await Promise.all(
+    [...new Set([...hostnames].map((hostname) => hostname.toLowerCase()))].map(async (hostname) => {
+      const row = await repos.domain.findByHostname(hostname);
+      if (
+        row?.projectId === projectId ||
+        !(await routableWithoutOwnership(hostname, projectId, row))
+      )
+        return null;
+      return {
+        hostname,
+        ownerType: row?.ownerType ?? null,
+        verified: row?.verified ?? null,
+        status: row?.status ?? null,
+        sslStatus: row?.sslStatus ?? null,
+        sslExpiresAt: row?.sslExpiresAt?.toISOString() ?? null,
+        manualSsl: row?.manualSsl ?? false,
+      } satisfies ProjectRoutingClaim;
+    }),
+  );
+  return claims.filter((claim) => claim !== null);
 }

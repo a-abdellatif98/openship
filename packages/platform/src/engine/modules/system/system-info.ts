@@ -1,4 +1,5 @@
 /** Public deployment metadata shared by SDK clients and HTTP health. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { hostname, userInfo } from "node:os";
 import type { SystemInfo } from "@repo/contracts";
 import { cloudRuntimeTarget, env } from "../../config/env";
@@ -22,7 +23,8 @@ function resolveMachineName(): string | undefined {
   const raw = (() => {
     try {
       return hostname();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/system-info");
       return "";
     }
   })().trim();
@@ -34,7 +36,8 @@ function resolveMachineName(): string | undefined {
   try {
     const u = userInfo().username?.trim();
     if (u) return `${u[0].toUpperCase()}${u.slice(1)}`;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/system/system-info");
     /* fall through */
   }
   return undefined;
@@ -81,7 +84,8 @@ export async function getSystemInfo(): Promise<SystemInfo> {
     teamMode = settings?.teamMode ?? "single_user";
     migrationTargetUrl = settings?.migrationTargetUrl ?? null;
     migrationInProgress = settings?.migrationInProgress ?? false;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/system/system-info");
     // settings table may be unavailable mid-migration; defaults are safe.
   }
 

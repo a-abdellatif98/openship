@@ -20,6 +20,7 @@
  * update must never leave the box without the thing it was serving.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { posix } from "node:path";
 import { safeErrorMessage } from "@repo/core";
 
@@ -77,7 +78,7 @@ export async function dockerAvailable(executor: CommandExecutor): Promise<boolea
   return executor
     .exec("docker version --format '{{.Server.Version}}' 2>/dev/null")
     .then((v) => Boolean(v.trim()))
-    .catch(() => false);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/managed-image"); return false; });
 }
 
 /**
@@ -131,7 +132,7 @@ export async function containerImageRef(
 export async function imageExistsLocally(executor: CommandExecutor, ref: string): Promise<boolean> {
   const out = await executor
     .exec(`docker image inspect -f '{{.Id}}' ${sq(ref)} 2>/dev/null`)
-    .catch(() => "");
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/managed-image"); return ""; });
   return Boolean(out.trim());
 }
 

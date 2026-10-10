@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -140,7 +141,7 @@ describe("resolveServerExecutor — local row with no host channel", () => {
  */
 describe("the demotion leaves a trace", () => {
   it("logs the decision with the remedy, ONCE per outage", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(errorDiagnostics, "warn").mockImplementation(() => {});
     h.acquire.mockRejectedValue(
       new HostChannelUnavailableError(
         "not_configured",
@@ -153,8 +154,8 @@ describe("the demotion leaves a trace", () => {
     // Once — this sits on every deploy AND on read paths (logs, status polls), so a
     // line per resolve would bury the log it is meant to be found in.
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0]?.[0]).toContain("openship up");
-    expect(warn.mock.calls[0]?.[0]).toContain("not_configured");
+    expect(warn.mock.calls[0]?.[1]).toContain("openship up");
+    expect(warn.mock.calls[0]?.[1]).toContain("not_configured");
     warn.mockRestore();
   });
 
@@ -163,7 +164,7 @@ describe("the demotion leaves a trace", () => {
     h.acquire.mockRejectedValue(new HostChannelUnavailableError("unreachable", reason));
     await resolve();
 
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(errorDiagnostics, "warn").mockImplementation(() => {});
     h.acquire.mockImplementation(async () => ({ tag: "real-host-channel" }));
     await resolve();
     h.acquire.mockRejectedValue(new HostChannelUnavailableError("unreachable", reason));

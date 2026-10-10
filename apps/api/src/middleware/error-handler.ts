@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
@@ -5,6 +6,7 @@ import { AppError } from "@repo/core";
 import { OperationError } from "@repo/contracts";
 import { redactSensitiveRequestPath } from "../lib/request-log-redaction";
 import { cloudAnalytics } from "@repo/platform/engine/modules/cloud-analytics/index";
+import { noteApiError } from "./error-observation";
 
 /**
  * Translate a thrown error to a structured JSON response.
@@ -24,6 +26,7 @@ import { cloudAnalytics } from "@repo/platform/engine/modules/cloud-analytics/in
  * try/catch-around-next middleware would never see downstream throws.
  */
 export function handleApiError(err: unknown, c: Context) {
+  noteApiError(c, err);
   observeCloudFailure(err, c);
   if (err instanceof ZodError) {
     return c.json(
@@ -53,12 +56,8 @@ export function handleApiError(err: unknown, c: Context) {
         ...(withDetail.slots ? { slots: withDetail.slots } : {}),
       };
     }
-    // A 5xx is a SERVER fault and must leave a trace, even when it arrives as a typed
-    // AppError carrying its own message. `AppError`'s statusCode defaults to 500, so
-    // a bare `new AppError(msg)` used to answer 500 and log NOTHING — the "500 with no
-    // actionable information in the logs" of GH-562. 4xx stays quiet on purpose: those
-    // are client outcomes, and logging them turns ordinary validation into noise.
-    if (statusCode >= 500) console.error(`[API ERROR] ${requestTag(c)}`, err);
+    // The outer observation boundary records both client and server failures.
+    // Never print the raw Error graph: provider subclasses contain credentials.
     return c.json(
       {
         // Only application failures explicitly carrying public recovery data may
@@ -100,7 +99,6 @@ export function handleApiError(err: unknown, c: Context) {
   // doesn't say WHICH request produced it, which is most of the work of diagnosing a
   // 500 from a log file. The response body stays deliberately generic — an unknown
   // error's message can carry internals we don't hand to a client.
-  console.error(`[UNHANDLED ERROR] ${requestTag(c)}`, err);
   return c.json({ error: "Internal server error" }, 500);
 }
 
@@ -116,7 +114,8 @@ function observeCloudFailure(error: unknown, c: Context): void {
     const status = error instanceof AppError ? error.statusCode : error instanceof HTTPException ? error.status : error instanceof ZodError || error instanceof SyntaxError ? 400 : 500;
     const reason = status === 400 || status === 422 ? "validation" : status === 401 || status === 402 || status === 403 ? "access" : status === 409 ? "conflict" : status === 502 ? "provider" : status === 503 || status === 504 ? "unavailable" : "unknown";
     cloudAnalytics.capture(ctx, "cloud_operation_failed", { operation, status, reason });
-  } catch { /* Optional telemetry must not change API error handling. */ }
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/middleware/error-handler"); /* Optional telemetry must not change API error handling. */ }
 }
 
 /**

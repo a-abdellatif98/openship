@@ -11,6 +11,7 @@
  * consumes, without re-asserting that invariant on every field.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos, type Project, type Service } from "@repo/db";
 import { getProjectType, type ComposeAdvanced, type StackId } from "@repo/core";
 import { serviceKind, type DeployableService } from "../../../lib/deployable-service";
@@ -29,7 +30,8 @@ export function isMultiServiceProject(
 
   try {
     return getProjectType(framework) === "services";
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/project-services");
     return framework === "docker-compose";
   }
 }

@@ -1,4 +1,5 @@
 /** Instance settings logic retained from the HTTP setup controller. */
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { ExecutionContext } from "../../../context";
 import { OperationError, type SystemOperations, type UpdateInstanceSettingsInput, type UpdateInstanceEmailSettingsInput } from "@repo/contracts";
 import { repos } from "@repo/db";
@@ -110,7 +111,7 @@ export async function getSetup(): Promise<Awaited<ReturnType<SystemOperations["g
   const hasServer = servers.length > 0;
   // Source-of-truth for "can teammates reach this instance + at what URL" —
   // drives the smart team-invite gate + its inline guidance (see TeamTab).
-  const teamReachability = await getInstanceReachability().catch(() => null);
+  const teamReachability = await getInstanceReachability().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/settings.operations"); return null; });
 
   return {
     configured: hasServer,
@@ -224,14 +225,16 @@ export async function updateSettings(ctx: ExecutionContext, body: UpdateInstance
   // the isLocal row so the change takes effect without a restart.
   if (body.hostControl !== undefined) {
     clearHostControlCache();
-    await syncHostControlOverride().catch(() => {});
+    await syncHostControlOverride().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/settings.operations");
+    });
     if (await resolveHostControlEnabled()) {
       // Enabled: materialize "This Server" now so it's a target immediately (the
       // GET /servers self-heal would do it eventually, but the toggle should be
       // instant). On Compose the row appears and container deploys work at once;
       // host-OS ops still refuse with the "re-run `openship up`" advisory until the
       // CLI provisions the channel — the deliberate degrade-and-advise behaviour.
-      await ensureLocalServer().catch(() => null);
+      await ensureLocalServer().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/settings.operations"); return null; });
     } else {
       // Disabled: drop the pooled host channel (and every other cached executor)
       // so an already-connected channel can't keep serving host ops past the flip —
@@ -268,7 +271,7 @@ export async function getEmailSettings(ctx: ExecutionContext): Promise<Awaited<R
     // Whether ANY transport can currently deliver (instance SMTP, mail-server
     // mailbox, or env). Drives the "no email transport → set up SMTP" hints —
     // e.g. the notification channel form.
-    deliverable: await canSendMail().catch(() => false),
+    deliverable: await canSendMail().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/settings.operations"); return false; }),
   };
 }
 
@@ -339,6 +342,7 @@ export async function sendTestEmail(ctx: ExecutionContext, body: { to: string })
     await sendInstanceTestEmail(to);
     return { ok: true };
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/system/settings.operations");
     const message = err instanceof Error ? err.message : "Failed to send test email";
     return { ok: false, error: message };
   }
@@ -361,12 +365,12 @@ export async function deleteSettings(ctx: ExecutionContext): Promise<Awaited<Ret
       await repos.resourceGrant
         .deleteForResource(s.organizationId, "server", s.id)
         .catch((err: unknown) =>
-          console.error("[deleteSettings] server grant cleanup failed:", err),
+          errorDiagnostics.error("platform/engine/modules/system/settings.operations", "[deleteSettings] server grant cleanup failed:", err),
         );
       await repos.resourceGrant
         .deleteForResource(s.organizationId, "mail_server", s.id)
         .catch((err: unknown) =>
-          console.error("[deleteSettings] mail_server grant cleanup failed:", err),
+          errorDiagnostics.error("platform/engine/modules/system/settings.operations", "[deleteSettings] mail_server grant cleanup failed:", err),
         );
     }
     await repos.server.delete(s.id);
@@ -382,6 +386,8 @@ export async function deleteSettings(ctx: ExecutionContext): Promise<Awaited<Ret
   // the delete and keep serving the deleted choice until the next boot — so re-sync
   // to let the OPENSHIP_HOST_CONTROL env floor govern again.
   clearHostControlCache();
-  await syncHostControlOverride().catch(() => {});
+  await syncHostControlOverride().catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/system/settings.operations");
+  });
   return { ok: true };
 }

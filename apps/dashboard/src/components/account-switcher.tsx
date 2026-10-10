@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -62,7 +63,7 @@ export function AccountSwitcher() {
     (async () => {
       const [listRes, activeRes] = await Promise.all([
         orgClient.list(),
-        orgClient.getFullOrganization().catch(() => ({ data: null as Org | null })),
+        orgClient.getFullOrganization().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/components/account-switcher"); return ({ data: null as Org | null }); }),
       ]);
       if (cancelled) return;
       setOrgs(listRes.data ?? []);

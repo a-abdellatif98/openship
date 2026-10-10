@@ -32,6 +32,7 @@
  *   either way; the whole difference is the prefix, and it lives in one place.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "@repo/adapters";
 import { safeErrorMessage } from "@repo/core";
 import { runMailSql, type MailTarget } from "../mail-engine";
@@ -92,6 +93,7 @@ export async function queryRows<T>(
     }
     return parsed as T[];
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/mail/admin/psql-runner");
     throw new Error(
       `Failed to parse psql output as JSON: ${
         safeErrorMessage(err)

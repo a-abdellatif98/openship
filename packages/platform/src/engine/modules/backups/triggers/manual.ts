@@ -8,6 +8,7 @@
  * project and the destination before enqueueing.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { assertResourceInOrg } from "@repo/platform/engine/lib/resource-access";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
@@ -31,7 +32,8 @@ export async function triggerManualBackup(
       ctx.organizationId,
       policyId,
     );
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/triggers/manual");
     throw new Error("Backup policy not found"); // hide existence
   }
   const destination = await repos.backupDestination.findById(policy.destinationId);
@@ -42,7 +44,8 @@ export async function triggerManualBackup(
       ctx.organizationId,
       policy.destinationId,
     );
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/triggers/manual");
     throw new Error("Backup destination not accessible");
   }
 

@@ -2,6 +2,7 @@
  * historical samples. Docker sidecars remain Docker workloads when the main app
  * uses BareRuntime. A stream keeps these read transports open until closed. */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos, type Project, type Deployment } from "@repo/db";
 import { NotFoundError, safeErrorMessage } from "@repo/core";
@@ -128,6 +129,7 @@ async function sampleTargets(
     try {
       out[i] = { ...t, usage: await runtime.getUsage(t.containerId!) };
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/monitoring/project-usage");
       onError?.(t, err);
     }
   });
@@ -188,7 +190,7 @@ async function createSampler(
     await close();
     return { error: "Resource usage is not available for this deployment" };
   }
-  const capacityPromise = usageCapacity(dep, serverId).catch(() => null);
+  const capacityPromise = usageCapacity(dep, serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/monitoring/project-usage"); return null; });
   return {
     serverId,
     sample: async (): Promise<ProjectUsage> => {

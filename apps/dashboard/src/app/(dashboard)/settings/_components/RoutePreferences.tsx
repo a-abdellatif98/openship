@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import { useState, useEffect, useCallback } from "react";
@@ -32,7 +33,8 @@ export function RoutePreferences() {
       setLoading(true);
       const res = await settingsApi.get();
       if (res?.routeStrategy) setRouteStrategy(res.routeStrategy);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/RoutePreferences");
       /* silent */
     } finally {
       setLoading(false);
@@ -56,7 +58,8 @@ export function RoutePreferences() {
         "success",
         t.settings.common.toast.settings,
       );
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/RoutePreferences");
       setRouteStrategy(prev);
       showToast(t.settings.routePreferences.toast.failed, "error", t.settings.common.toast.settings);
     } finally {

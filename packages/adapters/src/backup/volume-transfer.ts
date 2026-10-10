@@ -24,6 +24,7 @@
  * executor primitives that shell-escape their own args.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Transform } from "node:stream";
 import type { BackupExecutor, ServiceHandle } from "./types";
 
@@ -166,7 +167,9 @@ export async function transferVolume(
   });
   // Observe source termination from the start, including a rejected target
   // setup. A broken destination must not leave the producer streaming forever.
-  void read.awaitExit.catch(() => {});
+  void read.awaitExit.catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "adapters/backup/volume-transfer");
+  });
   let source = read.stdout;
   if (opts?.onProgress) {
     let moved = 0;
@@ -177,7 +180,7 @@ export async function transferVolume(
         cb(null, chunk);
       },
     });
-    read.stdout.on("error", (err) => counter.destroy(err));
+    read.stdout.on("error", (err) => { observeCaughtError(err, "adapters/backup/volume-transfer"); return counter.destroy(err); });
     source = read.stdout.pipe(counter);
   }
   try {

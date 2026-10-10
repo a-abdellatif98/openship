@@ -20,6 +20,7 @@
  * one pass over the box.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { ProxySettings } from "@repo/core";
 
 import type { CommandExecutor, ManualCert } from "../../types";
@@ -242,7 +243,7 @@ export async function edgeProxy(
   exec: CommandExecutor,
   opts: { status?: EdgeStatus } = {},
 ): Promise<EdgeProxyApi | null> {
-  const status = opts.status ?? (await probeEdge(exec).catch(() => null));
+  const status = opts.status ?? (await probeEdge(exec).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/proxy/api"); return null; }));
   if (!status) return null;
 
   let kind: ProxyKind | null = null;
@@ -256,7 +257,7 @@ export async function edgeProxy(
   }
   // Nothing on the ports (or something unrecognized) — but a stopped proxy's
   // config is still on disk and still migratable.
-  if (!kind) kind = await detectInstalledProxy(exec).catch(() => null);
+  if (!kind) kind = await detectInstalledProxy(exec).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/proxy/api"); return null; });
   if (!kind) return null;
 
   const container = status.occupants.find((o) => o.proxy === kind)?.containerName ?? null;
@@ -300,7 +301,7 @@ export async function collectProxyCerts(
   const warnings: string[] = [];
   const hosts = [...new Set(sites.filter((s) => s.ssl).flatMap((s) => s.serverNames))];
   for (const host of hosts) {
-    const candidate = await api.certCandidateFor(host).catch(() => null);
+    const candidate = await api.certCandidateFor(host).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/proxy/api"); return null; });
     if (candidate?.cert) {
       certPems[host] = { certPem: candidate.cert.certPem, keyPem: candidate.cert.keyPem };
     } else if (candidate?.reason) {
@@ -319,12 +320,12 @@ function makeApi(
   // One scan per instance backs sites / by-port / siteFor / certFor.
   let scan: Promise<ProxyScanResult> | null = null;
   const listSites = () => {
-    scan ??= (ours ? scanOpenshipEdge(exec) : scanImportableSites(exec, kind)).catch(() => ({
+    scan ??= (ours ? scanOpenshipEdge(exec) : scanImportableSites(exec, kind)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/proxy/api"); return ({
       proxy: kind,
       sites: [],
       readable: false,
       warnings: [`${kind}: config scan failed`],
-    }));
+    }); });
     return scan;
   };
 
@@ -343,7 +344,8 @@ function makeApi(
       // A transient transport/config failure must remain visible to this caller,
       // but it must not poison the API instance forever. The next call retries a
       // real scan; it never falls back to an older successful inventory.
-      void nextScan.catch(() => {
+      void nextScan.catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/system/proxy/api");
         if (strictLoopbackPorts === nextScan) strictLoopbackPorts = null;
       });
     }
@@ -373,7 +375,7 @@ function makeApi(
     const ctx: CertLookupCtx = { exec, host, site, container };
     let lastReason: string | null = null;
     for (const source of CERT_SOURCES[kind] ?? []) {
-      const raw = await source(ctx).catch(() => null);
+      const raw = await source(ctx).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/proxy/api"); return null; });
       if (!raw) continue;
       const candidate = validateCertFor(host, raw, raw.source);
       if (candidate.cert) return candidate;

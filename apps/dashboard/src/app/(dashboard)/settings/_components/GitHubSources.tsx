@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -62,7 +63,8 @@ export function GitHubSources() {
         const me = res.data?.members?.find((member) => member.userId === session?.user?.id);
         setIsOwner(me?.role === "owner");
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/GitHubSources");
         if (!cancelled) setIsOwner(false);
       });
     return () => {

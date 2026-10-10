@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos, type Project, type Deployment } from "@repo/db";
 import { isServiceSuccessStatus, isServiceFailureStatus } from "@repo/core";
 import { runtimeTarget } from "../../config/index";
@@ -31,7 +32,7 @@ export async function preCreateServiceDeployments(
     forceAll: boolean;
   },
 ): Promise<Map<string, { id: string | null; serviceId: string; serviceName: string; targeted: boolean }>> {
-  const services = await repos.service.listByProject(projectId).catch(() => []);
+  const services = await repos.service.listByProject(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/service-checks"); return []; });
   const enabled = services.filter((s) => s.enabled);
   const map = new Map<string, { id: string | null; serviceId: string; serviceName: string; targeted: boolean }>();
   if (enabled.length === 0) return map;
@@ -110,7 +111,7 @@ export async function emitServiceCheckRun(opts: {
   // resolves the actor's real role from the DB, so an arbitrary first member
   // (ordering is unspecified) made this feature work or silently vanish depending
   // on who happened to sort first and what repos they were granted.
-  const actor = await resolveOrgOwner(dep.organizationId).catch(() => null);
+  const actor = await resolveOrgOwner(dep.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/service-checks"); return null; });
   if (!actor?.userId) return;
   const actorCtx = buildBackgroundContext({
     userId: actor.userId,
@@ -118,7 +119,7 @@ export async function emitServiceCheckRun(opts: {
     label: "build:check-run",
   });
 
-  const sd = await repos.serviceDeployment.findById(serviceDeploymentId).catch(() => null);
+  const sd = await repos.serviceDeployment.findById(serviceDeploymentId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/service-checks"); return null; });
   // GitHub 422s a `completed` check run that carries no conclusion, and
   // `conclusion` is optional in this signature — so default once, for both
   // branches, instead of only defending the update path.
@@ -159,7 +160,9 @@ export async function emitServiceCheckRun(opts: {
         checkRunId: result.id,
         checkRunUrl: result.htmlUrl,
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/service-checks");
+      });
   }
 }
 
@@ -193,7 +196,9 @@ export async function emitInitialServiceChecks(
       serviceName: entry.serviceName,
       conclusion: "neutral",
       output: { title: "Skipped — no changes", summary: "Files under this service's root were unchanged." },
-    }).catch(() => {});
+    }).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/service-checks");
+    });
   }
 }
 

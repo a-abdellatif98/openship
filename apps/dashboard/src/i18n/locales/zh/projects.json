@@ -352,7 +352,7 @@
     "failed": "失败",
     "starting": "启动中",
     "restarting": "重启中",
-    "unknown": "未知"
+    "unknown": "无法获取状态"
   },
   "routingRetry": {
     "title": "域名路由需要处理",

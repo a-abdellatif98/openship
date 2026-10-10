@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 /**
@@ -41,7 +42,9 @@ function useInfraIssuesCount(): number {
       .then((r) => {
         if (!cancelled) setCount(r.total);
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/SettingsSidebar");
+      });
     return () => {
       cancelled = true;
     };

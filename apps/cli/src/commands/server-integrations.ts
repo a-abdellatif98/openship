@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Command, Option } from "commander";
 import {
   ServerResourceSchemas,
@@ -142,6 +143,7 @@ containerCommand
         }),
       );
     } catch (error) {
+      observeCaughtError(error, "cli/commands/server-integrations");
       fail(error);
     }
   });
@@ -171,6 +173,7 @@ containerCommand
         },
       );
     } catch (error) {
+      observeCaughtError(error, "cli/commands/server-integrations");
       fail(error);
     }
   });

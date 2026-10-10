@@ -16,6 +16,7 @@
  * update must never leave the box without a mail engine.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { buildMailImageRef, safeErrorMessage, mailHostname } from "@repo/core";
 import { DEFAULT_CONTAINER_LOG_ARGS } from "../../container-logging";
 import type { CommandExecutor, LogEntry } from "../../types";
@@ -295,7 +296,7 @@ async function handOverEnvFile(
   path: string,
   onLog: SystemLogCallback,
 ): Promise<void> {
-  const profile = await resolveEnvironment(executor).catch(() => null);
+  const profile = await resolveEnvironment(executor).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/mail/ensure-container-mail"); return null; });
   if (!profile || profile.isRoot || !profile.canSudo) return;
 
   // `$SUDO_USER` only as a last resort, so an owner we could not name fails loudly rather
@@ -314,6 +315,7 @@ async function handOverEnvFile(
         `chmod a+x ${sq(stateDir)} ${sq(dirOf(stateDir))}`,
     )
     .catch((err: unknown) => {
+      observeCaughtError(err, "adapters/system/mail/ensure-container-mail");
       onLog(
         log(
           `Could not give ${profile.loginUser || "the login user"} access to ${path}: ` +
@@ -331,7 +333,7 @@ async function readEnvFileValue(
   path: string,
   key: string,
 ): Promise<string | null> {
-  const body = await executor.readFile(path).catch(() => "");
+  const body = await executor.readFile(path).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/mail/ensure-container-mail"); return ""; });
   for (const line of body.split("\n")) {
     const eq = line.indexOf("=");
     if (eq > 0 && line.slice(0, eq).trim() === key) return line.slice(eq + 1);
@@ -361,7 +363,7 @@ async function retainedDbPassword(
   const initialised = await executor
     .exec(`test -s ${sq(`${MAIL_DB_HOST_DATA_DIR}/pgdata/PG_VERSION`)} && echo yes || true`)
     .then((out) => out.trim() === "yes")
-    .catch(() => false);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/mail/ensure-container-mail"); return false; });
   if (!initialised) return null;
 
   const retained = await readEnvFileValue(executor, DB_ENV_FILE, "POSTGRES_PASSWORD");
@@ -399,7 +401,7 @@ export async function retainedDbPort(
   const initialised = await executor
     .exec(`test -s ${sq(`${MAIL_DB_HOST_DATA_DIR}/pgdata/PG_VERSION`)} && echo yes || true`)
     .then((out) => out.trim() === "yes")
-    .catch(() => false);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/mail/ensure-container-mail"); return false; });
   if (!initialised) return null;
 
   const retained = await readEnvFileValue(executor, ENGINE_ENV_FILE, "OPENSHIP_MAIL_DB_PORT");
@@ -475,12 +477,13 @@ async function containerDbPort(
 ): Promise<number | null> {
   const raw = await executor
     .exec(`docker inspect -f '{{json .HostConfig.PortBindings}}' ${sq(container)} 2>/dev/null`)
-    .catch(() => "");
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/mail/ensure-container-mail"); return ""; });
   if (!raw.trim()) return null;
   let bindings: Record<string, Array<{ HostIp?: string; HostPort?: string }>>;
   try {
     bindings = JSON.parse(raw);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/system/mail/ensure-container-mail");
     throw new Error("Could not read the mail database container's port bindings.");
   }
   const binding = bindings?.[`${MAIL_DB_INTERNAL_PORT}/tcp`];
@@ -539,7 +542,9 @@ async function startDb(
   onLog: SystemLogCallback,
   dbPort: number = resolveMailDbPort(),
 ): Promise<boolean> {
-  await executor.exec(`docker rm -f ${sq(container)} 2>/dev/null || true`).catch(() => {});
+  await executor.exec(`docker rm -f ${sq(container)} 2>/dev/null || true`).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "adapters/system/mail/ensure-container-mail");
+  });
   const run = await executor.streamExec(
     buildDbRunCommand(container, dbPort),
     onLog as (l: LogEntry) => void,
@@ -558,7 +563,9 @@ async function startEngine(
   hostname: string,
   onLog: SystemLogCallback,
 ): Promise<boolean> {
-  await executor.exec(`docker rm -f ${sq(container)} 2>/dev/null || true`).catch(() => {});
+  await executor.exec(`docker rm -f ${sq(container)} 2>/dev/null || true`).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "adapters/system/mail/ensure-container-mail");
+  });
   const run = await executor.streamExec(
     buildMailRunCommand(container, image, hostname),
     onLog as (l: LogEntry) => void,
@@ -708,6 +715,7 @@ export async function ensureContainerMail(
   });
   for (const mount of MAIL_CONTAINER_MOUNTS) {
     await hostState.exec(`mkdir -p ${sq(mount.host)}`).catch((err: unknown) => {
+      observeCaughtError(err, "adapters/system/mail/ensure-container-mail");
       onLog(
         log(
           `Could not create the mail state directory ${mount.host}: ${safeErrorMessage(err)}. ` +
@@ -718,6 +726,7 @@ export async function ensureContainerMail(
     });
   }
   await hostState.exec(`mkdir -p ${sq(MAIL_DB_HOST_DATA_DIR)}`).catch((err: unknown) => {
+    observeCaughtError(err, "adapters/system/mail/ensure-container-mail");
     onLog(
       log(
         `Could not create the mail database directory ${MAIL_DB_HOST_DATA_DIR}: ` +
@@ -786,11 +795,12 @@ export async function ensureContainerMail(
     onLog(log("Mail engine container running"));
     return { container, dbContainer, image };
   } catch (err) {
+    observeCaughtError(err, "adapters/system/mail/ensure-container-mail");
     const msg = safeErrorMessage(err);
     onLog(log(`Mail engine setup failed: ${msg}`, "error"));
     const logs = await executor
       .exec(`docker logs --tail 60 ${sq(container)} 2>&1 || true`)
-      .catch(() => "");
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/mail/ensure-container-mail"); return ""; });
     if (logs.trim()) onLog(log(`Mail engine logs:\n${logs}`, "error"));
     throw new Error(`Mail engine setup failed: ${msg}`);
   }
@@ -874,7 +884,7 @@ export async function startContainerMail(
     onLog(log(`Could not start the mail engine: ${reason}`, "error"));
     const logs = await executor
       .exec(`docker logs --tail 60 ${sq(container)} 2>&1 || true`)
-      .catch(() => "");
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/mail/ensure-container-mail"); return ""; });
     if (logs.trim()) onLog(log(`Mail engine logs:\n${logs}`, "error"));
     return { started: false, reason };
   }

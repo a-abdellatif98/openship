@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { env } from "../../config/index";
 import { cloudClient } from "./client";
 import { resolveOrgCloudUserId, readCloudJson } from "./transport";
@@ -23,11 +24,11 @@ export async function fetchOrgCloudProjects(
 ): Promise<CloudProjectsResult> {
   // On the SaaS we ARE the source — never merge-from-self (no proxy recursion).
   if (env.CLOUD_MODE) return { state: "not-connected" };
-  const linked = await resolveOrgCloudUserId(organizationId).catch(() => null);
+  const linked = await resolveOrgCloudUserId(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/projects"); return null; });
   if (!linked) return { state: "not-connected" };
   const res = await cloudClient({ organizationId })
     .request("/api/projects/home", { method: "GET" })
-    .catch(() => null);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/projects"); return null; });
   if (!res || !res.ok) return { state: "unavailable" };
   const body = await readCloudJson<{ projects?: unknown[]; numbers?: Record<string, number> }>(res);
   if (!body || !Array.isArray(body.projects)) return { state: "unavailable" };

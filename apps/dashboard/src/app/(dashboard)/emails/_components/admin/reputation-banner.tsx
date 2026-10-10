@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -56,7 +57,8 @@ function readState(key: string): StoredState | null {
 function writeState(key: string, state: StoredState) {
   try {
     window.localStorage.setItem(key, JSON.stringify(state));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/reputation-banner");
     /* private mode */
   }
 }

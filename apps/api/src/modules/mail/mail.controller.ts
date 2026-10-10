@@ -1,3 +1,4 @@
+import { observedAllSettled, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { refreshMailCertificate } from "@repo/platform/engine/modules/mail/mail-certificate.service";
 /**
  * Mail setup controller - HTTP endpoints for the iRedMail setup wizard.
@@ -292,13 +293,13 @@ export async function getStatus(c: Context) {
   // resolved BEFORE the SSH probe and independent of it. An unreachable mail
   // server must not make a deployed webmail vanish from the page, and a
   // mid-build one still has to link to its logs.
-  const mailRecord = await repos.mailServer.get(serverId).catch(() => undefined);
+  const mailRecord = await repos.mailServer.get(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller"); return undefined; });
   const webmail = mailRecord?.domain
     ? await resolveWebmailSummary(ctx.organizationId, {
         serverId,
         domain: mailRecord.domain,
         webmailProjectId: mailRecord.webmailProjectId ?? null,
-      }).catch(() => undefined)
+      }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller"); return undefined; })
     : undefined;
 
   try {
@@ -312,7 +313,8 @@ export async function getStatus(c: Context) {
     const probed = await sshManager.withExecutor(serverId, async (executor) => {
       const found = await readState(executor, { strict: true });
       let observationError: string | undefined;
-      const engine = found ? await detectMailEngine(executor).catch(() => {
+      const engine = found ? await detectMailEngine(executor).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller");
         observationError = "Openship could not check the mail engine. Its current health is unknown.";
         return null;
       }) : null;
@@ -335,7 +337,8 @@ export async function getStatus(c: Context) {
         : {}),
       ...(probed.observationError ? { observationError: probed.observationError } : {}),
     });
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller");
     return c.json({
       code: "MAIL_STATUS_UNAVAILABLE",
       message: "Openship could not read this mail server's status. Its health is unknown. Check the connection and retry.",
@@ -385,7 +388,8 @@ export async function listMailServers(c: Context) {
           if (!state?.domain) return null;
           const completed = setupStateIsComplete(state);
           return { serverId: s.id, domain: state.domain, completed };
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller");
           return null;
         }
       }),
@@ -399,9 +403,9 @@ export async function listMailServers(c: Context) {
           installedAt: found.completed ? new Date() : null,
         });
       } catch (err) {
-        console.warn(
+        errorDiagnostics.warn("api/modules/mail/mail.controller",
           "[mail] backfill upsert failed:",
-          safeErrorMessage(err),
+          safeErrorMessage(err), err,
         );
       }
     }
@@ -478,12 +482,12 @@ export async function scanMailInstall(c: Context) {
     // Read from the DB, since the webmail is a project — a re-adopted box whose
     // openship DB was rebuilt correctly reads "not deployed": the container may
     // still be running, but nothing here manages or can redeploy it.
-    const mailRecord = await repos.mailServer.get(serverId).catch(() => undefined);
+    const mailRecord = await repos.mailServer.get(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller"); return undefined; });
     const webmailProject = await resolveLinkedWebmailProject(
       ctx.organizationId,
       serverId,
       mailRecord?.webmailProjectId ?? null,
-    ).catch(() => null);
+    ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller"); return null; });
     return c.json({
       serverId,
       iredmailInstalled,
@@ -495,6 +499,7 @@ export async function scanMailInstall(c: Context) {
       adoptable: iredmailInstalled || !!state?.domain,
     });
   } catch (err) {
+    observeCaughtError(err, "api/modules/mail/mail.controller");
     return c.json({ error: `Scan failed: ${safeErrorMessage(err)}` }, 502);
   }
 }
@@ -555,6 +560,7 @@ export async function adoptMailServer(c: Context) {
     });
     return c.json({ success: true, serverId, domain, completed });
   } catch (err) {
+    observeCaughtError(err, "api/modules/mail/mail.controller");
     return c.json({ error: `Adopt failed: ${safeErrorMessage(err)}` }, 502);
   }
 }
@@ -580,7 +586,8 @@ async function augmentStateWithHostRecords(
   let server;
   try {
     server = await repos.server.get(serverId);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller");
     return state;
   }
   if (!server?.sshHost) return state;
@@ -629,10 +636,10 @@ async function resolveHostIPs(
 
   // Hostname - resolve both families independently. allSettled so a
   // missing AAAA doesn't kill the whole lookup.
-  const [v4, v6] = await Promise.allSettled([
+  const [v4, v6] = await observedAllSettled([
     dnsLookup(host, { family: 4 }),
     dnsLookup(host, { family: 6 }),
-  ]);
+  ], "api/modules/mail/mail.controller");
   return {
     ipv4: v4.status === "fulfilled" ? v4.value.address : null,
     ipv6: v6.status === "fulfilled" ? v6.value.address : null,
@@ -696,7 +703,7 @@ function validateSetupConfig(config: IRedMailConfig | undefined): string | null 
 export async function startSetup(c: Context) {
   if (env.CLOUD_MODE) return c.json({ error: "Not available" }, 404);
 
-  const body = await c.req.json().catch(() => ({}));
+  const body = await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller"); return ({}); });
   const serverId = body.serverId as string | undefined;
   const domain = body.domain as string | undefined;
   const startStep = Math.max(1, Math.min(TOTAL_STEPS, Number(body.startStep) || 1));
@@ -754,9 +761,9 @@ export async function startSetup(c: Context) {
     reservation = await reserveMailSetup(serverId, domain);
   } catch (err) {
     if (active === session) active = null;
-    console.error(
+    errorDiagnostics.error("api/modules/mail/mail.controller",
       "[mail] failed to reserve mail-server setup:",
-      safeErrorMessage(err),
+      safeErrorMessage(err), err,
     );
     return c.json(
       { error: "Could not reserve mail setup. Please try again." },
@@ -805,6 +812,7 @@ export async function startSetup(c: Context) {
         state = makeFreshState(serverId, domain);
       }
     } catch (err) {
+      observeCaughtError(err, "api/modules/mail/mail.controller");
       await fail(
         `Could not read state from server: ${err instanceof Error ? err.message : "ssh error"}`,
       );
@@ -829,7 +837,9 @@ export async function startSetup(c: Context) {
       }
       stream
         .writeSSE({ event: "log", data: JSON.stringify({ stepId, level, message }) })
-        .catch(() => {});
+        .catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller");
+        });
     };
 
     /**
@@ -854,7 +864,7 @@ export async function startSetup(c: Context) {
       await repos.mailServer
         .setResumeStep(serverId, state.resumeStep ?? null)
         .catch((err) =>
-          console.warn("[mail] setResumeStep failed:", safeErrorMessage(err)),
+          errorDiagnostics.warn("api/modules/mail/mail.controller", "[mail] setResumeStep failed:", safeErrorMessage(err), err),
         );
     };
 
@@ -986,6 +996,7 @@ export async function startSetup(c: Context) {
             ),
           ]);
         } catch (err) {
+          observeCaughtError(err, "api/modules/mail/mail.controller");
           const message = err instanceof Error ? err.message : "Step execution failed";
           result = { stepId, success: false, message };
           log(stepId, "error", message);
@@ -1074,9 +1085,9 @@ export async function startSetup(c: Context) {
       try {
         await repos.mailServer.markInstalled(serverId, domain);
       } catch (err) {
-        console.warn(
+        errorDiagnostics.warn("api/modules/mail/mail.controller",
           "[mail] failed to stamp installedAt on mail-server record:",
-          safeErrorMessage(err),
+          safeErrorMessage(err), err,
         );
       }
 
@@ -1106,7 +1117,7 @@ export async function startSetup(c: Context) {
           }),
         });
       } catch (err) {
-        console.warn(
+        errorDiagnostics.warn("api/modules/mail/mail.controller",
           `[mail.install] ensureOpenshipPlatformMailbox failed for ${serverId}:`,
           err,
         );
@@ -1131,11 +1142,13 @@ export async function startSetup(c: Context) {
         }),
       });
     } catch (err) {
+      observeCaughtError(err, "api/modules/mail/mail.controller");
       const message = err instanceof Error ? err.message : "Setup failed";
       await fail(message);
       try {
         await halt({ errorMessage: message });
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller");
         active = null;
       }
     }
@@ -1198,7 +1211,7 @@ export async function cancelSetup(c: Context) {
 export async function acknowledgeDns(c: Context) {
   if (env.CLOUD_MODE) return c.json({ error: "Not available" }, 404);
 
-  const body = await c.req.json().catch(() => ({}));
+  const body = await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller"); return ({}); });
   const serverId = body.serverId as string | undefined;
   if (!serverId) return c.json({ error: "serverId is required" }, 400);
 
@@ -1221,6 +1234,7 @@ export async function acknowledgeDns(c: Context) {
       }
     });
   } catch (err) {
+    observeCaughtError(err, "api/modules/mail/mail.controller");
     return c.json(
       { error: err instanceof Error ? err.message : "DNS acknowledge failed" },
       400,
@@ -1246,7 +1260,7 @@ export async function acknowledgeDns(c: Context) {
 export async function acknowledgePtr(c: Context) {
   if (env.CLOUD_MODE) return c.json({ error: "Not available" }, 404);
 
-  const body = await c.req.json().catch(() => ({}));
+  const body = await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller"); return ({}); });
   const serverId = body.serverId as string | undefined;
   if (!serverId) return c.json({ error: "serverId is required" }, 400);
 
@@ -1269,6 +1283,7 @@ export async function acknowledgePtr(c: Context) {
       }
     });
   } catch (err) {
+    observeCaughtError(err, "api/modules/mail/mail.controller");
     return c.json(
       { error: err instanceof Error ? err.message : "PTR acknowledge failed" },
       400,
@@ -1289,7 +1304,7 @@ export async function acknowledgePtr(c: Context) {
 export async function resetSetup(c: Context) {
   if (env.CLOUD_MODE) return c.json({ error: "Not available" }, 404);
 
-  const body = await c.req.json().catch(() => ({}));
+  const body = await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller"); return ({}); });
   const serverId = body.serverId as string | undefined;
   if (!serverId) return c.json({ error: "serverId is required" }, 400);
 
@@ -1311,6 +1326,7 @@ export async function resetSetup(c: Context) {
   try {
     await sshManager.withExecutor(serverId, (executor) => clearState(executor));
   } catch (err) {
+    observeCaughtError(err, "api/modules/mail/mail.controller");
     return c.json(
       { error: err instanceof Error ? err.message : "Reset failed" },
       500,
@@ -1323,9 +1339,9 @@ export async function resetSetup(c: Context) {
   try {
     await repos.mailServer.remove(serverId);
   } catch (err) {
-    console.warn(
+    errorDiagnostics.warn("api/modules/mail/mail.controller",
       "[mail] failed to drop mail-server record after reset:",
-      safeErrorMessage(err),
+      safeErrorMessage(err), err,
     );
   }
   return c.json({ ok: true });
@@ -1414,7 +1430,7 @@ export async function saveMailBackupPolicy(c: Context) {
     return c.json({ error: "Mail server is not registered / has no domain" }, 404);
   }
 
-  const body = (await c.req.json().catch(() => ({}))) as {
+  const body = (await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller"); return ({}); })) as {
     destinationId?: string;
     messageData?: boolean;
     keys?: boolean;
@@ -1547,7 +1563,7 @@ export async function listMailBackupRuns(c: Context) {
 export async function setPostmasterPassword(c: Context) {
   if (env.CLOUD_MODE) return c.json({ error: "Not available" }, 404);
 
-  const body = await c.req.json().catch(() => ({}));
+  const body = await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail.controller"); return ({}); });
   const serverId = body.serverId as string | undefined;
   const password = body.password as string | undefined;
 
@@ -1589,6 +1605,7 @@ export async function setPostmasterPassword(c: Context) {
       await updatePostmasterPassword(executor, state.domain, password);
     });
   } catch (err) {
+    observeCaughtError(err, "api/modules/mail/mail.controller");
     return c.json(
       { error: err instanceof Error ? err.message : "Password change failed" },
       500,
@@ -1657,7 +1674,7 @@ export async function getHealth(c: Context) {
     const message = err instanceof Error ? err.message : "Health check failed";
     // Same reason as the mail-admin funnel: this 500 is answered here, so `app.onError`
     // never logs it and every Health-tab failure was invisible in the API log.
-    console.error(`[MAIL HEALTH ERROR] ${requestTag(c)}`, err);
+    errorDiagnostics.error("api/modules/mail/mail.controller", `[MAIL HEALTH ERROR] ${requestTag(c)}`, err);
     return c.json({ error: message }, 500);
   }
 }

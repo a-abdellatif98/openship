@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { createHash, randomUUID } from "node:crypto";
 import { Value } from "@sinclair/typebox/value";
 import {
@@ -48,7 +49,8 @@ export class CloudAnalytics {
         !config.excludedOrganizations.has(actor.organizationId ?? "") &&
         !config.excludedUsers.has(actor.userId ?? "")
       );
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud-analytics/service");
       return false;
     }
   }
@@ -56,13 +58,14 @@ export class CloudAnalytics {
     if (Date.now() - this.lastWarning < 60_000) return;
     this.lastWarning = Date.now();
     // No provider response, event payload, or token in logs.
-    console.warn("[cloud-analytics] Delivery/storage unavailable; pending deliveries will retry.");
+    errorDiagnostics.warn("platform/engine/modules/cloud-analytics/service", "[cloud-analytics] Delivery/storage unavailable; pending deliveries will retry.");
   }
   private async safely(work: () => Promise<void>) {
     try {
       await work();
       return true;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud-analytics/service");
       this.warn();
       return false;
     }
@@ -441,7 +444,8 @@ export class CloudAnalytics {
           lease,
           this.now(),
         );
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud-analytics/service");
         const attempts = Math.max(...batch.map((row) => row.attempts));
         const delay = Math.min(60 * 60_000, 30_000 * 2 ** Math.min(attempts, 7));
         await this.options.repo.retry(
@@ -451,7 +455,8 @@ export class CloudAnalytics {
         );
         this.warn();
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/cloud-analytics/service");
       this.warn();
     } finally {
       this.flushing = false;

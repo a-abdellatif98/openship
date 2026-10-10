@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -102,9 +103,9 @@ export function BackupTab({ serverId, domain }: { serverId: string; domain: stri
     setLoading(true);
     try {
       const [destRes, polRes, runsRes] = await Promise.all([
-        backupDestinationsApi.list().catch(() => ({ data: [] as BackupDestinationSummary[] })),
-        mailAdminApi.backup.getPolicy(serverId).catch(() => ({ policy: null })),
-        mailAdminApi.backup.listRuns(serverId).catch(() => ({ runs: [] as BackupRun[] })),
+        backupDestinationsApi.list().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/backup-tab"); return ({ data: [] as BackupDestinationSummary[] }); }),
+        mailAdminApi.backup.getPolicy(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/backup-tab"); return ({ policy: null }); }),
+        mailAdminApi.backup.listRuns(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/backup-tab"); return ({ runs: [] as BackupRun[] }); }),
       ]);
       setDestinations(destRes.data);
       setRuns(runsRes.runs);
@@ -188,7 +189,9 @@ export function BackupTab({ serverId, domain }: { serverId: string; domain: stri
         void mailAdminApi.backup
           .listRuns(serverId)
           .then((r) => setRuns(r.runs))
-          .catch(() => {});
+          .catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/backup-tab");
+          });
       }, 1200);
     } catch (err) {
       showToast(
@@ -514,7 +517,9 @@ export function BackupTab({ serverId, domain }: { serverId: string; domain: stri
             void mailAdminApi.backup
               .listRuns(serverId)
               .then((r) => setRuns(r.runs))
-              .catch(() => {});
+              .catch((diagnosticFailure) => {
+                observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/backup-tab");
+              });
           }}
         />
       )}

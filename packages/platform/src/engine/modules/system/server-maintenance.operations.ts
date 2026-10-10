@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { OperationError } from "@repo/contracts";
 import { repos } from "@repo/db";
 import type { RateLimitConfig } from "@repo/adapters";
@@ -25,6 +26,7 @@ export const serverMaintenanceResources: Pick<ServerDependencies["resources"],
     const server = await requireSelfHostedServer(ctx, id);
     await assertServerExecution(server);
     const modules = await scanServer(server).catch((err: unknown) => {
+      observeCaughtError(err, "platform/engine/modules/system/server-maintenance.operations");
       throw new Error(`scan failed: ${(err as Error).message}`);
     });
     audit.recordAsync(operationAuditContext(ctx), { eventType: "server:write", resourceType: "server", resourceId: id });
@@ -45,6 +47,7 @@ export const serverMaintenanceResources: Pick<ServerDependencies["resources"],
     try {
       config = await withOpenRestyRouting(id, routing => routing.getRateLimitConfig());
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/system/server-maintenance.operations");
       return rateLimitFailure(`Failed to read OpenResty rate limit config: ${safeErrorMessage(err)}`);
     }
     if (!config) return rateLimitFailure("Failed to parse OpenResty rate limit config");

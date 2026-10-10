@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import {
   listNamespaceResources,
@@ -242,10 +243,10 @@ export class KubernetesRuntime implements RuntimeAdapter {
         await builder
           .removeImage(image)
           .catch((error) =>
-            logger?.log(
+            { observeCaughtError(error, "adapters/runtime/kubernetes"); return logger?.log(
               `Local build image cleanup deferred: ${error instanceof Error ? error.message : String(error)}\n`,
               "warn",
-            ),
+            ); },
           );
       }
     }
@@ -518,7 +519,8 @@ export class KubernetesRuntime implements RuntimeAdapter {
       await this.activateService(name);
       return { deploymentId: config.deploymentId, containerId: this.ref(name), status: "running" };
     } catch (error) {
-      const observed = await this.status(this.ref(name)).catch(() => null);
+      observeCaughtError(error, "adapters/runtime/kubernetes");
+      const observed = await this.status(this.ref(name)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/runtime/kubernetes"); return null; });
       const detail = observed?.pods
         .filter((pod) => !pod.ready)
         .map((pod) => `${pod.nodeName ?? pod.name}: ${pod.phase}`)
@@ -528,6 +530,7 @@ export class KubernetesRuntime implements RuntimeAdapter {
       try {
         await this.destroy(this.ref(name));
       } catch (cleanup) {
+        observeCaughtError(cleanup, "adapters/runtime/kubernetes");
         onLog?.({
           timestamp: new Date().toISOString(),
           level: "warn",
@@ -1067,6 +1070,7 @@ export class KubernetesRuntime implements RuntimeAdapter {
                 onLog(entry);
               }
             } catch (error) {
+              observeCaughtError(error, "adapters/runtime/kubernetes");
               if (isMissing(error) || followSignal.aborted) return;
               if (error instanceof KubernetesApiError && [401, 403].includes(error.statusCode)) {
                 onLog({
@@ -1077,9 +1081,13 @@ export class KubernetesRuntime implements RuntimeAdapter {
                 return;
               }
             }
-            await sleep(1000, followSignal).catch(() => {});
+            await sleep(1000, followSignal).catch((diagnosticFailure) => {
+              observeCaughtError(diagnosticFailure, "adapters/runtime/kubernetes");
+            });
           }
-        })().catch(() => {});
+        })().catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/kubernetes");
+        });
       }
     };
     const readPods = async () => {
@@ -1131,6 +1139,7 @@ export class KubernetesRuntime implements RuntimeAdapter {
         }
       }
     })().catch((error) => {
+      observeCaughtError(error, "adapters/runtime/kubernetes");
       if (!signal.aborted)
         onLog({
           timestamp: new Date().toISOString(),
@@ -1201,7 +1210,9 @@ export class KubernetesRuntime implements RuntimeAdapter {
       try {
         this.assertOwned(object);
         acceptable.add(object.metadata.uid!);
-      } catch {}
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/kubernetes");
+      }
     }
     for (let pass = 0; pass < objects.length; pass++) {
       let added = false;

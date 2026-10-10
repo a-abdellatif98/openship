@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Agent } from "node:https";
 import * as acme from "acme-client";
@@ -76,6 +77,7 @@ export function createAcmeDnsProvider(options: AcmeDnsOptions): DnsCertificatePr
     try {
       return await requests.run({ signal: AbortSignal.timeout(90_000), agent }, work);
     } catch (error) {
+      observeCaughtError(error, "adapters/infra/acme-dns");
       const message = safeErrorMessage(error);
       throw new Error(
         options.eabHmacKey ? message.split(options.eabHmacKey).join("[REDACTED]") : message,

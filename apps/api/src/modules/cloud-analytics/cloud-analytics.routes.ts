@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { Value } from "@sinclair/typebox/value";
@@ -49,7 +50,8 @@ r.public(
         : null;
       if (session && !organizationId) return c.body(null, 204);
       await cloudAnalytics.browser({ userId, organizationId }, body as CloudBrowserCapture);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "api/modules/cloud-analytics/cloud-analytics.routes");
       // Session/telemetry outages don't cause toasts or break the page. Never
       // downgrade an unresolvable signed-in session to anonymous activity.
     }

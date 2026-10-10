@@ -4,6 +4,7 @@
  * Called once in kickoffBuild, BEFORE workspace admission: backup workers need
  * that same workspace lock, so waiting inside it would deadlock managed deploys.
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { setTimeout as delay } from "node:timers/promises";
 import { repos } from "@repo/db";
 import {
@@ -42,7 +43,7 @@ export async function firePreDeployBackups(opts: {
   const policies = await repos.backupPolicy.listEnabledPreDeployByProject(opts.projectId);
   if (policies.length === 0) return { enqueued: 0, completed: 0 };
   // Names are only presentation; an unavailable name must not bypass the gate.
-  const services = await repos.service.listByProject(opts.projectId).catch(() => []);
+  const services = await repos.service.listByProject(opts.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/triggers/pre-deploy"); return []; });
   const names = new Map(services.map((service) => [service.id, service.name]));
   const log = (message: string, level?: LogEntry["level"]) => {
     const line = `[pre-deploy-backup] ${message}`;
@@ -84,6 +85,7 @@ export async function firePreDeployBackups(opts: {
         if (runIds.length === 0) throw new Error("no backup runs were created");
         for (const id of runIds) pending.set(id, target);
       } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/backups/triggers/pre-deploy");
         throwIfDeploymentCancelled(opts.signal);
         const message = `policy ${target.policyId}: ${safeErrorMessage(error)}`;
         failures.push({ target, message });
@@ -198,6 +200,7 @@ export async function firePreDeployBackups(opts: {
       );
       throwIfDeploymentCancelled(opts.signal);
     } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/backups/triggers/pre-deploy");
       throwIfDeploymentCancelled(opts.signal);
       log(`No backup decision received; deployment stopped: ${safeErrorMessage(error)}`, "warn");
       throw new Error(`Pre-deploy backup decision failed: ${safeErrorMessage(error)}`);

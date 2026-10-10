@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import type { LogEntry } from "@repo/adapters";
 import * as sessionManager from "./session-manager";
@@ -93,7 +94,7 @@ export async function getBuildSessionStatus(deploymentId: string) {
   const targetServer = snapshot?.serverId
     ? await repos.server
         .getInOrganization(snapshot.serverId, dep.organizationId)
-        .catch(() => null)
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/build-status.service"); return null; })
     : null;
 
   // Derive step progress from persisted log entries when no active session
@@ -142,15 +143,15 @@ export async function getBuildSessionStatus(deploymentId: string) {
   }
 
   const [deploymentServices, projectServices] = await Promise.all([
-    repos.service.listByDeployment(deploymentId).catch(() => []),
-    repos.service.listByProject(project.id).catch(() => []),
+    repos.service.listByDeployment(deploymentId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/build-status.service"); return []; }),
+    repos.service.listByProject(project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/build-status.service"); return []; }),
   ]);
   // A terminal outcome can be persisted before the worker's outer finally
   // releases its durable execution lease. Keep the UI's terminal projection,
   // but let SDK callers wait until redeployment and teardown are safe too.
   const completionPending =
     terminalBuildStatus(effectiveStatus) !== undefined
-      ? await repos.deployment.hasLiveBuildExecution(dep.id, project.id).catch(() => true)
+      ? await repos.deployment.hasLiveBuildExecution(dep.id, project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/build-status.service"); return true; })
       : false;
   const cancellationPending = effectiveStatus === "cancelled" && completionPending;
   const isServiceDeployment =

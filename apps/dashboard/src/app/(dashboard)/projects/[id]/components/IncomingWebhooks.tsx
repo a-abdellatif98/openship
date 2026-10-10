@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -43,7 +44,8 @@ export function IncomingWebhooks() {
     try {
       const res = await incomingWebhooksApi.list(projectId);
       setHooks(res?.data ?? []);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/IncomingWebhooks");
       setHooks([]);
     } finally {
       setLoading(false);
@@ -283,7 +285,8 @@ function CopyField({
       await navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/IncomingWebhooks");
       /* clipboard unavailable */
     }
   };
@@ -350,7 +353,8 @@ function CreateHookModal({
           .map((service) => ({ id: service.id, name: service.name })),
       );
       setServiceOptionsState("ready");
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/IncomingWebhooks");
       setServices([]);
       setServiceOptionsState("error");
     }
@@ -361,7 +365,7 @@ function CreateHookModal({
     jobsApi
       .list()
       .then((r) => setJobs((r?.data ?? []).map((j) => ({ key: j.key, label: j.label }))))
-      .catch(() => setJobs([]));
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/IncomingWebhooks"); return setJobs([]); });
   }, [loadServices]);
 
   const canSubmit = canSubmitIncomingWebhook({

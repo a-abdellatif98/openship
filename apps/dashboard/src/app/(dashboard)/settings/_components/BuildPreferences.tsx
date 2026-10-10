@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import { useState, useEffect, useCallback } from "react";
@@ -30,7 +31,8 @@ export function BuildPreferences() {
       setLoading(true);
       const res = await settingsApi.get();
       if (res?.buildMode) setBuildMode(res.buildMode);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/BuildPreferences");
       /* silent */
     } finally {
       setLoading(false);
@@ -49,7 +51,8 @@ export function BuildPreferences() {
     try {
       await settingsApi.updateBuildMode(mode);
       showToast(interpolate(t.settings.buildPreferences.toast.setTo, { mode }), "success", t.settings.common.toast.settings);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/BuildPreferences");
       setBuildMode(prev);
       showToast(t.settings.buildPreferences.toast.failed, "error", t.settings.common.toast.settings);
     } finally {

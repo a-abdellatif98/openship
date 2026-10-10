@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect, useState } from "react";
@@ -48,7 +49,8 @@ export function ServiceOverview({ service, container, projectId, deployTarget, o
     try {
       await copyText(value);
       setCopied(value);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/services/ServiceOverview");
       showToast(copy.networking.copyFailed, "error");
     }
   };

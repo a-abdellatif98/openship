@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import {
@@ -116,7 +117,8 @@ async function managementAddresses(host: string): Promise<string[]> {
   try {
     const resolved = await lookup(host, { family: 4, all: true });
     return resolved.map((entry) => entry.address).filter(validWireGuardEndpoint);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/system/managed-network.operations");
     return [];
   }
 }
@@ -287,6 +289,7 @@ export async function planNetwork(
           "Host interfaces, Docker networks, VPN routes, DNS addresses, transport MTU, and firewall rules inspected.",
         );
       } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/system/managed-network.operations");
         const detail = checkError(
           inspectionError && inspectionError.cause === error ? inspectionError : error,
         );
@@ -426,7 +429,8 @@ export async function runManagedNetwork(
         if (controllerSignal?.aborted) return;
         if (!(await repos.serverCluster.heartbeatOperation(id, generation))) lostLease = true;
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/managed-network.operations");
         lostLease = true;
       });
   }, 20_000);
@@ -437,7 +441,7 @@ export async function runManagedNetwork(
     const snapshotReport = structuredClone(report);
     const snapshotStatus = status;
     progress = progress
-      .catch(() => undefined)
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/managed-network.operations"); return undefined; })
       .then(async () => {
         await repos.serverCluster.progressOperation(
           id,
@@ -452,7 +456,8 @@ export async function runManagedNetwork(
   };
   const logTimer = setInterval(() => {
     if (dirtyLogs)
-      void persist().catch(() => {
+      void persist().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/managed-network.operations");
         lostLease = true;
       });
   }, 1000);
@@ -514,7 +519,8 @@ export async function runManagedNetwork(
               return;
             await managedNetworkTools.finalize(executor, transaction(host.serverId));
           });
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "platform/engine/modules/system/managed-network.operations");
           /* An offline host retains its root-only recovery files. */
         }
       },
@@ -543,6 +549,7 @@ export async function runManagedNetwork(
             "The previous network configuration was restored.",
           );
         } catch (error) {
+          observeCaughtError(error, "platform/engine/modules/system/managed-network.operations");
           host.stage = "failed";
           host.error = checkError(error).message;
           for (const active of host.steps ?? [])
@@ -788,6 +795,7 @@ export async function runManagedNetwork(
             "All WireGuard peers completed an encrypted handshake.",
           );
         } catch (error) {
+          observeCaughtError(error, "platform/engine/modules/system/managed-network.operations");
           host.stage = "failed";
           host.error = checkError(error).message;
           if (!report!.hosts.some((item) => item.serverId === member.serverId))
@@ -954,27 +962,29 @@ export async function runManagedNetwork(
     // cleanup failure cannot turn a committed, verified network into a failed one.
     await finalize();
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/system/managed-network.operations");
     const message = checkError(error).message;
     for (const host of hosts)
       for (const active of host.steps ?? [])
         if (active.status === "running") {
           updateNetworkSetupStep(host, active.id, "failed", host.error || message);
         }
-    if (await repos.serverCluster.operationActive(id, generation).catch(() => false)) {
+    if (await repos.serverCluster.operationActive(id, generation).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/managed-network.operations"); return false; })) {
       try {
         await rollback(message);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/managed-network.operations");
         await repos.serverCluster
           .progressOperation(id, generation, "needs_attention", hosts, report, message)
           .then(() => notifyNetworkSetup(ctx.organizationId, "operation", id))
-          .catch(() => undefined);
+          .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/managed-network.operations"); return undefined; });
       }
     }
   } finally {
     clearInterval(interval);
     clearInterval(logTimer);
     await heartbeat;
-    await progress.catch(() => undefined);
+    await progress.catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/managed-network.operations"); return undefined; });
   }
 }
 

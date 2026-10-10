@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { Context, Next } from "hono";
 import { randomUUID } from "node:crypto";
 import { repos } from "@repo/db";
@@ -203,7 +204,8 @@ export async function resolveBearerIdentity(
   let session: Awaited<ReturnType<typeof auth.api.getMcpSession>>;
   try {
     session = await auth.api.getMcpSession({ headers });
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/middleware/auth");
     return null; // not an OAuth token (or introspection failed)
   }
   if (!session) return null;
@@ -293,7 +295,9 @@ async function tryBearerAuth(
 
   // Usage tracking only for a real token row (skip the synthetic unbound key).
   if (resolved.hasBinding) {
-    void repos.personalAccessToken.touchLastUsed(resolved.tokenId).catch(() => {});
+    void repos.personalAccessToken.touchLastUsed(resolved.tokenId).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "api/middleware/auth");
+    });
   }
 
   const patScope = resolved.scoped ? { tokenId: resolved.tokenId, scoped: true } : undefined;
@@ -328,7 +332,7 @@ export async function authMiddleware(c: Context, next: Next) {
     // failure, etc.) MUST NOT silently fall through to the zero-auth
     // path. Return a 503 with a typed code so callers can distinguish
     // "no session" (cookie missing) from "session machinery broken".
-    console.error("[auth] getSession threw:", err);
+    errorDiagnostics.error("api/middleware/auth", "[auth] getSession threw:", err);
     return c.json({ error: "Authentication service unavailable", code: "AUTH_UNAVAILABLE" }, 503);
   }
 
@@ -377,7 +381,7 @@ export async function authMiddleware(c: Context, next: Next) {
   const gate = await zeroAuthAllowed(c);
   if (!gate.ok) {
     if (!gate.reason.startsWith("authMode=")) {
-      console.warn(`[auth] zero-auth refused: ${gate.reason}`);
+      errorDiagnostics.warn("api/middleware/auth", `[auth] zero-auth refused: ${gate.reason}`);
     }
     return c.json({ error: "Unauthorized" }, 401);
   }
@@ -474,7 +478,7 @@ async function applyAuthedRequest(
       scopeMode: fixedScope ? "fixed" : "resource",
       clientIp,
       userAgent,
-      traceId: randomUUID(),
+      traceId: c.get("diagnosticRequestId") ?? randomUUID(),
       hono: c,
     }),
   );

@@ -5,6 +5,7 @@
  * SSL operations live in ssl.service.ts.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findProjectDeployment } from "../../lib/active-deployment";
 import { withProjectRuntimeLock } from "../../lib/project-runtime-lock";
 import { existsSync, readFileSync } from "node:fs";
@@ -310,10 +311,10 @@ async function describeRestoreConsequences(
       untouchedServices,
     };
   } catch (err) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/deployments/deployment.service",
       `[rollback] restore preview for ${target.id} could not describe its consequences: ${
         err instanceof Error ? err.message : String(err)
-      }`,
+      }`, err,
     );
     return { untouchedServices: [] };
   }
@@ -490,7 +491,8 @@ function readInstanceLog(tail?: number): LogEntry[] {
   let text: string;
   try {
     text = readFileSync(path, "utf8");
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/deployment.service");
     return [];
   }
   const lines = text.split(/\r?\n/).filter((l) => l.length > 0);

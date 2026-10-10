@@ -12,6 +12,7 @@
  * custom headers through the dashboard's API proxy.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getApiBaseUrl } from "@/lib/api";
 import { endpoints } from "@/lib/api/endpoints";
@@ -104,7 +105,7 @@ export function useProjectUsageStream(
       // can't measure usage. Surface its message instead of "Connection failed",
       // and don't retry — reconnecting won't create a deployment.
       if (res.status === 404) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        const body = (await res.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/hooks/useProjectUsageStream"); return null; })) as { error?: string } | null;
         setError(body?.error ?? "No active deployment");
         return;
       }
@@ -153,6 +154,7 @@ export function useProjectUsageStream(
         }
       }
     } catch (err) {
+      observeCaughtError(err, "dashboard/hooks/useProjectUsageStream");
       if (abort.signal.aborted) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {

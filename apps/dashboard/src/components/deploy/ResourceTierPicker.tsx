@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   MIN_CPU_CORES, MIN_MEMORY_MB, RESOURCE_TIER_ORDER, RESOURCE_TIER_SPECS,
@@ -97,7 +98,8 @@ export function ResourceTierPicker({ value, values, requiresLimit = false, capac
         if (useModes && tier === "unlimited") fullRef.current?.focus();
         else if (tier === "custom") customRef.current?.focus();
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/deploy/ResourceTierPicker");
       setSaveError(true);
     }
   };

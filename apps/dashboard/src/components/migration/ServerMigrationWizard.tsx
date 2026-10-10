@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -465,7 +466,9 @@ export function ServerMigrationWizard({
   // terminal/failed run it's just "Close".
   const cancelRun = () => {
     const active = run && !["succeeded", "failed", "rolled_back"].includes(run.status);
-    if (migrationId && active) void dockerMigrationApi.cancel(migrationId).catch(() => {});
+    if (migrationId && active) void dockerMigrationApi.cancel(migrationId).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "dashboard/components/migration/ServerMigrationWizard");
+    });
     close();
   };
 
@@ -617,7 +620,7 @@ export function ServerMigrationWizard({
           // Recovered, but an operator's proxy is still misconfigured — say so
           // somewhere rather than hiding it behind a scan that silently got slower.
           // The aborted scan also keeps running server-side; it's read-only.
-          console.warn(`[migration] ${(e as Error).message} — falling back to a plain scan`);
+          errorDiagnostics.warn("dashboard/components/migration/ServerMigrationWizard", `[migration] ${(e as Error).message} — falling back to a plain scan`, e);
           return (await dockerMigrationApi.scan(selectedId, { flatDocker: flat })).stack;
         });
       if (stale()) return;
@@ -776,7 +779,8 @@ export function ServerMigrationWizard({
         if (proj?.services.has(svcUid(s))) map[svcUid(s)] = autoMatchCompose(s.name, names);
       }
       setProjectCompose(projectId, services, map);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/migration/ServerMigrationWizard");
       if (isCurrent()) setProjectCompose(projectId, [], {});
     } finally {
       if (isCurrent()) setParsingRepo((current) => (current === projectId ? null : current));
@@ -1434,7 +1438,9 @@ export function ServerMigrationWizard({
         setConfirmToken(res.confirmationToken);
         setRun(res.run);
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/migration/ServerMigrationWizard");
+      });
     return () => {
       live = false;
     };
@@ -1497,7 +1503,8 @@ export function ServerMigrationWizard({
           setConfirmToken(res.run.confirmationToken ?? null);
           setProgress(res.progress ?? null);
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/migration/ServerMigrationWizard");
         /* transient — keep polling */
       } finally {
         fetching = false;
@@ -1552,7 +1559,8 @@ export function ServerMigrationWizard({
               }))
             : undefined,
         });
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/migration/ServerMigrationWizard");
         /* transient */
       }
     };
@@ -3452,7 +3460,8 @@ function PartialResolution({ runId, pending }: { runId: string; pending: Pending
     try {
       await dockerMigrationApi.resume(runId, { overrides: cleanOverrides, skip });
       // Status flips server-side; the parent progress poll picks it up.
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/migration/ServerMigrationWizard");
       setBusy(false);
     }
   };

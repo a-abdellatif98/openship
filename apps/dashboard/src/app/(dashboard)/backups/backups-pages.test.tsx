@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { errorReporter } from "@repo/core/diagnostics";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -156,6 +157,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
   vi.useRealTimers();
   vi.restoreAllMocks();

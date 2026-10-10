@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { exitCommand, rethrowCommandExit } from "./command-exit";
 /**
  * Small per-command helpers shared across the cross-cutting commands.
@@ -41,7 +42,9 @@ export function printResult(work: () => Promise<unknown>): Promise<void>;
 export function printResult<T>(work: () => Promise<T>, render: (value: T) => void): Promise<void>;
 export async function printResult<T>(work: () => Promise<T>, render: (value: T) => void = printJson): Promise<void> {
   try { render(await work()); }
-  catch (error) { fail(error); }
+  catch (error) {
+    observeCaughtError(error, "cli/lib/cmd-helpers");
+ fail(error); }
 }
 
 /** Host and container execution have the same output and shell exit contract. */

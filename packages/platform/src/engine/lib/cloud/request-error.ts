@@ -12,6 +12,7 @@
  * to result-semantics would ripple through `syncManagedEdgeRoutes`' per-domain
  * best-effort loop for no gain.
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 export class CloudRequestError extends Error {
   readonly status: number;
   /** Machine-readable code from the upstream, when it sent one. Never invented. */
@@ -44,7 +45,7 @@ export async function cloudRequestError(
   res: Response,
   label: string,
 ): Promise<CloudRequestError> {
-  const text = await res.text().catch(() => "");
+  const text = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/request-error"); return ""; });
   let error: string | undefined;
   let code: string | undefined;
   try {

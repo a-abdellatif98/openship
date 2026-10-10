@@ -26,6 +26,7 @@
  * `activeOrganizationId`. Reading any of them reintroduces the bypass.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context, Next } from "hono";
 import { instanceAuthorization } from "../lib/instance-authorization";
 
@@ -44,7 +45,8 @@ export function requireInstanceAdmin() {
     let ctx: RequestContext;
     try {
       ctx = getRequestContext(c);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "api/middleware/instance-admin");
       // Route mounted without authMiddleware — fail loud rather than open.
       return c.json({ error: "Unauthorized" }, 401);
     }

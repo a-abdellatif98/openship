@@ -19,6 +19,7 @@
  * a public target yet simply isn't ready to hold a free domain either.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { Platform } from "@repo/adapters";
 import { safeErrorMessage } from "@repo/core";
 import { repos } from "@repo/db";
@@ -77,7 +78,7 @@ export async function ensureEdgeChallengeReady(
     // Never propagates: this is preparation for a feature the deploy does not depend
     // on, and the verify flow re-attempts it with the token in hand anyway.
     const message = safeErrorMessage(err);
-    console.warn(`[edge-challenge] could not prepare ${host}: ${message}`);
+    errorDiagnostics.warn("platform/engine/lib/edge-challenge", `[edge-challenge] could not prepare ${host}: ${message}`, err);
     return { ready: false, host, reason: message };
   }
 }
@@ -98,8 +99,8 @@ async function owedTokens(organizationId: string, host: string): Promise<string[
     );
     return repos.edgeTargetVerification.servableTokens(row);
   } catch (err) {
-    console.warn(
-      `[edge-challenge] could not read owed tokens for ${host}: ${safeErrorMessage(err)}`,
+    errorDiagnostics.warn("platform/engine/lib/edge-challenge",
+      `[edge-challenge] could not read owed tokens for ${host}: ${safeErrorMessage(err)}`, err,
     );
     return [];
   }

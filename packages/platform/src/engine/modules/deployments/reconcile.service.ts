@@ -21,6 +21,7 @@
  * failure never advances the project pointer.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos, type Deployment, type Project } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
@@ -80,7 +81,7 @@ async function reconcileDeploymentUnlocked(deploymentId: string): Promise<Reconc
   if (!isCloud && serverId) {
     const inOrg = await repos.server
       .getInOrganization(serverId, dep.organizationId)
-      .catch(() => undefined);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/reconcile.service"); return undefined; });
     if (!inOrg) return "unreachable";
     const probe = createReachabilityProbe();
     if (!(await probe.isReachable(serverId))) return "unreachable";
@@ -93,7 +94,7 @@ async function reconcileDeploymentUnlocked(deploymentId: string): Promise<Reconc
     if (isConnectionLoss(err)) return "unreachable";
     // Server removed / unresolvable — can't verify. Leave reconciling (a
     // redeploy supersedes it; task B17) rather than guessing failed.
-    console.warn(`[reconcile] ${dep.id}: cannot resolve runtime — ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/modules/deployments/reconcile.service", `[reconcile] ${dep.id}: cannot resolve runtime — ${safeErrorMessage(err)}`, err);
     return "unreachable";
   }
 
@@ -147,6 +148,7 @@ async function reconcileDeploymentUnlocked(deploymentId: string): Promise<Reconc
         const info = await runtime.getContainerInfo(t.containerId);
         state = info.status === "running" ? "running" : info.status === "missing" ? "missing" : "down";
       } catch (err) {
+        observeCaughtError(err, "platform/engine/modules/deployments/reconcile.service");
         // A connection error mid-inspect means the host went away again — abort
         // the whole reconcile and retry later rather than recording half-truths.
         if (isConnectionLoss(err)) return "unreachable";
@@ -161,7 +163,9 @@ async function reconcileDeploymentUnlocked(deploymentId: string): Promise<Reconc
           .update(t.rowId, {
             status: state === "running" ? "success" : state === "missing" ? "missing" : "failure",
           })
-          .catch(() => {});
+          .catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/reconcile.service");
+          });
       }
     }
 
@@ -228,6 +232,6 @@ export function triggerReconcile(deploymentId: string): void {
   if (inFlight.has(deploymentId)) return;
   inFlight.add(deploymentId);
   void reconcileDeployment(deploymentId)
-    .catch((err) => console.error(`[reconcile] on-demand ${deploymentId} failed:`, safeErrorMessage(err)))
+    .catch((err) => errorDiagnostics.error("platform/engine/modules/deployments/reconcile.service", `[reconcile] on-demand ${deploymentId} failed:`, safeErrorMessage(err), err))
     .finally(() => inFlight.delete(deploymentId));
 }

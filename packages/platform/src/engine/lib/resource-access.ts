@@ -47,13 +47,18 @@ export function isControlPlaneProject(
   return project?.appTemplateId === "openship";
 }
 
+export function controlPlaneManagementMessage(): string {
+  return process.env.OPENSHIP_INSTANCE_PROJECT_ID
+    ? "This is your active Openship API. Use Settings → Instance → Move back to Desktop before changing its runtime or updating its service images."
+    : "The Openship control plane manages its own runtime — manage it with the CLI on the host (`openship up`, `openship stop`, `openship update`), not from the dashboard.";
+}
+
 export function assertNotControlPlane(
   project: { appTemplateId?: string | null } | null | undefined,
 ): void {
   if (isControlPlaneProject(project)) {
     throw new ForbiddenError(
-      "The Openship control plane manages its own runtime — manage it with the CLI on the host " +
-        "(`openship up`, `openship stop`, `openship update`), not from the dashboard.",
+      controlPlaneManagementMessage(),
     );
   }
 }

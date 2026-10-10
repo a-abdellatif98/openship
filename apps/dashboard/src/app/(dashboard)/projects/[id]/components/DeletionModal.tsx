@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 import React, { useEffect, useState } from "react";
 import { projectsApi } from "@/lib/api";
@@ -76,7 +77,8 @@ export const DeletionModal = ({
       .then((res) => {
         if (!cancelled) setLinkedProjects(res?.data ?? []);
       })
-      .catch(() => { /* informational — a failed read just hides the notice */ });
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DeletionModal"); /* informational — a failed read just hides the notice */ });
     projectsApi
       .deletionPreview(projectId)
       .then((res) => {
@@ -91,7 +93,8 @@ export const DeletionModal = ({
           });
         }
       })
-      .catch(() => { /* preview is informational - silent on failure */ })
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/DeletionModal"); /* preview is informational - silent on failure */ })
       .finally(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
   }, [isOpen, projectId]);

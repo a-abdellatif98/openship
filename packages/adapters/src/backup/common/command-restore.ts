@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createWriteStream, promises as fs } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -144,7 +145,9 @@ export async function pipeRestoreCommand(
           if (localDir) await fs.rm(localDir, { recursive: true, force: true });
         }
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/backup/common/command-restore");
+      });
     throw error;
   } finally {
     clearTimeout(timer);
@@ -200,7 +203,9 @@ export async function receiveCommandArchive(
     },
   });
   const transfer = pipeline(body, counter, { signal: opts?.signal });
-  void transfer.catch(() => {});
+  void transfer.catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "adapters/backup/common/command-restore");
+  });
   try {
     const exit = await pipe(
       safeRestoreCommand(codec, `tar -x -C ${quoted}`, prelude),
@@ -216,6 +221,8 @@ export async function receiveCommandArchive(
   } finally {
     counter.destroy();
     body.destroy();
-    await transfer.catch(() => {});
+    await transfer.catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/backup/common/command-restore");
+    });
   }
 }

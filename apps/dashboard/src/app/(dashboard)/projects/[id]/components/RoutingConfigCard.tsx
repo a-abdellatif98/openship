@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -59,7 +60,8 @@ export function RoutingConfigCard({
     setEdgeLoading(true);
     try {
       setEdge(await projectsApi.getEdgeConfig(id));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/RoutingConfigCard");
       // A box we can't read is not an error worth a toast — the panel says so.
       setEdge({ reachable: false, saved: {}, hosts: [] });
     } finally {

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -28,7 +29,9 @@ export function UpdatesTab() {
     void window.desktop?.config
       ?.get<boolean | undefined>("autoUpdate")
       .then((v) => setAutoUpdate(v === true))
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/UpdatesTab");
+      });
   }, [desktop]);
 
   const toggleAuto = useCallback((v: boolean) => {

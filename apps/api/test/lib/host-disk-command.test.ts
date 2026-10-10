@@ -1,6 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { errorReporter, type ErrorEvent } from "@repo/core/diagnostics";
+
+vi.mock("@repo/platform/engine/config/env", () => ({ env: { CLOUD_MODE: false } }));
+vi.mock("@repo/platform/engine/lib/cache-store/index", () => ({ cacheStore: async () => ({ get: async () => undefined }) }));
+vi.mock("@repo/platform/engine/lib/deployment-runtime", () => ({ resolveServerExecutor: async () => { throw new Error("host unreachable"); } }));
+vi.mock("@repo/platform/engine/lib/server-execution", () => ({ withServerExecution: vi.fn() }));
 
 /**
  * The disk probe is the one place in the capacity path that shells out (free
@@ -45,7 +51,14 @@ describe("host-disk probe", () => {
     expect(execAt).toBeGreaterThan(guardAt);
   });
 
-  it("never throws — an unreachable host reports unknown", () => {
-    expect(src).toMatch(/catch\s*\{\s*return\s*\{\s*\.\.\.UNKNOWN_DISK\s*\}/);
+  it("reports an unreachable host while still returning unknown disk capacity", async () => {
+    const events: ErrorEvent[] = [];
+    await errorReporter.flush();
+    errorReporter.setEnabled(true);
+    errorReporter.setSink(batch => { events.push(...batch); });
+    const { getHostDisk, UNKNOWN_DISK } = await import("@repo/platform/engine/lib/host-disk");
+    await expect(getHostDisk("server-a", "org-a")).resolves.toEqual(UNKNOWN_DISK);
+    await errorReporter.flush();
+    expect(events.some(event => event.error.message === "host unreachable")).toBe(true);
   });
 });

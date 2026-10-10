@@ -430,6 +430,38 @@ describe("teardownProject — force-orphan contract", () => {
     expect(res.canForceOrphan).toBe(true);
   });
 
+  it("keeps failed Cloud cleanup retryable without offering a forbidden force-orphan action", async () => {
+    h.project = projectFixture({ workspaceId: "ws1" });
+    h.collectProjectManifest.mockResolvedValueOnce({
+      projectId: "p1",
+      resources: [{ type: "route", ref: "app.opsh.io", label: "app route" }],
+    } as never);
+    h.executeCleanup.mockResolvedValueOnce({
+      total: 1,
+      succeeded: 0,
+      failed: [{ label: "app route", error: "provider unavailable" }],
+    } as never);
+
+    const result = await teardownProject(ctx, "p1", { force: false });
+
+    expect(result.rowDeleted).toBe(false);
+    expect(result.canForceOrphan).toBe(false);
+    expect(h.deleteHard).not.toHaveBeenCalled();
+    expect(h.orphanCreate).not.toHaveBeenCalled();
+    expect(h.clearDeletionInProgress).toHaveBeenCalled();
+    expect(stepOf(result.steps, "runtime_cleanup")?.error).toContain("provider unavailable");
+
+    h.collectProjectManifest.mockResolvedValueOnce({
+      projectId: "p1",
+      resources: [{ type: "route", ref: "app.opsh.io", label: "app route" }],
+    } as never);
+    h.executeCleanup.mockResolvedValueOnce({ total: 1, succeeded: 1, failed: [] });
+    const retried = await teardownProject(ctx, "p1", { force: false });
+    expect(retried.rowDeleted).toBe(true);
+    expect(h.executeCleanup).toHaveBeenCalledTimes(2);
+    expect(h.orphanCreate).not.toHaveBeenCalled();
+  });
+
   it("does not offer force-orphan when manifest collection itself fails", async () => {
     h.collectProjectManifest.mockRejectedValueOnce(new Error("deployment metadata unavailable"));
 

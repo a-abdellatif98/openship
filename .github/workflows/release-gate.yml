@@ -113,6 +113,12 @@ jobs:
         if: steps.resume.outputs.reused != 'true'
         run: bun run --cwd apps/api lint
 
+      - name: Audit structured error boundaries
+        if: steps.resume.outputs.reused != 'true'
+        run: |
+          bun test scripts/audit-error-boundaries.test.ts
+          bun run errors:check
+
       - name: Typecheck SDK and shared platform
         if: steps.resume.outputs.reused != 'true'
         run: |

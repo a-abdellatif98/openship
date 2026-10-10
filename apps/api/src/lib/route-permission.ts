@@ -22,6 +22,7 @@
  *     the server if any registered route lacks a spec.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context, Next, MiddlewareHandler } from "hono";
 import type { TSchema } from "@sinclair/typebox";
 import { NotFoundError, normalizeRepoPath } from "@repo/core";
@@ -218,21 +219,21 @@ async function assertParentChain(
   }
   // backup_destination → backup_policy / backup_run / backup_restore
   if (parent === "backup_destination" && child === "backup_policy") {
-    const p = await repos.backupPolicy.findById(childId).catch(() => null);
+    const p = await repos.backupPolicy.findById(childId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/lib/route-permission"); return null; });
     if (!p || p.destinationId !== parentId) {
       throw new NotFoundError("backup_policy", childId);
     }
     return;
   }
   if (parent === "backup_destination" && child === "backup_run") {
-    const r = await repos.backupRun.findById(childId).catch(() => null);
+    const r = await repos.backupRun.findById(childId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/lib/route-permission"); return null; });
     if (!r || r.destinationId !== parentId) {
       throw new NotFoundError("backup_run", childId);
     }
     return;
   }
   if (parent === "backup_destination" && child === "backup_restore") {
-    const r = await repos.backupRestore.findById(childId).catch(() => null);
+    const r = await repos.backupRestore.findById(childId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/lib/route-permission"); return null; });
     if (!r || r.destinationId !== parentId) {
       throw new NotFoundError("backup_restore", childId);
     }

@@ -8,6 +8,7 @@
  * aren't projects — the installer just returns the wizard route to hand off to.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { randomBytes, createHmac } from "node:crypto";
 export { installServicePorts, serviceRoutingPatch, type InstallAppRoute } from "@repo/core";
 import {
@@ -179,6 +180,7 @@ export async function getAppHostFit(
       await assertCloudDeploymentLimits(ctx.organizationId, configuration);
       return { ...unchecked, cloud: { resources, status: "ready" } };
     } catch (error) {
+      observeCaughtError(error, "platform/engine/modules/apps/app-install.service");
       return {
         ...unchecked,
         cloud: {
@@ -205,7 +207,7 @@ export async function getAppHostFit(
   if (target.serverId) {
     const server = await repos.server
       .getInOrganization(target.serverId, ctx.organizationId)
-      .catch(() => null);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/apps/app-install.service"); return null; });
     if (!server) return unchecked;
     isLocalTarget = await isLocalHostRow(server);
   }
@@ -574,6 +576,7 @@ export async function installApp(
             svc.ports,
             input.routes,
             existingRow.ports as string[] | null,
+            workspaceId ? "cloud" : "server",
           ),
         });
       }
@@ -598,7 +601,13 @@ export async function installApp(
     await createService(ctx, project.id, {
       name: svc.name,
       image: svc.image,
-      ports: installServicePorts(svc.name, svc.ports, input.routes),
+      ports: installServicePorts(
+        svc.name,
+        svc.ports,
+        input.routes,
+        svc.ports,
+        workspaceId ? "cloud" : "server",
+      ),
       dependsOn: svc.dependsOn ? [...svc.dependsOn] : [],
       environment: plainEnv,
       volumes: svc.volumes ? [...svc.volumes] : [],
@@ -782,13 +791,13 @@ export async function ensureGeneratedAppSecrets(
       if (Object.hasOwn(stored, field.key) || Object.hasOwn(storedAtProject, field.key)) continue;
       const group = field.generateGroup ?? field.jwtSecretGroup;
       if (group && blockedGroups.has(group)) {
-        console.warn(
+        errorDiagnostics.warn("platform/engine/modules/apps/app-install.service",
           `[apps] ${template.id}: ${serviceName}.${field.key} is missing, but its group "${group}" already has a value elsewhere that cannot be read — leaving it alone rather than writing a value the rest of the group would not match.`,
         );
         continue;
       }
       if (inlined.has(field.key)) {
-        console.warn(
+        errorDiagnostics.warn("platform/engine/modules/apps/app-install.service",
           `[apps] ${template.id}: ${serviceName}.${field.key} is missing and is inlined elsewhere in the template — not minting a value that its existing copies would contradict.`,
         );
         continue;
@@ -809,7 +818,7 @@ export async function ensureGeneratedAppSecrets(
   }
 
   if (written.length > 0) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/apps/app-install.service",
       `[apps] ${template.id}: backfilled generated config on ${projectId}: ${written.join(", ")}`,
     );
   }
@@ -840,7 +849,8 @@ function resolveGeneratedGroups(
     if (!raw || groupValue.has(group)) continue;
     try {
       groupValue.set(group, decrypt(raw));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/apps/app-install.service");
       blockedGroups.add(group);
     }
   }

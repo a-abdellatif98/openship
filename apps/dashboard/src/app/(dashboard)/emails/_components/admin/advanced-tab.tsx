@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 /**
@@ -427,6 +428,7 @@ function MailStackToolsSection({ serverId }: { serverId: string }) {
         );
       }
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/emails/_components/admin/advanced-tab");
       showToast(
         err instanceof Error ? err.message : a.restartFailed,
         "error",

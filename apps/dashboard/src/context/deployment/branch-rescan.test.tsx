@@ -485,6 +485,45 @@ describe("deploy branch detection", () => {
     expect(api.prepare.mock.lastCall?.[0].composePath).toBeUndefined();
   });
 
+  it("keeps Dockerfile defaults as a running service when rescanning single and monorepo apps", async () => {
+    const docker = scan("openship", {
+      stack: "docker",
+      projectType: "docker",
+      category: "docker",
+      startCommand: "",
+      buildCommand: "",
+      installCommand: "",
+      port: 20128,
+    });
+    api.prepare.mockResolvedValueOnce(docker);
+    await selectBranch("openship");
+    expect(current.config).toMatchObject({
+      framework: "docker",
+      projectType: "docker",
+      runtimeMode: "docker",
+      options: { startCommand: "", hasServer: true, productionPort: "20128" },
+    });
+
+    api.prepare.mockResolvedValueOnce({
+      ...docker,
+      projectType: "monorepo",
+      monorepoApps: [
+        { ...docker, id: "web", name: "web", rootDirectory: "apps/web" },
+      ],
+      monorepoWorkspace: {
+        packageManager: "pnpm",
+        prepareCommand: "pnpm install",
+      },
+    });
+    await selectBranch("main");
+    expect(current.config.monorepoApps?.[0]).toMatchObject({
+      framework: "docker",
+      startCommand: "",
+      hasServer: true,
+      port: "20128",
+    });
+  });
+
   it("replaces monorepo apps, workspace defaults, and mode snapshots when returning to a plain branch", async () => {
     const app = scan("openship");
     api.prepare.mockResolvedValueOnce(

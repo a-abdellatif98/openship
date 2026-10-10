@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -141,7 +142,8 @@ export async function reconcileKnownHosts(config: SshConfig): Promise<void> {
 
   try {
     await access(knownHostsPath);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/system/ssh-support");
     return;
   }
 
@@ -161,7 +163,8 @@ export async function reconcileKnownHosts(config: SshConfig): Promise<void> {
       for (const entry of parseKnownHostsEntries(output)) {
         knownEntries.add(entry);
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/system/ssh-support");
       // No matching entry for this host pattern.
     }
   }
@@ -175,7 +178,8 @@ export async function reconcileKnownHosts(config: SshConfig): Promise<void> {
       ["-p", String(port), "-T", "5", config.host],
       7_000,
     );
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/system/ssh-support");
     return;
   }
 
@@ -199,7 +203,8 @@ export async function reconcileKnownHosts(config: SshConfig): Promise<void> {
         "ssh-known-hosts",
         `removed stale known_hosts entry for ${pattern}`,
       );
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/system/ssh-support");
       // Best effort cleanup only.
     }
   }
@@ -229,7 +234,8 @@ export async function resolveSshAuthSock(): Promise<string | null> {
       const stdout = await execFileText("launchctl", ["getenv", "SSH_AUTH_SOCK"], 4_000);
       const sock = stdout.trim();
       if (sock) return sock;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/system/ssh-support");
       // launchctl missing / no value — fall through.
     }
   } else if (process.platform === "linux") {
@@ -240,7 +246,8 @@ export async function resolveSshAuthSock(): Promise<string | null> {
       const line = stdout.split("\n").find((l) => l.startsWith("SSH_AUTH_SOCK="));
       const sock = line?.slice("SSH_AUTH_SOCK=".length).trim();
       if (sock) return sock;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/system/ssh-support");
       // systemctl missing (non-systemd) / no value — fall through.
     }
   }

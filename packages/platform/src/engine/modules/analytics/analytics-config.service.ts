@@ -25,6 +25,7 @@
  * lifecycle, separate payload.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
 import { postEdgeMgmt, resolveProjectTrafficSources } from "../../lib/project-analytics";
@@ -70,7 +71,7 @@ export async function pushProjectAnalyticsConfig(
     // Resolves a null serverId to the "This Server" row; there is no loopback fallback.
     project.organizationId,
   ).catch((err) =>
-    console.warn(`[analytics-config] push failed: ${safeErrorMessage(err)}`),
+    errorDiagnostics.warn("platform/engine/modules/analytics/analytics-config.service", `[analytics-config] push failed: ${safeErrorMessage(err)}`, err),
   );
 }
 
@@ -114,7 +115,7 @@ export async function reconcileAnalyticsConfig(): Promise<{ servers: number; hos
     if (p.workspaceId) continue;
     // An undeployed project has no edge to configure yet; its first route apply will.
     if (!p.activeDeploymentId) continue;
-    const sources = await resolveProjectTrafficSources(p.id).catch(() => []);
+    const sources = await resolveProjectTrafficSources(p.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/analytics/analytics-config.service"); return []; });
     for (const src of sources) {
       if (src.kind !== "self-hosted") continue;
       const key = src.serverId ?? "";
@@ -133,8 +134,8 @@ export async function reconcileAnalyticsConfig(): Promise<{ servers: number; hos
       { hosts: slot.hosts },
       slot.organizationId,
     ).catch((err) =>
-      console.warn(
-        `[analytics-config] reconcile failed for ${key || "local"}: ${safeErrorMessage(err)}`,
+      errorDiagnostics.warn("platform/engine/modules/analytics/analytics-config.service",
+        `[analytics-config] reconcile failed for ${key || "local"}: ${safeErrorMessage(err)}`, err,
       ),
     );
   }

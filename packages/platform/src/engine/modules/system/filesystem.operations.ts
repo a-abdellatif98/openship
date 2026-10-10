@@ -1,4 +1,5 @@
 /** Directory discovery uses the same native root policy as source registration. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -29,10 +30,12 @@ export async function browseDirectories(input: { path?: string } = {}) {
     let isProject = false;
     if (native) {
       // Also check children in case an entry changed to a symlink since readdir.
-      try { await assertNativeSourcePath(childPath); } catch { return; }
+      try { await assertNativeSourcePath(childPath); } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/filesystem.operations"); return; }
     }
     try { isProject = (await readdir(childPath)).some(marker => PROJECT_MARKERS.has(marker)); }
-    catch { /* An unreadable child remains selectable without a project marker. */ }
+    catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/system/filesystem.operations"); /* An unreadable child remains selectable without a project marker. */ }
     directories.push({ name: entry.name, path: childPath, isProject });
   }));
   directories.sort((a, b) => a.isProject !== b.isProject ? a.isProject ? -1 : 1 : a.name.localeCompare(b.name));

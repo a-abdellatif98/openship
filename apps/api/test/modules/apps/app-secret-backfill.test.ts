@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -132,7 +133,7 @@ describe("ensureGeneratedAppSecrets", () => {
     listByProject.mockResolvedValue(
       (redis.services ?? []).map((s, i) => ({ id: `svc-${i}`, name: s.name })),
     );
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(errorDiagnostics, "warn").mockImplementation(() => {});
 
     const written = await ensureGeneratedAppSecrets("prj_1", redis);
 
@@ -196,7 +197,7 @@ describe("ensureGeneratedAppSecrets", () => {
     getEnvMap.mockImplementation(async (_p: string, _e: string, serviceId: string) =>
       serviceId === "svc-ghost-db" ? { MYSQL_ROOT_PASSWORD: "unreadable-ciphertext" } : {},
     );
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(errorDiagnostics, "warn").mockImplementation(() => {});
 
     // Anything minted here would disagree with the copy MySQL is already using.
     expect(await ensureGeneratedAppSecrets("prj_1", ghost)).toEqual([]);

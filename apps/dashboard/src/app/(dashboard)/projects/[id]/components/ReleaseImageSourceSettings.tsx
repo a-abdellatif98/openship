@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -70,6 +71,7 @@ export function ReleaseImageSourceSettings({
     try {
       payload = releaseImageSourceFromDraft(draft);
     } catch (error) {
+      observeCaughtError(error, "dashboard/app/(dashboard)/projects/[id]/components/ReleaseImageSourceSettings");
       setValidationError(error instanceof Error ? error.message : copy.validationInvalid);
       return;
     }

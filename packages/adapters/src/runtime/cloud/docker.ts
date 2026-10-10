@@ -1,3 +1,5 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
+import { managedNodeEnvironment } from "./node-listener";
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import type { Oblien } from "oblien";
@@ -344,7 +346,9 @@ export class CloudDockerRuntime extends DockerRuntime {
         this.sourcePath = source;
         this.sourceBase = base;
       } catch (error) {
-        await this.executor.rm(source).catch(() => {});
+        await this.executor.rm(source).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/docker");
+        });
         throw error;
       }
     })().catch((error) => {
@@ -396,6 +400,7 @@ export class CloudDockerRuntime extends DockerRuntime {
       try {
         await files.destroy(hostOutDir);
       } catch (error) {
+        observeCaughtError(error, "adapters/runtime/cloud/docker");
         logger?.log(`Static build cleanup deferred: ${safeErrorMessage(error)}\n`, "warn");
       } finally {
         await files.dispose();
@@ -419,6 +424,7 @@ export class CloudDockerRuntime extends DockerRuntime {
     return {
       ...config,
       cloneOnServer: true,
+      managedNodeListener: true,
       localPath: undefined,
       staticExtractOnly: Boolean(config.isStatic && config.staticExtractOnly),
     };
@@ -474,7 +480,18 @@ export class CloudDockerRuntime extends DockerRuntime {
     await this.canSpend();
     await this.connection.ensureDocker();
     // Even a single web app/worker gets a project network on a subscribed host.
-    return super.deploy({ ...config, networkAlias: config.networkAlias || "app" }, onLog);
+    const image = await this.accessibleImage(config.imageRef!);
+    const ports = config.portless
+      ? []
+      : [config.port, ...(config.publicEndpoints ?? []).flatMap((e) => (e.port ? [e.port] : []))];
+    return super.deploy(
+      {
+        ...config,
+        networkAlias: config.networkAlias || "app",
+        envVars: managedNodeEnvironment(image.Config?.Labels, config.envVars ?? {}, ports),
+      },
+      onLog,
+    );
   }
   override async ensureServiceGroup(config: Parameters<DockerRuntime["ensureServiceGroup"]>[0]) {
     this.assertProject(config.projectId);
@@ -609,6 +626,7 @@ export class CloudDockerRuntime extends DockerRuntime {
           ...config,
           volumes,
           imageAlreadyPrepared: true,
+          environment: managedNodeEnvironment(image.Config?.Labels, config.environment, [...published.keys()]),
           ...{ namespaceVolumes: true },
           ports: [...published].map(([port, hostPort]) => `0.0.0.0:${hostPort}:${port}`),
         },
@@ -789,7 +807,18 @@ export class CloudDockerRuntime extends DockerRuntime {
       throw new Error("A Docker workspace is not a service container");
     await this.connection.resume();
     await this.connection.ensureDocker();
-    return super.applyEnvironment(...args);
+    await this.assertContainerAccess(args[0]);
+    const info = await this.docker.getContainer(args[0]).inspect();
+    const ports = Object.entries(info.HostConfig.PortBindings ?? {}).flatMap(([key, bindings]) =>
+      /^\d+\/tcp$/.test(key) && Array.isArray(bindings) && bindings.length
+        ? [Number(key.split("/")[0])]
+        : [],
+    );
+    return super.applyEnvironment(
+      args[0],
+      managedNodeEnvironment(info.Config.Labels, args[1], ports),
+      args[2],
+    );
   }
   override async pullImage(...args: Parameters<DockerRuntime["pullImage"]>) {
     await this.canSpend();
@@ -831,7 +860,9 @@ export class CloudDockerRuntime extends DockerRuntime {
   }
   override async dispose() {
     await super.dispose();
-    if (this.sourcePath) await this.executor.rm(this.sourcePath).catch(() => {});
+    if (this.sourcePath) await this.executor.rm(this.sourcePath).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/docker");
+    });
     await this.connection.dispose();
   }
 }

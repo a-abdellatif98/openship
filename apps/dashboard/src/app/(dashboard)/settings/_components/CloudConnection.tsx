@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useState } from "react";
@@ -44,7 +45,8 @@ export function CloudConnection() {
       await cloudApi.disconnect();
       await refresh();
       showToast(t.settings.cloud.toast.disconnected, "success", t.settings.common.toast.cloud);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/CloudConnection");
       showToast(t.settings.cloud.toast.disconnectFailed, "error", t.settings.common.toast.cloud);
     } finally {
       setDisconnecting(false);

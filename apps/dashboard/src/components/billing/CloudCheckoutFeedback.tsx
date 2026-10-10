@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { CloudSupportCustomerInput } from "@repo/contracts";
 import { Icon } from "@repo/ui/icons";
@@ -92,7 +93,8 @@ function FeedbackContent({ failure, plan, onClose, onRetry }: {
     try {
       const receipt = await createCloudSupportApi(session.user.id).create(request);
       if (mounted.current) { setReceivedEmail(contact); setTicketId(receipt.id); }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/billing/CloudCheckoutFeedback");
       if (mounted.current) setError(true);
     } finally {
       busy.current = false;

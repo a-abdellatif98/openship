@@ -36,6 +36,7 @@
  * logs and the install wizard terminal.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { randomBytes } from "node:crypto";
 import type { CommandExecutor } from "@repo/adapters";
 import { safeErrorMessage, mailHostname } from "@repo/core";
@@ -148,7 +149,7 @@ export async function ensureOpenshipPlatformMailbox(
       try {
         plaintext = decrypt(cached.password);
       } catch {
-        console.warn(
+        errorDiagnostics.warn("platform/engine/modules/mail/admin/platform-mailbox.service",
           `[ensureOpenshipPlatformMailbox] state.platformMailbox.password failed to decrypt — treating as legacy plaintext. It will be re-encrypted on next rotation.`,
         );
         plaintext = cached.password;
@@ -168,7 +169,7 @@ export async function ensureOpenshipPlatformMailbox(
       cached.email.toLowerCase() === email &&
       cached.password
     ) {
-      console.warn(
+      errorDiagnostics.warn("platform/engine/modules/mail/admin/platform-mailbox.service",
         `[ensureOpenshipPlatformMailbox] cached mailbox ${email} is missing or inactive in vmail; recreating it and rotating the stale credential.`,
       );
     }
@@ -250,7 +251,10 @@ async function mintAndPersist(args: MintArgs): Promise<PlatformMailboxCreds> {
   try {
     await createMaildirOnDisk(exec, layout);
   } catch (err) {
-    await rollbackMailbox(exec, email).catch(() => {});
+    observeCaughtError(err, "platform/engine/modules/mail/admin/platform-mailbox.service");
+    await rollbackMailbox(exec, email).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/platform-mailbox.service");
+    });
     throw new PlatformMailboxError(
       `Failed to create platform mailbox maildir; mailbox row rolled back: ${safeErrorMessage(err)}`,
     );
@@ -282,7 +286,10 @@ async function mintAndPersist(args: MintArgs): Promise<PlatformMailboxCreds> {
       platformMailbox: nextPlatformMailbox,
     }));
   } catch (err) {
-    await rollbackMailbox(exec, email, layout).catch(() => {});
+    observeCaughtError(err, "platform/engine/modules/mail/admin/platform-mailbox.service");
+    await rollbackMailbox(exec, email, layout).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/platform-mailbox.service");
+    });
     throw new PlatformMailboxError(
       `Failed to persist platform mailbox to mail-state.json; mailbox row + maildir rolled back: ${safeErrorMessage(err)}`,
     );
@@ -294,7 +301,8 @@ async function mintAndPersist(args: MintArgs): Promise<PlatformMailboxCreds> {
   //    the ensure on it.
   try {
     await recountDomain(serverId, domain);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/platform-mailbox.service");
     // Counter drift is cosmetic; don't fail the ensure on it.
   }
 
@@ -307,11 +315,17 @@ export async function rollbackMailbox(
   layout?: { storagebasedirectory: string; storagenode: string; maildir: string },
 ): Promise<void> {
   await execute(exec, `DELETE FROM forwardings WHERE address = ${q(email)} OR forwarding = ${q(email)};`).catch(
-    () => {},
+    (diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/platform-mailbox.service");
+    },
   );
-  await execute(exec, `DELETE FROM mailbox WHERE username = ${q(email)};`).catch(() => {});
+  await execute(exec, `DELETE FROM mailbox WHERE username = ${q(email)};`).catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/platform-mailbox.service");
+  });
   if (layout) {
-    await removeMaildirOnDisk(exec, layout).catch(() => {});
+    await removeMaildirOnDisk(exec, layout).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/admin/platform-mailbox.service");
+    });
   }
 }
 

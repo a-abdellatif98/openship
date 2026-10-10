@@ -21,6 +21,7 @@
  * moves, so a process pinning a core looks idle.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor, ResourceUsage } from "../../types";
 import { sq } from "../build-pipeline";
 
@@ -163,7 +164,8 @@ export async function sampleBareUsage(
     const out = await executor.exec(buildProbe(pid, cgroupCandidates));
     const { source: _source, ...usage } = parseProbe(out);
     return usage;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/runtime/supervisor/usage");
     return { ...ZERO_USAGE };
   }
 }

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
 import { OperationError } from "@repo/contracts";
@@ -40,7 +41,7 @@ export async function getProjectHome(ctx: ExecutionContext) {
     const msg = safeErrorMessage(err);
     const isMissingTable = /relation .* does not exist|no such table/i.test(msg);
     if (!isMissingTable) {
-      console.error("[projects.getHome] listProjects failed:", err);
+      errorDiagnostics.error("platform/engine/modules/projects/project-home.operations", "[projects.getHome] listProjects failed:", err);
       throw new OperationError("Failed to load projects", 500, "LIST_FAILED", { success: false, message: msg });
     }
     return {
@@ -116,7 +117,7 @@ export async function getProjectHome(ctx: ExecutionContext) {
       // Batch lookup names + project counts. Names come from one
       // findManyById; counts still go through projectService per org
       // (each is a SELECT COUNT — fine at N < 20 memberships).
-      const orgs = await repos.organization.findManyById(otherOrgIds).catch(() => []);
+      const orgs = await repos.organization.findManyById(otherOrgIds).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-home.operations"); return []; });
       const orgsById = new Map(orgs.map((o) => [o.id, o]));
       otherOrgs = await Promise.all(
         otherOrgIds.map(async (otherOrgId) => {
@@ -128,7 +129,7 @@ export async function getProjectHome(ctx: ExecutionContext) {
               page: 1, perPage: 1,
               ...(context.role === "restricted" && { canRead: (id: string) => authorization.checkPermissionOnResource(context, { resourceType: "project", resourceId: id, action: "read" }) }),
             })
-            .catch(() => ({ total: 0 }));
+            .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-home.operations"); return ({ total: 0 }); });
           const org = orgsById.get(otherOrgId);
           return {
             organizationId: otherOrgId,
@@ -139,7 +140,7 @@ export async function getProjectHome(ctx: ExecutionContext) {
       );
       otherOrgs = otherOrgs.filter((o) => o.projectCount > 0);
     } catch (err) {
-      console.warn("[projects.getHome] cross-org hint lookup failed:", err);
+      errorDiagnostics.warn("platform/engine/modules/projects/project-home.operations", "[projects.getHome] cross-org hint lookup failed:", err);
       otherOrgs = [];
     }
   }

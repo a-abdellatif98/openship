@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -438,7 +439,8 @@ export function SourceAccessModal({
         setRepoChoices(names);
         setBrowseRepo((cur) => cur ?? names[0] ?? null);
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/permissions/SourceAccessModal");
         if (!cancelled) setRepoChoices([]);
       });
     return () => {

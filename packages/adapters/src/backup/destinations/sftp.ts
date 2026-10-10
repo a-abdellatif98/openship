@@ -21,6 +21,7 @@
  * resolveDestination sees them.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Client, type SFTPWrapper } from "ssh2";
 import { posix } from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -100,6 +101,7 @@ function sftpRequest<T = void>(
     try {
       start(finish);
     } catch (error) {
+      observeCaughtError(error, "adapters/backup/destinations/sftp");
       finish(error as Error);
     }
   });
@@ -189,7 +191,8 @@ class SftpDestinationImpl implements BackupDestination {
         cancelSignal?.removeEventListener("abort", onCancel);
         try {
           client.end();
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/backup/destinations/sftp");
           // already ended
         }
       };
@@ -229,6 +232,7 @@ class SftpDestinationImpl implements BackupDestination {
       try {
         client.connect(this.conn);
       } catch (error) {
+        observeCaughtError(error, "adapters/backup/destinations/sftp");
         fail(error);
       }
     });
@@ -299,6 +303,7 @@ class SftpDestinationImpl implements BackupDestination {
       });
       return { ok: true };
     } catch (err) {
+      observeCaughtError(err, "adapters/backup/destinations/sftp");
       return {
         ok: false,
         reason: safeErrorMessage(err),
@@ -376,7 +381,7 @@ class SftpDestinationImpl implements BackupDestination {
         }, UPLOAD_STALL_PROBE_MS);
         (watchdog as { unref?: () => void }).unref?.();
 
-        ws.on("error", (err: Error) => finish(err));
+        ws.on("error", (err: Error) => { observeCaughtError(err, "adapters/backup/destinations/sftp"); return finish(err); });
         ws.on("finish", () => { finishedWriting = true; ws.destroy(); });
         ws.on("close", () => finish(finishedWriting ? undefined : new Error("SFTP upload closed before all bytes were written")));
         const onAbort = () => finish(signal.reason ?? new Error("SFTP connection closed"));
@@ -398,7 +403,7 @@ class SftpDestinationImpl implements BackupDestination {
         }, 1000);
         (trackProgress as { unref?: () => void }).unref?.();
         onSettled.push(() => clearInterval(trackProgress));
-        body.on("error", (err) => finish(err));
+        body.on("error", (err) => { observeCaughtError(err, "adapters/backup/destinations/sftp"); return finish(err); });
         body.on("close", () => {
           if (!body.readableEnded) finish(new Error("SFTP upload source closed prematurely"));
         });
@@ -426,7 +431,7 @@ class SftpDestinationImpl implements BackupDestination {
         (sftp, signal) => this.unlinkIfPresent(sftp, tmp, signal, "temporary upload cleanup"),
         SFTP_CONTROL_TIMEOUT_MS,
       ).catch((cleanupError) => {
-        console.warn(`[sftp] Could not reclaim temporary upload ${tmp}: ${safeErrorMessage(cleanupError)}`);
+        errorDiagnostics.warn("adapters/backup/destinations/sftp", `[sftp] Could not reclaim temporary upload ${tmp}: ${safeErrorMessage(cleanupError)}`, cleanupError);
       });
       throw error;
     });
@@ -437,7 +442,7 @@ class SftpDestinationImpl implements BackupDestination {
   async get(key: string): Promise<Readable> {
     const target = this.fullPath(key);
     const out = new PassThrough();
-    out.on("error", () => {});
+    out.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/backup/destinations/sftp"); });
     const cancelled = new AbortController();
     out.once("close", () => {
       if (!out.readableEnded) cancelled.abort(new Error("SFTP download consumer closed early"));
@@ -466,7 +471,7 @@ class SftpDestinationImpl implements BackupDestination {
         out.off("drain", touch);
         signal.removeEventListener("abort", onAbort);
       }
-    }, undefined, cancelled.signal).catch(error => out.destroy(error as Error));
+    }, undefined, cancelled.signal).catch(error => { observeCaughtError(error, "adapters/backup/destinations/sftp"); return out.destroy(error as Error); });
     return out;
   }
 
@@ -553,6 +558,7 @@ class SftpDestinationImpl implements BackupDestination {
           await this.unlinkIfPresent(sftp, this.fullPath(key), signal);
           deleted.push(key);
         } catch (error) {
+          observeCaughtError(error, "adapters/backup/destinations/sftp");
           failed.push({ key, error: safeErrorMessage(error) });
         }
       }

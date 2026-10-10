@@ -1,4 +1,5 @@
 /** HTTP codecs over shared issue aggregation and the retained health/job services. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import { getPlatformKernel } from "@repo/platform/engine/lib/platform";
 import { operationContext, operationData } from "../../lib/operation-context";
@@ -25,6 +26,7 @@ export async function rescanIssues(c: Context) {
   const text = await c.req.text();
   let input;
   try { input = text.trim() ? JSON.parse(text) : undefined; }
-  catch { throw new ValidationError("Invalid JSON body"); }
+  catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/modules/issues/issues.controller"); throw new ValidationError("Invalid JSON body"); }
   return c.json({ data: await operationData(c, issues().rescan(operationContext(c), input)) }, 202);
 }

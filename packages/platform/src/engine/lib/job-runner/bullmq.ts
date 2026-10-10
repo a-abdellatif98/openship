@@ -16,6 +16,8 @@
  * jobs can also be resolved by a consumer that has not registered them locally.
  */
 
+import { observedAllSettled, reportError, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
+import { observeBackground } from "@repo/core/diagnostics/node";
 import { Queue, Worker, type ConnectionOptions } from "bullmq";
 import IORedis from "ioredis";
 import { env } from "../../config/env";
@@ -43,7 +45,7 @@ export class BullMQJobRunner implements JobRunner {
         enableReadyCheck: false,
       });
       this.connection.on("error", (err) => {
-        console.warn("[job-runner:bullmq] Redis error:", err.message);
+        errorDiagnostics.warn("platform/engine/lib/job-runner/bullmq", "[job-runner:bullmq] Redis error:", err);
       });
     }
     return this.connection;
@@ -89,7 +91,7 @@ export class BullMQJobRunner implements JobRunner {
       async (job) => {
         const { runId } = job.data;
         if (!runId) throw new Error("backup-run job missing runId");
-        await opts.processRun(runId);
+        await observeBackground({ component: "backup-runner", runId, attempt: job.attemptsMade + 1 }, () => opts.processRun(runId));
       },
       { connection: conn, concurrency: 2, ...queueScope },
     );
@@ -102,29 +104,36 @@ export class BullMQJobRunner implements JobRunner {
         if (!cb) {
           // The job may have been created on another API replica. The shared
           // resolver checks the current row; deleted/disabled schedules no-op.
-          await opts.processRecurring?.(jobId);
+          await observeBackground({ component: "job-runner", jobId, attempt: job.attemptsMade + 1 }, async () => { await opts.processRecurring?.(jobId); });
           return;
         }
-        await cb();
+        await observeBackground({ component: "job-runner", jobId, attempt: job.attemptsMade + 1 }, cb);
       },
       { connection: conn, concurrency: 4, ...queueScope },
     );
 
     this.runWorker.on("failed", (job, err) =>
-      console.error(`[job-runner:bullmq:run] job ${job?.id} failed:`, err.message),
+      reportError(err, { kind: "background", component: "backup-runner", runId: job?.data.runId, attempt: job ? job.attemptsMade : undefined, handled: true }),
     );
     this.recurringWorker.on("failed", (job, err) =>
-      console.error(`[job-runner:bullmq:recurring] job ${job?.id} failed:`, err.message),
+      reportError(err, { kind: "background", component: "job-runner", jobId: job?.data.jobId, attempt: job ? job.attemptsMade : undefined, handled: true }),
     );
+    // Queue transport failures are EventEmitter errors, not rejected processors.
+    const onQueueError = (error: Error) => { reportError(error, { kind: "background", component: "job-queue", handled: true }); };
+    this.runWorker.on("error", onQueueError);
+    this.recurringWorker.on("error", onQueueError);
+    this.runQueue.on("error", onQueueError);
+    this.recurringQueue.on("error", onQueueError);
   }
 
   async shutdown(_deadlineMs = 30_000): Promise<void> {
-    await Promise.allSettled([this.runWorker?.close(), this.recurringWorker?.close()]);
-    await Promise.allSettled([this.runQueue?.close(), this.recurringQueue?.close()]);
+    await observedAllSettled([this.runWorker?.close(), this.recurringWorker?.close()], "platform/engine/lib/job-runner/bullmq");
+    await observedAllSettled([this.runQueue?.close(), this.recurringQueue?.close()], "platform/engine/lib/job-runner/bullmq");
     if (this.connection) {
       try {
         this.connection.disconnect();
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/job-runner/bullmq");
         // best-effort
       }
       this.connection = null;

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { systemApi } from "@/lib/api";
@@ -32,7 +33,8 @@ export function useAttentionFeed() {
     try {
       const res = await issuesApi.list();
       if (organizationId === getActiveOrganizationId()) setIssues(res?.data ?? []);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/hooks/useAttentionFeed");
       // A failed refresh must not hide a deployment that is still updating.
       if (organizationId === getActiveOrganizationId()) setIssues((previous) => previous ?? []);
     }
@@ -52,11 +54,13 @@ export function useAttentionFeed() {
     // ref keep it to one probe per window, shared with the Infrastructure tab, even
     // under StrictMode's double-mount.
     void (async () => {
-      const on = await systemApi.getInfraAutoScan().catch(() => false);
+      const on = await systemApi.getInfraAutoScan().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/hooks/useAttentionFeed"); return false; });
       if (on && !autoScanRan.current && infraScanStale()) {
         autoScanRan.current = true;
         markInfraScanned();
-        await systemApi.scanAllContainers().catch(() => {});
+        await systemApi.scanAllContainers().catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/hooks/useAttentionFeed");
+        });
       }
       void load();
     })();

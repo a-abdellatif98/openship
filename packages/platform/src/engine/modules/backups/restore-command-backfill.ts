@@ -30,6 +30,7 @@
  * contains `***` is skipped rather than rewritten or announced as unrestorable.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos, type BackupPolicy } from "@repo/db";
 import { isRedactedCommand } from "@repo/adapters";
 import { safeErrorMessage } from "@repo/core";
@@ -76,7 +77,7 @@ export async function backfillCustomCommandRestoreCommands(): Promise<{
   const policies = new Map<string, BackupPolicy | undefined>();
   const loadPolicy = async (id: string) => {
     if (!policies.has(id)) {
-      policies.set(id, await repos.backupPolicy.findById(id).catch(() => undefined));
+      policies.set(id, await repos.backupPolicy.findById(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/restore-command-backfill"); return undefined; }));
     }
     return policies.get(id);
   };
@@ -123,8 +124,8 @@ export async function backfillCustomCommandRestoreCommands(): Promise<{
       await repos.backupRun.setArtifacts(run.id, patched);
       repaired++;
     } catch (err) {
-      console.warn(
-        `[backups] restoreCommand backfill failed for run ${run.id}: ${safeErrorMessage(err)}`,
+      errorDiagnostics.warn("platform/engine/modules/backups/restore-command-backfill",
+        `[backups] restoreCommand backfill failed for run ${run.id}: ${safeErrorMessage(err)}`, err,
       );
     }
   }
@@ -147,7 +148,7 @@ export function registerCustomCommandRestoreBackfill(): void {
         const named = unrecoverable.slice(0, LOG_ID_CAP).join(", ");
         const rest =
           unrecoverable.length > LOG_ID_CAP ? ` (+${unrecoverable.length - LOG_ID_CAP} more)` : "";
-        console.warn(
+        errorDiagnostics.warn("platform/engine/modules/backups/restore-command-backfill",
           `[backups] ${unrecoverable.length} backup run(s) hold a custom_command artifact whose ` +
             `restoreCommand is missing or credential-scrubbed, with no surviving policy to recover ` +
             `it from — these CANNOT be restored. Re-run the backup to capture a restorable ` +

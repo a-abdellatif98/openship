@@ -9,6 +9,7 @@
  * A legacy flat config ({ token, apiUrl, dashboardUrl }) is migrated to a
  * single "default" context on first read.
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -210,7 +211,7 @@ export async function closeCommandConnection(): Promise<void> {
   const invocation = commandContext.getStore();
   // A cancelled SDK request may stop awaiting its credential callback while the
   // exchange finishes. Drain that bounded request before signing its session out.
-  await invocation?.localSession?.catch(() => null);
+  await invocation?.localSession?.catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "cli/lib/config"); return null; });
   const close = invocation?.close;
   if (invocation) invocation.close = undefined;
   await close?.();

@@ -2,6 +2,7 @@
  * events. Reuse one read runtime per server/runtime/project scope, with a shared
  * sampling budget for all projects on the same physical server. */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { activeDeploymentForProject } from "@repo/platform/engine/lib/active-deployment";
 import {
   repos,
@@ -95,7 +96,7 @@ async function targetsForGroup(
 ): Promise<SampleTarget[]> {
   const live =
     runtime.supports("hostContainerQuery") && runtime.listAllContainers
-      ? await runtime.listAllContainers().catch(() => null)
+      ? await runtime.listAllContainers().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/monitoring/usage-sampler"); return null; })
       : null;
   const targets: SampleTarget[] = [];
   for (const candidate of candidates) {
@@ -149,7 +150,7 @@ export async function runUsageSampleSweep(): Promise<UsageSampleSummary> {
     if (!dep) {
       summary.skipped++;
       if (candidate)
-        console.warn(
+        errorDiagnostics.warn("platform/engine/modules/monitoring/usage-sampler",
           `[usage-sampler] Ignoring invalid active-deployment binding for project ${p.id}`,
         );
       continue;
@@ -234,12 +235,14 @@ export async function runUsageSampleSweep(): Promise<UsageSampleSummary> {
             networkTxBytes: u.networkTxBytes,
           });
         } catch (err) {
+          observeCaughtError(err, "platform/engine/modules/monitoring/usage-sampler");
           // A container that vanished between the listing and the stats call. One
           // missing sample, not a failed sweep.
           debug(`sweep:usage-failed container=${t.containerId} ${safeErrorMessage(err)}`);
         }
       });
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/monitoring/usage-sampler");
       if (isManagedServerIdle(err)) continue;
       // Anything above the per-container loop means the daemon is unreachable, not
       // that something on it is broken.

@@ -44,6 +44,7 @@
  * before. This can only ever upgrade a source that really is containerized.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   disposeRuntime,
   resolveDeploymentPlatform,
@@ -81,7 +82,7 @@ async function containerExists(
     runtime.listAllContainers(),
     CONTAINER_PROBE_TIMEOUT_MS,
     `container probe did not answer in ${CONTAINER_PROBE_TIMEOUT_MS / 1000}s`,
-  ).catch(() => null);
+  ).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/source-platform"); return null; });
   if (!containers) return false;
   // Recorded ids are full 64-char ids, but compare both ways: a short id from an
   // older row must still match, and a full id must match the summary's full id.
@@ -142,9 +143,9 @@ export async function resolveSourceExecutor(args: {
     // No reachable daemon, no permission, a target that can't produce one — all of
     // them mean "not containerized as far as we can tell", which is the snapshot's
     // answer anyway. Never fail a run over a probe.
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/backups/source-platform",
       `[backup] docker probe for service "${args.serviceName}" failed, using the ` +
-        `deployment's own runtime: ${safeErrorMessage(err)}`,
+        `deployment's own runtime: ${safeErrorMessage(err)}`, err,
     );
   }
 

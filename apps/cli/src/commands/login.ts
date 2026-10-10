@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Command, Option } from "commander";
 import chalk from "chalk";
 import { stdin as input } from "node:process";
@@ -35,7 +36,8 @@ export async function promptSelfHostedUrl(): Promise<string> {
     validate: (value) => {
       try {
         new HttpClient({ baseUrl: value?.trim() ?? "" });
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "cli/commands/login");
         return "Enter the full HTTP(S) URL of your Openship instance.";
       }
     },
@@ -106,7 +108,8 @@ export async function runLogin(options: LoginOptions = {}): Promise<void> {
     try {
       const { default: open } = await import("open");
       await open(settingsUrl);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "cli/commands/login");
       // Browser open is best-effort; the URL is printed below regardless.
     }
     info(chalk.dim("  If the browser didn't open, visit:\n") + chalk.cyan(`  ${settingsUrl}\n`));
@@ -155,7 +158,7 @@ export async function runLogin(options: LoginOptions = {}): Promise<void> {
 
   // Best-effort capability discovery so later commands can gate offline.
   await withCommandContext(() => fetchCaps({ force: true, context: contextName })).catch(
-    () => undefined,
+    (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "cli/commands/login"); return undefined; },
   );
 
   if (isJsonMode()) {

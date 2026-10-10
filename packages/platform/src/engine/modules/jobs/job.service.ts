@@ -7,6 +7,7 @@
  * just that job. `runJobNow` fires a job immediately, recorded as a manual run.
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos, type Job } from "@repo/db";
 import { nativeJobsEnabled, assertNativeJobs } from "../../native/execution-policy";
 import { NotFoundError, ValidationError, safeErrorMessage, generateId } from "@repo/core";
@@ -134,7 +135,7 @@ export async function reconcileJobs(): Promise<{ registered: number; total: numb
     try {
       if (await syncJob(row)) registered++;
     } catch (err) {
-      console.warn(`[jobs] failed to register ${row.key}: ${safeErrorMessage(err)}`);
+      errorDiagnostics.warn("platform/engine/modules/jobs/job.service", `[jobs] failed to register ${row.key}: ${safeErrorMessage(err)}`, err);
     }
   }
   await refreshTriggerArm();

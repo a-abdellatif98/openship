@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useId, useState } from "react";
@@ -55,8 +56,11 @@ export function CloneCredentials() {
           const m = gh?.capabilities?.methods?.find((x: any) => x.kind === "forwarding");
           if (m) setForwardingAvailable(Boolean(m.available));
         })
-        .catch(() => {});
-    } catch {
+        .catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/CloneCredentials");
+        });
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/settings/_components/CloneCredentials");
       // Silent - section just shows empty.
     } finally {
       setLoading(false);

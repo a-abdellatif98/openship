@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useState, useRef, useEffect } from "react";
@@ -80,7 +81,8 @@ export const DeploymentMenu: React.FC<DeploymentMenuProps> = ({
     try {
       await deployApi.cancel(deployment.id);
       onStatusChange?.();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/deployments/components/DeploymentMenu");
       /* silent */
     }
   };
@@ -95,7 +97,7 @@ export const DeploymentMenu: React.FC<DeploymentMenuProps> = ({
     const plan = await deployApi
       .restorePlan(deployment.id)
       .then((res) => res.data)
-      .catch(() => null);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/deployments/components/DeploymentMenu"); return null; });
     setConfirmPlan({ plan });
   };
 
@@ -150,7 +152,8 @@ export const DeploymentMenu: React.FC<DeploymentMenuProps> = ({
     try {
       await deployApi.deleteDeployment(deployment.id);
       onStatusChange?.();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/deployments/components/DeploymentMenu");
       /* silent */
     }
   };

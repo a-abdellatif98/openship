@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import cronParser from "cron-parser";
 import { domainRetryEligibleAt, SYSTEM } from "@repo/core";
 import type { DomainDiagnostics } from "@repo/contracts";
@@ -21,7 +22,8 @@ async function readRetrySchedule(): Promise<DomainRetrySchedule> {
       cron: job.enabled && job.scheduleType === "recurring" ? job.cronExpression : null,
       unavailable: false,
     };
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain-diagnostics");
     return { cron: null, unavailable: true };
   }
 }
@@ -92,7 +94,8 @@ export function domainDiagnostics(
       const currentDate = new Date(Math.max(now.getTime(), eligible.getTime() - 1));
       nextRetryAt = cronParser.parseExpression(schedule.cron, { currentDate }).next().toISOString();
       automaticRetry = "scheduled";
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain-diagnostics");
       automaticRetry = "unavailable";
     }
   } else if (!automatic) automaticRetry = "not_applicable";

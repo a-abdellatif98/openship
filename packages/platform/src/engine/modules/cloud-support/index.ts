@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { env } from "../../config/env";
 import { sendMail } from "../../lib/mail";
@@ -13,7 +14,7 @@ export const cloudSupport = new CloudSupportService({
 export function deliverCloudSupport() {
   if (!env.CLOUD_MODE) return;
   void trackBackgroundWork(cloudSupport.flush()).catch(() => {
-    console.warn("[cloud-support] Email delivery deferred; saved requests will be retried.");
+    errorDiagnostics.warn("platform/engine/modules/cloud-support/index", "[cloud-support] Email delivery deferred; saved requests will be retried.");
   });
 }
 

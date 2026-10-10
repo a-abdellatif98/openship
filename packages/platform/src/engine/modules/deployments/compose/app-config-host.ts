@@ -16,6 +16,7 @@
  * what this module is for.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "@repo/adapters";
 import { cloudDockerProjectPaths } from "@repo/adapters";
 import { shellQuote } from "@repo/core";
@@ -121,6 +122,7 @@ export async function writeAppConfigFile(
     await writer.writeFile(stagedPath, content, { mode: opts?.mode ?? 0o644 });
     await writer.rename(stagedPath, hostPath);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/deployments/compose/app-config-host");
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
       `Service "${serviceName}": couldn't write its generated config file ${containerPath} to ` +
@@ -129,6 +131,6 @@ export async function writeAppConfigFile(
         `can't reach that machine, or can't write that path. Underlying error: ${detail}`,
     );
   } finally {
-    await writer.rm?.(stagedPath).catch(() => undefined);
+    await writer.rm?.(stagedPath).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/compose/app-config-host"); return undefined; });
   }
 }

@@ -129,7 +129,15 @@
     "acceptedTitle": "Aramıza katıldınız",
     "acceptedRedirect": "Panele yönlendiriliyor...",
     "errorTitle": "Bu davet kabul edilemiyor",
-    "backToDashboard": "Panele dön"
+    "backToDashboard": "Panele dön",
+    "invitedBy": "{name} tarafından davet edildiniz",
+    "roleLabel": "Rol:",
+    "desktopOpen": "Desktop’ta aç",
+    "desktopCopy": "Davet bağlantısını kopyala",
+    "desktopCopied": "Bağlantı kopyalandı",
+    "desktopFallback": "Desktop açılmadı mı? Bu davet bağlantısını Ayarlar → Örnek → Bir örneğe bağlan alanına yapıştırın.",
+    "desktopDescription": "Desktop’ı kullanın veya burada tarayıcınızda devam edin.",
+    "switchAccount": "Davet edilen hesapla giriş yap"
   },
   "cloudAuthorize": {
     "missingRedirect": "Yönlendirme (redirect) parametresi eksik.",

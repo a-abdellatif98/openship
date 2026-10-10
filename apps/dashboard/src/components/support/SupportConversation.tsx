@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { CloudSupportCustomerDetail, CloudSupportCustomerReply } from "@repo/contracts";
 import { Icon } from "@repo/ui/icons";
@@ -48,7 +49,8 @@ export function SupportConversation({
       previous.current = result;
       setDetail(result);
       setLoadFailed(false);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/support/SupportConversation");
       if (mounted.current && request === generation.current) setLoadFailed(true);
     } finally {
       if (mounted.current && request === generation.current) setLoading(false);
@@ -101,7 +103,8 @@ export function SupportConversation({
         attempt.current = null;
       }
       onChanged();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/support/SupportConversation");
       if (mounted.current) setActionError(kind);
     } finally {
       busy.current = false;

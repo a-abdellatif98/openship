@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { HttpClient } from "@repo/sdk/client";
 import { internalFetch } from "./loopback-api";
 import { internalTokenSources } from "./internal-token";
@@ -54,7 +55,7 @@ export async function openLocalCliSession(apiUrl: string, required: boolean) {
       `Local administrator authentication failed (HTTP ${call.res.status}). Check the installation's operator credential and finish its admin setup, or use openship login.`,
     );
   }
-  const body = (await call.res.json().catch(() => null)) as {
+  const body = (await call.res.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "cli/lib/local-connection"); return null; })) as {
     token?: unknown;
     expiresAt?: unknown;
   } | null;
@@ -75,7 +76,7 @@ export async function openLocalCliSession(apiUrl: string, required: boolean) {
     // Existing Better Auth sign-out invalidates only this command's session.
     // An unavailable/stopped server is covered by the session's expiry.
     close: async () => {
-      await http.request("/auth/sign-out", { method: "POST", body: "{}" }).catch(() => undefined);
+      await http.request("/auth/sign-out", { method: "POST", body: "{}" }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "cli/lib/local-connection"); return undefined; });
     },
   };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { DomainSettings } from "../components/DomainSettings";
@@ -262,6 +263,7 @@ const EnvironmentSwitcher = ({ disabled = false }: { disabled?: boolean }) => {
         router.push(environmentWizardHref(created));
       }
     } catch (error) {
+      observeCaughtError(error, "dashboard/app/(dashboard)/projects/[id]/[[...slug]]/page");
       const message = environmentErrorMessage(error, t.projects.env.failedCreateEnvironment);
       showToast(message, "error", t.projects.env.toastEnvironmentTitle);
     } finally {
@@ -290,6 +292,7 @@ const EnvironmentSwitcher = ({ disabled = false }: { disabled?: boolean }) => {
         router.push(environmentWizardHref(created));
       }
     } catch (error) {
+      observeCaughtError(error, "dashboard/app/(dashboard)/projects/[id]/[[...slug]]/page");
       const message = environmentErrorMessage(error, t.projects.env.failedCreateEnvironment);
       showToast(message, "error", t.projects.env.toastEnvironmentTitle);
     } finally {
@@ -615,6 +618,7 @@ const ProjectSettingsContent = () => {
       try {
         await projectsApi.getInfo(id);
       } catch (err) {
+        observeCaughtError(err, "dashboard/app/(dashboard)/projects/[id]/[[...slug]]/page");
         if (!active || finishedDeletions.current.has(id)) return;
         if (err instanceof ApiError && err.status === 404) {
           active = false;
@@ -707,7 +711,7 @@ const ProjectSettingsContent = () => {
       // "success" because the row IS gone — the warning content lives in
       // the title + body. router.push so the user doesn't see a ghost.
       if (Array.isArray(response.unrecoverable) && response.unrecoverable.length > 0) {
-        console.warn("[delete-project] partial cleanup", response.unrecoverable);
+        errorDiagnostics.warn("dashboard/app/(dashboard)/projects/[id]/[[...slug]]/page", "[delete-project] partial cleanup", response.unrecoverable);
         showToast(
           interpolate(t.projects.delete.partialCleanup, {
             count: String(response.unrecoverable.length),
@@ -780,7 +784,7 @@ const ProjectSettingsContent = () => {
         const reasons = [
           ...new Set((body.unrecoverable ?? []).map((u) => u.error?.trim() || u.step)),
         ].join(" · ");
-        console.error("[delete-project] teardown failed", body.unrecoverable);
+        errorDiagnostics.error("dashboard/app/(dashboard)/projects/[id]/[[...slug]]/page", "[delete-project] teardown failed", body.unrecoverable, err);
         // The source teardown couldn't complete. Rather than a jarring
         // window.confirm (or silently reverting to a plain "Draft"), surface a
         // themed module offering the storage-only delete (forceOrphan) — atomic

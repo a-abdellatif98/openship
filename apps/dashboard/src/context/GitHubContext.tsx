@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { GITHUB_SOURCES_CHANGED_EVENT, githubApi, settingsApi } from "@/lib/api";
 import { endpoints } from "@/lib/api/endpoints";
@@ -319,7 +320,8 @@ export function GitHubProvider({ children, initialData }: GitHubProviderProps) {
         if (pollTimer !== null) window.clearTimeout(pollTimer);
         try {
           reservedWindow?.close();
-        } catch {
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/context/GitHubContext");
           // A cross-origin window may already be inaccessible or closed.
         }
         if (cancelConnect.current === cleanup) cancelConnect.current = null;

@@ -16,6 +16,7 @@
  * decryption is involved and a key is safe to name in an API response.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos, type Project } from "@repo/db";
 import { OperationError } from "@repo/contracts";
@@ -44,7 +45,7 @@ export class ServiceConfigStaleError extends OperationError {
  *  nothing deployed to compare with (first deploy → forceAll handles it). */
 async function envDriftAnchors(project: Project) {
   if (!project.activeDeploymentId) return null;
-  const active = await findActiveDeployment(project).catch(() => null);
+  const active = await findActiveDeployment(project).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/env-drift"); return null; });
   if (!active?.createdAt) return null;
   const applied = (active.meta as {
     serviceEnvironmentApplied?: Record<string, { appliedAt?: string }>;
@@ -71,8 +72,8 @@ export async function resolveEnvDirtyServiceIds(
   if (!anchorFor) return null;
 
   const [meta, services] = await Promise.all([
-    repos.project.listEnvVarChangeMeta(project.id, environment).catch(() => []),
-    repos.service.listByProject(project.id).catch(() => []),
+    repos.project.listEnvVarChangeMeta(project.id, environment).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/env-drift"); return []; }),
+    repos.service.listByProject(project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/env-drift"); return []; }),
   ]);
   const enabledIds = services.filter((s) => s.enabled).map((s) => s.id);
 
@@ -101,7 +102,7 @@ export async function resolveStaleEnvKeysForService(
   if (!anchorFor) return [];
   const anchor = anchorFor(serviceId);
 
-  const meta = await repos.project.listEnvVarChangeMeta(project.id, environment).catch(() => []);
+  const meta = await repos.project.listEnvVarChangeMeta(project.id, environment).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/env-drift"); return []; });
   const keys = meta
     .filter((m) => m.updatedAt > anchor && (m.serviceId === null || m.serviceId === serviceId))
     .map((m) => m.key);

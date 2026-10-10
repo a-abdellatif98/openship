@@ -53,7 +53,12 @@ import { checkServer as checkServerHandler } from "./server-check.controller";
 /** Enough of a Hono context for this handler: a JSON body in, a JSON reply out. */
 function context(body: unknown) {
   const sent: { body: unknown; status: number } = { body: undefined, status: 0 };
+  const vars = new Map<string, unknown>();
   const c = {
+    set: (key: string, value: unknown) => vars.set(key, value),
+    get: (key: string) => vars.get(key),
+    header: vi.fn(),
+    res: new Response(),
     req: { json: async () => body },
     json: (payload: unknown, status = 200) => {
       sent.body = payload;

@@ -17,6 +17,7 @@
  *   - Written ONLY in desktop mode (see the gate at the call site).
  */
 
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "@repo/adapters";
 import { safeErrorMessage } from "@repo/core";
 import type { DatabaseDump } from "@repo/db";
@@ -80,12 +81,12 @@ export async function readManifest(exec: CommandExecutor): Promise<OpenshipManif
   try {
     const parsed = JSON.parse(trimmed) as OpenshipManifest;
     if (parsed.version !== MANIFEST_VERSION || !Array.isArray(parsed.projects)) {
-      console.warn(`[openship-manifest] ${MANIFEST_PATH} unrecognized shape/version — ignoring`);
+      errorDiagnostics.warn("platform/engine/lib/openship-manifest", `[openship-manifest] ${MANIFEST_PATH} unrecognized shape/version — ignoring`);
       return null;
     }
     return parsed;
   } catch (err) {
-    console.warn(`[openship-manifest] failed to parse ${MANIFEST_PATH}: ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/lib/openship-manifest", `[openship-manifest] failed to parse ${MANIFEST_PATH}: ${safeErrorMessage(err)}`, err);
     return null;
   }
 }
@@ -177,7 +178,7 @@ export async function readProjectSnapshot(
     if (parsed?.scope?.kind !== "project" || !parsed.tables) return null;
     return parsed;
   } catch (err) {
-    console.warn(`[openship-snapshot] failed to parse snapshot for ${projectId}: ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/lib/openship-manifest", `[openship-snapshot] failed to parse snapshot for ${projectId}: ${safeErrorMessage(err)}`, err);
     return null;
   }
 }

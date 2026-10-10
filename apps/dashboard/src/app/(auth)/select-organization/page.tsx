@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -122,7 +123,7 @@ export default function SelectOrganizationPage() {
             orgClient
               .getFullOrganization({ organizationId: o.id })
               .then((r) => r.data ?? null)
-              .catch(() => null),
+              .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(auth)/select-organization/page"); return null; }),
           ),
         );
 
@@ -169,6 +170,7 @@ export default function SelectOrganizationPage() {
           setLoading(false);
         }
       } catch (err) {
+        observeCaughtError(err, "dashboard/app/(auth)/select-organization/page");
         if (!cancelled) {
           setError(
             err instanceof Error
@@ -197,6 +199,7 @@ export default function SelectOrganizationPage() {
       setActiveOrganizationId(orgId);
       router.push("/");
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(auth)/select-organization/page");
       setError(
         err instanceof Error
           ? err.message

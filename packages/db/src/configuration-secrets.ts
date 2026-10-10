@@ -4,6 +4,7 @@
  * Legacy objects remain readable until the bounded startup backfill seals them.
  * No environment access, connection, or process-global key lives in this module.
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Encryption } from "./encryption";
 
 export type ConfigurationEncryption = Pick<Encryption, "encrypt" | "decrypt">;
@@ -40,7 +41,8 @@ export function createConfigurationSecrets(encryption: ConfigurationEncryption) 
       );
       if (plain === null || typeof plain !== "object") throw new Error();
       return plain;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "db/configuration-secrets");
       // Never pass ciphertext to a runtime, expose it in errors, or turn a wrong
       // key into an empty configuration that could overwrite the stored secret.
       throw new Error("Unable to decrypt stored configuration with this installation's key");

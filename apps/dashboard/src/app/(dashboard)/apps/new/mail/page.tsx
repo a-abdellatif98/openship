@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -94,7 +95,8 @@ export default function MailWizardPage() {
       try {
         const res = await mailApi.listMailServers();
         setMailServers(res?.servers ?? []);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/new/mail/page");
         // Wizard still works without it — the operator types the IMAP host.
       }
     })();
@@ -144,7 +146,8 @@ export default function MailWizardPage() {
           setErrorMsg(s.failureMessage || w.installFailed);
           setPhase("error");
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/apps/new/mail/page");
         /* transient — keep polling */
       }
     };

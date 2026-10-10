@@ -7,6 +7,7 @@
  * read-only; acting on the result requires an explicit, user-accepted EdgePolicy.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { AppError, shellQuote } from "@repo/core";
 import type { CommandExecutor } from "../../types";
 import {
@@ -140,7 +141,7 @@ export async function sanitizeEdgeVhosts(
     `  fi;`,
     `done`,
   ].join(" ");
-  const out = await executor.exec(script).catch(() => "");
+  const out = await executor.exec(script).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "adapters/system/proxy/detect"); return ""; });
   for (const line of out.split("\n").map((l) => l.trim()).filter(Boolean)) {
     const [action, file] = [line.slice(0, line.indexOf(" ")), line.slice(line.indexOf(" ") + 1)];
     if (action === "dropped-catchall") {

@@ -203,8 +203,8 @@
 			},
 			"environmentApply": {
 				"title": "Aplicar cambios de entorno",
-        "applying": "Aplicando cambios…",
-        "applied": "Cambios de entorno aplicados",
+				"applying": "Aplicando cambios…",
+				"applied": "Cambios de entorno aplicados",
 				"hint": "Aplica las variables guardadas a este servicio sin volver a compilar. El servicio se reiniciará.",
 				"saveFirst": "Guarda los cambios antes de aplicarlos a este servicio.",
 				"restartBlocked": "{name} tiene cambios de entorno guardados que un reinicio normal no puede aplicar. Revísalos y aplícalos en la pestaña Entorno.",
@@ -370,6 +370,46 @@
 			},
 			"orBuildFromSource": "o compilar desde el código",
 			"imageHint": "Déjalo vacío para compilar desde un Dockerfile de abajo."
+		},
+		"connection": {
+			"terminal": "Terminal",
+			"statusTitle": "Estado del servicio no disponible",
+			"statusHint": "Openship no pudo confirmar el estado actual. Es posible que tu servicio siga funcionando.",
+			"checkingTitle": "Comprobando el servicio",
+			"checkingHint": "Esperando una respuesta del servidor. Ya puedes intentar abrir la terminal.",
+			"startingTitle": "Esperando al servicio",
+			"startingHint": "La terminal estará disponible cuando el servicio esté en ejecución.",
+			"stoppedTitle": "No hay un servicio en ejecución",
+			"openTerminal": "Abrir terminal",
+			"serviceSettings": "Ajustes del servicio",
+			"connectingTitle": "Abriendo terminal",
+			"connectingHint": "Estableciendo una conexión segura con {name}.",
+			"reconnectingTitle": "Reconectando",
+			"reconnectingHint": "Intentando restaurar tu sesión. La salida anterior se conserva aquí.",
+			"attempt": "Intento {attempt}",
+			"connected": "Conectado",
+			"cancel": "Cancelar",
+			"reconnect": "Reconectar",
+			"closedTitle": "Sesión finalizada",
+			"closedHint": "Abre una sesión nueva para continuar.",
+			"exitCode": "Código de salida {code}",
+			"exitSignal": "Señal {signal}",
+			"pausedTitle": "Conexión pausada",
+			"pausedHint": "Reconecta cuando quieras abrir una consola.",
+			"errorTitle": "Terminal no disponible",
+			"errors": {
+				"auth": "No se pudo verificar tu acceso. Inicia sesión de nuevo o revisa tus permisos.",
+				"connect": "Openship no pudo acceder a la consola del servicio. Inténtalo cuando el servidor vuelva a estar disponible.",
+				"notFound": "Este servicio no está disponible o no tienes acceso.",
+				"notDeployed": "No hay un contenedor en ejecución al que conectarse. Comprueba el estado del servicio e inténtalo de nuevo.",
+				"notSupported": "El entorno de ejecución de este servicio no admite una terminal interactiva.",
+				"maxSessions": "Cierra una sesión de terminal que no uses y vuelve a conectar.",
+				"idleTimeout": "Tu sesión finalizó por inactividad. Reconecta para continuar.",
+				"sessionCap": "Esta sesión alcanzó su límite de tiempo. Reconecta para continuar.",
+				"server": "No se pudo abrir la terminal. Inténtalo de nuevo.",
+				"maxReconnects": "No se pudo restaurar la conexión. Puedes intentar reconectar.",
+				"transport": "La conexión se interrumpió. Es posible que tu servicio siga funcionando."
+			}
 		}
 	}
 }

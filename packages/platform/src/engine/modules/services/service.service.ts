@@ -2,6 +2,7 @@
  * Service business logic - CRUD and compose sync.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import {
   normalizeRoutingFields,
@@ -402,7 +403,8 @@ async function reconcileAppServiceRow(project: Project): Promise<void> {
   let projectType: string;
   try {
     projectType = getProjectType((project.framework ?? "") as StackId);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service");
     return; // unknown framework → leave shape resolution to the existing paths
   }
   if (projectType !== "app") return; // services / docker-compose / monorepo already multi-unit
@@ -435,7 +437,7 @@ async function reconcileAppServiceRow(project: Project): Promise<void> {
   // it is safe to call on every sidecar add AND from the boot backfill.
   if (!hasSidecar || appRow) return;
 
-  const projectDomains = await repos.domain.listByProject(project.id).catch(() => []);
+  const projectDomains = await repos.domain.listByProject(project.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service"); return []; });
   const routeState = deriveProjectRouteState(project, { projectDomains });
   // Reuse the SAME normalizer createService uses so the mirrored project route
   // lands as ServicePublicEndpoint[] (exposed/exposedPort/domain scalars + the
@@ -547,11 +549,11 @@ async function healPhantomAppServiceRow(
 ): Promise<void> {
   if (!appRow || !isMaterializedAppRow(project, appRow)) return;
 
-  const history = await repos.serviceDeployment.listByService(appRow.id).catch(() => []);
+  const history = await repos.serviceDeployment.listByService(appRow.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service"); return []; });
   if (history.some((d) => d.status === "success")) return;
 
   await repos.service.remove(appRow.id);
-  console.warn(
+  errorDiagnostics.warn("platform/engine/modules/services/service.service",
     `[services] removed phantom app row "${appRow.name}" from project ${project.id}: ` +
       `the project has no build or start command, so it could never produce an image (#589)`,
   );
@@ -577,11 +579,11 @@ export function registerAppServiceRowReconcile(): void {
     id: "services:reconcile-app-row",
     modes: ["selfhosted", "desktop"],
     run: async () => {
-      const projects = await repos.project.listAllForScan().catch(() => []);
+      const projects = await repos.project.listAllForScan().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service"); return []; });
       for (const project of projects) {
         await reconcileAppServiceRow(project).catch((err) =>
-          console.warn(
-            `[services] app-row reconcile skipped for ${project.id}: ${(err as Error).message}`,
+          errorDiagnostics.warn("platform/engine/modules/services/service.service",
+            `[services] app-row reconcile skipped for ${project.id}: ${(err as Error).message}`, err,
           ),
         );
       }
@@ -613,7 +615,7 @@ export async function createService(
   // sentinel the client sent is dropped (never persist "••••••••"). Warn so a
   // real value accidentally lost this way is traceable.
   if (data.environment && hasMaskedValue(data.environment)) {
-    console.warn(`[services] create "${name}": dropping masked env value(s) with no stored source`);
+    errorDiagnostics.warn("platform/engine/modules/services/service.service", `[services] create "${name}": dropping masked env value(s) with no stored source`);
     data = { ...data, environment: unmaskEnv(data.environment, null) };
   }
 
@@ -754,7 +756,7 @@ export async function createService(
   // Best-effort — a failure here must never block adding the service.
   if (kind === "compose") {
     await reconcileAppServiceRow(project).catch((err) =>
-      console.warn(`[services] app materialization skipped: ${(err as Error).message}`),
+      errorDiagnostics.warn("platform/engine/modules/services/service.service", `[services] app materialization skipped: ${(err as Error).message}`, err),
     );
   }
 
@@ -1063,8 +1065,8 @@ export async function updateService(
           try {
             ({ runtime, hostPortTarget } = await resolveDeploymentRuntimeForRead({ ...dep, meta: { ...(dep.meta as Record<string, unknown>), runtimeMode: "docker" } }));
           } catch (err) {
-            console.warn(
-              `[SERVICE] ${svc.name}: could not resolve runtime for upstream, using stored row: ${safeErrorMessage(err)}`,
+            errorDiagnostics.warn("platform/engine/modules/services/service.service",
+              `[SERVICE] ${svc.name}: could not resolve runtime for upstream, using stored row: ${safeErrorMessage(err)}`, err,
             );
           }
         }
@@ -1134,7 +1136,7 @@ export async function updateService(
       // 502 cause is visible instead of a silently portless vhost.
       for (const reg of registers) {
         if (reg.port && !reg.targetUrl) {
-          console.warn(
+          errorDiagnostics.warn("platform/engine/modules/services/service.service",
             `[SERVICE] ${svc.name}: no live upstream for ${reg.hostname} (port ${reg.port}) — ` +
               `route may 502 until the deployment publishes that port.`,
           );
@@ -1195,16 +1197,18 @@ export async function updateService(
         // top of the live HTTP route — adopt an existing cert for a freshly
         // published custom domain (migration / takeover) instead of ACME.
         for (const domainId of freshlyPublishedDomainIds) {
-          await reuseServerCertForDomain(ctx, domainId).catch(() => {});
+          await reuseServerCertForDomain(ctx, domainId).catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service");
+          });
         }
         // A base service write replaces its vhost. Reapply the project's saved
         // path routes last so editing the root service cannot erase its backend.
         if (liveProject.compositeRoutes?.length) await applyProjectRouting(project.id);
       });
-      applyEdge.catch((err) => console.error(`[SERVICE] edge apply for ${svc.name}:`, err));
+      applyEdge.catch((err) => errorDiagnostics.error("platform/engine/modules/services/service.service", `[SERVICE] edge apply for ${svc.name}:`, err));
       await advisoryWork(applyEdge, undefined, ROUTE_EDGE_APPLY_TIMEOUT_MS);
     } catch (err) {
-      console.error(`[SERVICE] Failed to update route for ${svc.name}:`, err);
+      errorDiagnostics.error("platform/engine/modules/services/service.service", `[SERVICE] Failed to update route for ${svc.name}:`, err);
     } finally {
       // `applyEdge` may still be running past the race above, but it retains the
       // project runtime lock and resolves its own routing/executor from the
@@ -1239,7 +1243,7 @@ async function deleteLiveService(project: Project, svc: Service): Promise<void> 
         // also closes the Docker-over-SSH bridge on every settled failure.
         try {
           await platform.runtime.destroy(containerId).catch((err: unknown) => {
-            console.error(`[SERVICE] Failed to destroy service container ${containerId}:`, err);
+            errorDiagnostics.error("platform/engine/modules/services/service.service", `[SERVICE] Failed to destroy service container ${containerId}:`, err);
           });
           // Reclaim this service's built artifact NOW — the FK cascade in
           // repos.service.remove() below erases the imageRef record, so a later
@@ -1254,7 +1258,7 @@ async function deleteLiveService(project: Project, svc: Service): Promise<void> 
           // never be removed.
           if (isArtifactRef(serviceDeployment.imageRef)) {
             await platform.runtime.destroy(serviceDeployment.imageRef!).catch((err: unknown) => {
-              console.error(`[SERVICE] Failed to remove static output for ${svc.name}:`, err);
+              errorDiagnostics.error("platform/engine/modules/services/service.service", `[SERVICE] Failed to remove static output for ${svc.name}:`, err);
             });
           } else if (
             serviceDeployment.imageRef &&
@@ -1262,14 +1266,14 @@ async function deleteLiveService(project: Project, svc: Service): Promise<void> 
             platform.runtime instanceof DockerRuntime
           ) {
             await platform.runtime.removeImage(serviceDeployment.imageRef).catch((err: unknown) => {
-              console.error(`[SERVICE] Failed to remove image for ${svc.name}:`, err);
+              errorDiagnostics.error("platform/engine/modules/services/service.service", `[SERVICE] Failed to remove image for ${svc.name}:`, err);
             });
           }
         } finally {
           disposePlatform(platform);
         }
       })().catch((err: unknown) => {
-        console.error(`[SERVICE] Runtime teardown skipped for ${svc.name} (best-effort):`, err);
+        errorDiagnostics.error("platform/engine/modules/services/service.service", `[SERVICE] Runtime teardown skipped for ${svc.name} (best-effort):`, err);
       });
     }
   }
@@ -1304,7 +1308,7 @@ async function deleteLiveService(project: Project, svc: Service): Promise<void> 
         });
       }
     } catch (err) {
-      console.error(`[SERVICE] Failed to remove route for ${svc.name}:`, err);
+      errorDiagnostics.error("platform/engine/modules/services/service.service", `[SERVICE] Failed to remove route for ${svc.name}:`, err);
     }
   }
 
@@ -1589,8 +1593,8 @@ export async function syncComposeServices(
         hostname: row.hostname,
         targetPort: row.targetPort,
       }).catch((err: unknown) => {
-        console.warn(
-          `[services] ${svc.name}: could not record domain "${row.hostname}" — ${safeErrorMessage(err)}`,
+        errorDiagnostics.warn("platform/engine/modules/services/service.service",
+          `[services] ${svc.name}: could not record domain "${row.hostname}" — ${safeErrorMessage(err)}`, err,
         );
       });
     }
@@ -1601,8 +1605,8 @@ export async function syncComposeServices(
     for (const hostname of serviceCustomHostnames(previous)) {
       if (stillConfigured.has(hostname)) continue;
       await removeServiceDomain({ serviceId: svc.id, hostname }).catch((err: unknown) => {
-        console.warn(
-          `[services] ${svc.name}: could not drop stale domain "${hostname}" — ${safeErrorMessage(err)}`,
+        errorDiagnostics.warn("platform/engine/modules/services/service.service",
+          `[services] ${svc.name}: could not drop stale domain "${hostname}" — ${safeErrorMessage(err)}`, err,
         );
       });
     }
@@ -1770,7 +1774,7 @@ export async function getActiveServiceContainers(
                 };
                 if (!hint?.containerId)
                   return { ...base, status: "stopped" as ServiceContainerState };
-                const info = await runtime.getContainerInfo(hint.containerId).catch(() => null);
+                const info = await runtime.getContainerInfo(hint.containerId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service"); return null; });
                 return {
                   ...base,
                   status: info ? containerStatusToServiceState(info.status) : "unknown",
@@ -1786,7 +1790,7 @@ export async function getActiveServiceContainers(
         // is fire-and-forget (it still runs, we just don't wait on it).
         disposeRuntime(runtime);
       }
-    })().catch(() => null),
+    })().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service"); return null; }),
   );
   // Unreachable host / timeout / runtime without a query: say UNKNOWN. The old
   // fallback echoed the deploy-time status column, which is how a long-dead
@@ -1932,18 +1936,20 @@ export async function getServiceVolumeSizes(
     } finally {
       disposeRuntime(resolved.runtime);
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service");
     // fall through — try the instance's local host below
   }
   let executor: CommandExecutor;
   try {
     if (!serverId) {
-      const local = await repos.server.findLocal(project.organizationId).catch(() => null);
+      const local = await repos.server.findLocal(project.organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service"); return null; });
       if (!local) return unmeasured(false); // cloud / no host to du on
       serverId = local.id;
     }
     ({ executor } = await resolveServerExecutor(serverId, project.organizationId));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service");
     return unmeasured(false);
   }
 
@@ -1960,7 +1966,7 @@ export async function getServiceVolumeSizes(
       .exec(`docker inspect ${sq(containerId)} --format '{{json .Mounts}}' 2>/dev/null || echo`, {
         timeout: 10_000,
       })
-      .catch(() => "");
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service"); return ""; });
     try {
       const arr = JSON.parse(out.trim() || "[]");
       if (Array.isArray(arr)) {
@@ -2086,7 +2092,9 @@ async function resolveServiceContainer(
   // Heal the record so the DB-hint consumers (backups, restore) converge on the
   // same container instead of each rediscovering the drift.
   if (row && containerId && row.containerId !== containerId) {
-    await repos.service.updateServiceDeployment(row.id, { containerId }).catch(() => {});
+    await repos.service.updateServiceDeployment(row.id, { containerId }).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service");
+    });
   }
   if (!containerId) {
     disposeRuntime(runtime);
@@ -2172,7 +2180,7 @@ async function provisionServiceContainer(
     const line = entry.message.replace(/\n$/, "");
     if (!line) return;
     const tag = `[service-provision:${service.name}]`;
-    if (entry.level === "error" || entry.level === "warn") console.error(tag, line);
+    if (entry.level === "error" || entry.level === "warn") errorDiagnostics.error("platform/engine/modules/services/service.service", tag, line);
     else console.log(tag, line);
   });
   const snapshot = (dep.meta ?? {}) as DeploymentConfigSnapshot;
@@ -2311,7 +2319,9 @@ async function startServiceContainerUnlocked(ctx: RequestContext, projectId: str
       if (existing.row) {
         await repos.service
           .updateServiceDeployment(existing.row.id, { status: "success" })
-          .catch(() => {});
+          .catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service");
+          });
       }
       return { containerId: existing.containerId };
     } finally {
@@ -2336,7 +2346,9 @@ async function stopServiceContainerUnlocked(ctx: RequestContext, projectId: stri
     await runtime.stop(containerId);
     // Deploy-history bookkeeping only — the panel reads state from the host.
     if (row) {
-      await repos.service.updateServiceDeployment(row.id, { status: "stopped" }).catch(() => {});
+      await repos.service.updateServiceDeployment(row.id, { status: "stopped" }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service");
+      });
     }
     return { containerId };
   } finally {
@@ -2381,7 +2393,7 @@ async function restartServiceContainerUnlocked(
     const project = await repos.project.findById(projectId);
     assertResourceInOrg(project, "Project", ctx.organizationId, projectId);
     const dep = project.activeDeploymentId
-      ? await findActiveDeployment(project).catch(() => null)
+      ? await findActiveDeployment(project).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service"); return null; })
       : null;
     const service = (await repos.service.listByProject(projectId)).find((s) => s.id === serviceId);
     if (dep && service) {
@@ -2416,7 +2428,9 @@ async function restartServiceContainerUnlocked(
   try {
     await runtime.restart(containerId);
     if (row) {
-      await repos.service.updateServiceDeployment(row.id, { status: "success" }).catch(() => {});
+      await repos.service.updateServiceDeployment(row.id, { status: "success" }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/services/service.service");
+      });
     }
     return { containerId };
   } finally {

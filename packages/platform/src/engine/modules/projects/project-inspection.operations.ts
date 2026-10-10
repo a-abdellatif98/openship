@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { ProjectControlSchemas } from "@repo/contracts";
 import type { ResourceServices } from "../../../resource-operations";
 import type { ProjectDependencies } from "../../../projects";
@@ -13,7 +14,10 @@ import { maskDeploymentEnv } from "../../lib/secret-env";
 import { listProjectRouteRows, resolveProjectRouteState } from "../domains/project-route.service";
 import { refreshProjectFaviconIfStale } from "../../lib/favicon-detector";
 import { pickCanonicalDomainRow, resolveProjectAccess } from "../../lib/public-endpoints";
+import { readProjectRoutingClaims } from "../../lib/domain-claims";
+import { serviceCustomHostnames } from "../../lib/routing-domains";
 import { withDomainDiagnostics } from "../domains/domain-diagnostics";
+import { getProjectRoutingRetry } from "./project-routing-retry.operations";
 
 export function createProjectInspectionOperations(
   recordAudit: ProjectDependencies["recordAudit"],
@@ -39,7 +43,7 @@ export function createProjectInspectionOperations(
       // ACTIVE one, which by construction is never a blocked deploy — so without this
       // the detail page's status pill couldn't show a blocker that the project list
       // (which already fetches `latest`) does show. One query on a detail read.
-      const latestDeployment = await repos.deployment.findLatestByProject(id).catch(() => null);
+      const latestDeployment = await repos.deployment.findLatestByProject(id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-inspection.operations"); return null; });
       const hasServer = project.hasServer ?? project.productionMode === "host";
       // The resolved runtime workload (web | worker | static). A worker and a web app
       // both run a long-lived process (start command + volumes), but only a web app
@@ -91,6 +95,11 @@ export function createProjectInspectionOperations(
       // here would re-introduce the duplication the fan-out unification removed.
       // Fetch domains for this project
       const rawDomains = await listProjectRouteRows(id);
+      const ownedHostnames = new Set(rawDomains.map((domain) => domain.hostname.toLowerCase()));
+      const configuredHostnames = serviceRows
+        .flatMap(serviceCustomHostnames)
+        .filter((hostname) => !ownedHostnames.has(hostname));
+      const routingClaims = await readProjectRoutingClaims(id, configuredHostnames);
       const routeState = await resolveProjectRouteState(project, { projectDomains: rawDomains });
       const publicEndpoints = routeState.publicEndpoints;
       const domains = (await withDomainDiagnostics(project, rawDomains, serviceRows)).map((d) => ({
@@ -135,6 +144,8 @@ export function createProjectInspectionOperations(
           access,
           options,
           domains,
+          routingClaims,
+          routingRetry: getProjectRoutingRetry(organizationId, id),
           serviceCount,
           hasMultipleServices: serviceCount > 1,
           projectType,

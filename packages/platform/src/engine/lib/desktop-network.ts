@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { networkInterfaces } from "node:os";
 import { peekPlatform } from "@repo/adapters";
 
@@ -18,7 +19,8 @@ export function desktopNetworkDisconnected(): boolean {
     return !Object.values(networkInterfaces()).some((addresses) =>
       addresses?.some((address) => !address.internal),
     );
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/desktop-network");
     // Failure to inspect this machine is not evidence that any server is down.
     return false;
   }

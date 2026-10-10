@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { ProjectDependencies } from "../../../projects";
 import type { CreateProjectInput, EnsureProjectInput } from "@repo/contracts";
 import type { ExecutionContext } from "../../../context";
@@ -46,7 +47,7 @@ const create = async (ctx: ExecutionContext, input: EnsureProjectInput) => {
   await checkSource(input);
   if (input.routeStrategy === undefined) {
     const { getRouteStrategy } = await import("../settings/settings.service");
-    const preference = await getRouteStrategy(ctx.userId).catch(() => "auto" as const);
+    const preference = await getRouteStrategy(ctx.userId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project.operations"); return "auto" as const; });
     if (preference !== "auto") input.routeStrategy = preference;
   }
   return service.createProject(input, ctx.organizationId, ctx.tokenScope ?? undefined, ctx);

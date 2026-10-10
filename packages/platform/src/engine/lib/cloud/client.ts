@@ -10,6 +10,7 @@
  * Methods that look up cached state (token) key off the resolved cloud user id
  * — for org scope, that's the org owner (resolveOrgCloudUserId).
  */
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { DatabaseDump } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
 import type { CloudPreflightData } from "../cloud-preflight";
@@ -309,17 +310,17 @@ export function cloudClient(scope: CloudClientScope, expectedIdentity?: CloudIde
       // "connected but unreachable" preflight is diagnosable instead of
       // opaque (no owner-link/send vs SaaS error vs response-shape).
       if (!res) {
-        console.warn("[cloud preflight] no response (owner-link missing, or fetch failed/timed out)");
+        errorDiagnostics.warn("platform/engine/lib/cloud/client", "[cloud preflight] no response (owner-link missing, or fetch failed/timed out)");
         return null;
       }
       if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        console.warn(`[cloud preflight] SaaS returned ${res.status}: ${body.slice(0, 300)}`);
+        const body = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/client"); return ""; });
+        errorDiagnostics.warn("platform/engine/lib/cloud/client", `[cloud preflight] SaaS returned ${res.status}: ${body.slice(0, 300)}`);
         return null;
       }
       const json = await readCloudJson<{ data: CloudPreflightData }>(res);
       if (!json?.data) {
-        console.warn("[cloud preflight] 200 but no { data } in body (non-JSON or shape mismatch)");
+        errorDiagnostics.warn("platform/engine/lib/cloud/client", "[cloud preflight] 200 but no { data } in body (non-JSON or shape mismatch)");
         return null;
       }
       return json.data;
@@ -345,14 +346,14 @@ export function cloudClient(scope: CloudClientScope, expectedIdentity?: CloudIde
           method: "POST",
         }, session);
         if (res && !res.ok) {
-          console.warn(
+          errorDiagnostics.warn("platform/engine/lib/cloud/client",
             `[cloud disconnect] SaaS returned ${res.status} on session revoke; clearing local anyway`,
           );
         }
       } catch (err) {
-        console.warn(
+        errorDiagnostics.warn("platform/engine/lib/cloud/client",
           `[cloud disconnect] SaaS revoke failed (clearing local anyway):`,
-          safeErrorMessage(err),
+          safeErrorMessage(err), err,
         );
       }
       await clearCloudSession(userId, session);

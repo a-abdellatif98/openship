@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -154,7 +155,8 @@ export function DeployCredentialModal({
       if (trigger !== "preflight-gate") return;
       try {
         await settingsApi.updateCloneStrategyPreference(pref);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/deployments/DeployCredentialModal");
         // Silent — non-fatal, the deploy can still proceed without it.
       }
     },

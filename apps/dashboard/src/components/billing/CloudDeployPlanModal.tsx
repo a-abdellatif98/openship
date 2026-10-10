@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -53,6 +54,7 @@ export function CloudDeployPlanModal({
       initialOffer.current ??= next.subscription?.offerReference ?? next.tier;
       setState(next);
     } catch (err) {
+      observeCaughtError(err, "dashboard/components/billing/CloudDeployPlanModal");
       if (mounted.current) {
         setState(null);
         setError(err instanceof ApiError && err.status === 403 ? "owner" : "unavailable");

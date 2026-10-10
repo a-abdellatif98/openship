@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useState } from "react";
 import { getActiveOrganizationId } from "@/lib/api/client";
 import { issuesApi, subscribeOpenIssueCounts, type IssueCounts } from "@/lib/api/issues";
@@ -40,7 +41,8 @@ export function useIssueCounts(organizationId: string | null | undefined): Issue
         ) {
           setSnapshot({ organizationId, counts: result.data });
         }
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/hooks/useIssueCounts");
         // Keep the last known count until the next successful read.
       } finally {
         reading = false;

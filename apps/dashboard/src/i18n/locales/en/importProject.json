@@ -439,12 +439,12 @@
     "rowType": "Type"
   },
   "configDiagnostics": {
-    "title": "Some of this repo's openship.json was not applied",
-    "description": "The fields listed below were skipped; the rest of the file was applied. The deploy will still run.",
+    "title": "Some repository deployment settings were not applied",
+    "description": "Review the skipped settings below before deploying.",
     "titleWholeFile": "This repo's openship.json was ignored",
     "descriptionWholeFile": "None of it was applied. The deploy will still run, using the settings Openship detected.",
     "refused": "Refused",
     "unrecognized": "Not recognized",
-    "hint": "Run `openship config validate` in the repo to check the file before your next deploy."
+    "hint": "Check the named configuration files and update any unsupported settings before your next deploy."
   }
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { CloudSupportSession } from "@repo/contracts";
@@ -60,6 +61,7 @@ function LinkedInbox({ connected, children }: { connected: boolean; children: In
       setSession(result);
       setFailed(false);
     } catch (error) {
+      observeCaughtError(error, "dashboard/components/support/LinkedSupportCenter");
       if (!mounted.current || generation.current !== request) return;
       setFailed(true);
       if (

@@ -9,6 +9,7 @@
  * a repo can be shared by projects across groups.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { repos, type Project } from "@repo/db";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
 import { registerWebhook, updateWebhook } from "../github/github.service";
@@ -68,7 +69,7 @@ export async function ensureSharedWebhook(
   // A new hook superseded a stale one on the same repo — turn the old one off so
   // stale GitHub hooks don't pile up (the gap the old link path never closed).
   if (existingHookId && existingHookId !== result.hookId) {
-    await updateWebhook(ctx, owner, repo, existingHookId, { active: false }).catch(() => undefined);
+    await updateWebhook(ctx, owner, repo, existingHookId, { active: false }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-git-webhook"); return undefined; });
   }
   await syncSharedWebhookId(project.organizationId, owner, repo, result.hookId);
   return result.hookId;

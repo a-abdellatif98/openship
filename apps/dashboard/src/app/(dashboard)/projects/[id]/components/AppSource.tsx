@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -36,7 +37,8 @@ export function AppSource() {
     try {
       const res = await updatesApi.list();
       setStatus((res.data ?? []).find((u) => u.projectId === String(id)) ?? null);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/AppSource");
       setStatus(null);
     } finally {
       setLoading(false);
@@ -58,7 +60,9 @@ export function AppSource() {
       .then((res) => {
         if (alive) setRepository(res.data?.repository ?? null);
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/AppSource");
+      });
     return () => {
       alive = false;
     };

@@ -23,6 +23,7 @@
  * opinion and the rest of the queue is fine.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "@repo/adapters";
 import { relayedDomainsFor, safeErrorMessage } from "@repo/core";
 
@@ -120,13 +121,14 @@ const unread = { status: "unknown" as const, queued: 0, sampled: false, deferral
 export async function checkMailDelivery(exec: CommandExecutor): Promise<MailDeliveryHealth> {
   const relay = await readState(exec)
     .then((state) => (state?.outboundRelay?.enabled ? state.outboundRelay : undefined))
-    .catch(() => undefined);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/mail/mail-delivery.service"); return undefined; });
   const base = describePath(relay);
 
   let probe;
   try {
     probe = await resolveMailEngine(exec);
   } catch (error) {
+    observeCaughtError(error, "api/modules/mail/mail-delivery.service");
     return { ...base, ...unread, detail: firstLine(safeErrorMessage(error)) };
   }
   if (probe.flavor === "none") {
@@ -145,6 +147,7 @@ export async function checkMailDelivery(exec: CommandExecutor): Promise<MailDeli
   try {
     raw = await exec.exec(mailQueueProbeCommand(flavor));
   } catch (err) {
+    observeCaughtError(err, "api/modules/mail/mail-delivery.service");
     return { ...base, ...unread, detail: firstLine(safeErrorMessage(err)) };
   }
 

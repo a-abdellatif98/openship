@@ -1,3 +1,4 @@
+import { errorReporter } from "@repo/core/diagnostics";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { runEvents } from "../src/engine/lib/run-events";
 import type { RunBus } from "../src/engine/lib/run-bus";
@@ -83,6 +84,7 @@ it("recovers a separate worker's progress and exact completion without any bus n
   expect((await f.stream.next()).done).toBe(true);
   expect(f.unsubscribe).toHaveBeenCalledOnce();
   expect(f.listeners.size).toBe(0);
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -102,6 +104,7 @@ it("coalesces state notifications and reads the saved verdict before closing", a
   expect(payload(await f.stream.next())).toEqual({ type: "complete", status: "succeeded" });
   await f.stream.next();
   expect(f.load).toHaveBeenCalledTimes(2);
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -120,6 +123,7 @@ it("does not replay older transitions over the initial durable snapshot", async 
   await vi.advanceTimersByTimeAsync(200);
   expect(payload(await next)).toMatchObject({ type: "snapshot", run: { status: "succeeded" } });
   await f.stream.return?.();
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -139,6 +143,7 @@ it("serializes slow reads and reconciles an update that arrives during one", asy
   expect(payload(await next)).toMatchObject({ run: { status: "uploading", bytes: 100 } });
   expect(f.load).toHaveBeenCalledTimes(3);
   await f.stream.return?.();
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -167,6 +172,7 @@ it("does not send duplicate snapshots on an unchanged run", async () => {
   f.abort.abort();
   await cancelled;
   expect(f.unsubscribe).toHaveBeenCalledOnce();
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -185,6 +191,7 @@ it("stops timers immediately on abort even while a durable read is pending", asy
   await vi.advanceTimersByTimeAsync(20_000);
   expect(f.load).toHaveBeenCalledTimes(2);
   expect(f.unsubscribe).toHaveBeenCalledOnce();
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -196,6 +203,7 @@ it("closes a failed reconciliation so clients reconnect instead of receiving hea
   await vi.advanceTimersByTimeAsync(5_000);
   await next;
   expect(f.unsubscribe).toHaveBeenCalledOnce();
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -206,6 +214,7 @@ it("closes completed initial snapshots without starting reconciliation", async (
   expect(payload(await f.stream.next()).type).toBe("complete");
   expect((await f.stream.next()).done).toBe(true);
   expect(f.load).toHaveBeenCalledOnce();
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -218,6 +227,7 @@ it("bounds buffered advisories and unsubscribes when their consumer falls behind
   slow.resolve({ status: "preparing", bytes: 0, finishedAt: null });
   await first;
   expect(f.unsubscribe).toHaveBeenCalledOnce();
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -232,5 +242,6 @@ it("preserves existing live event delivery for callers without durable reconcili
   expect((await f.stream.next()).done).toBe(true);
   expect(f.load).toHaveBeenCalledOnce();
   expect(f.unsubscribe).toHaveBeenCalledOnce();
+  await errorReporter.flush(); // Drain diagnostics before checking operation timers.
   expect(vi.getTimerCount()).toBe(0);
 });

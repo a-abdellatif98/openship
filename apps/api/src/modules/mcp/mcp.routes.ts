@@ -5,6 +5,7 @@
  * request that re-runs the full auth + permission stack (see mcp-dispatch.ts).
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Hono, type Context } from "hono";
 import { repos, type Permission } from "@repo/db";
 import { secureRouter } from "../../lib/secure-router";
@@ -202,7 +203,8 @@ r.public("post", "/", { reason: PUBLIC_REASON, rateLimit: "mcp" }, async (c) => 
   let payload: unknown;
   try {
     payload = await c.req.json();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/modules/mcp/mcp.routes");
     return c.json(jsonRpcError(null, -32700, "Parse error"), 400);
   }
 
@@ -220,7 +222,9 @@ r.public("post", "/", { reason: PUBLIC_REASON, rateLimit: "mcp" }, async (c) => 
   // never-used in Settings. `tools/call` is excluded because its sub-request stamps
   // it in authMiddleware — counting both would double every tool call.
   if (caller.hasBinding && message?.method !== "tools/call") {
-    void repos.personalAccessToken.touchLastUsed(caller.tokenId).catch(() => {});
+    void repos.personalAccessToken.touchLastUsed(caller.tokenId).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "api/modules/mcp/mcp.routes");
+    });
   }
 
   // Read off the OUTER request — a real HTTP request from the real client. The

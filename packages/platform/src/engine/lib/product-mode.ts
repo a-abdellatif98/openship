@@ -27,6 +27,7 @@
  * platform endpoints on mail mode would break mail itself.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { env } from "@repo/platform/engine/config/env";
 
 /** The canonical mode set. Shared with the env parser and the write validator so
@@ -60,7 +61,8 @@ export async function resolveProductMode(): Promise<ProductMode> {
     const { repos } = await import("@repo/db");
     const stored = (await repos.instanceSettings.get())?.productMode;
     resolved = isProductMode(stored) ? stored : env.OPENSHIP_PRODUCT;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/product-mode");
     resolved = env.OPENSHIP_PRODUCT;
   }
 

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { acquireServerExecution } from "../../lib/server-execution";
 /** Server setup sessions and monitoring, independent of HTTP stream lifetimes. */
 import type { ServerDependencies } from "../../../servers";
@@ -59,7 +60,8 @@ export const serverInstallationDependencies: NonNullable<ServerDependencies["ins
       try {
         await authorization.authorize(ctx, { resourceType: "server", resourceId: existing.serverId, action: "admin" });
         visible = true;
-      } catch { /* The busy response must not reveal another tenant's session id. */ }
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-install.operations"); /* The busy response must not reveal another tenant's session id. */ }
       return failSystem({ error: "install_in_progress", ...(visible && { sessionId: existing.id }) }, 409);
     }
     const componentMeta = installNames.map(name => ({ name, label: getSystemComponentDefinition(name).label }));
@@ -150,7 +152,8 @@ export const serverInstallationDependencies: NonNullable<ServerDependencies["ins
                   appendSetupLog(session.id, "edge", l.message, l.level),
                 ),
               );
-            } catch {
+            } catch (diagnosticFailure) {
+              observeCaughtError(diagnosticFailure, "platform/engine/modules/system/server-install.operations");
               /* best-effort */
             }
           }
@@ -193,6 +196,7 @@ export const serverInstallationDependencies: NonNullable<ServerDependencies["ins
             hasFailure = true;
           }
         } catch (err) {
+          observeCaughtError(err, "platform/engine/modules/system/server-install.operations");
           const msg = safeErrorMessage(err);
           appendSetupLog(session.id, name, msg, "error");
           updateComponentProgress(session.id, name, "failed", msg);
@@ -216,6 +220,7 @@ export const serverInstallationDependencies: NonNullable<ServerDependencies["ins
         done = true;
         finishSetupSession(session.id, hasFailure ? "failed" : "completed");
       } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/system/server-install.operations");
         done = true;
         const message = safeErrorMessage(error);
         appendSetupLog(session.id, "setup", message, "error");
@@ -252,6 +257,7 @@ async function* monitorServer(organizationId: string, serverId: string, signal?:
         if (signal?.aborted) break;
         yield { event: "stats", data: JSON.stringify(stats) };
       } catch (error) {
+        observeCaughtError(error, "platform/engine/modules/system/server-install.operations");
         if (signal?.aborted) break;
         yield { event: "error", data: JSON.stringify({ error: safeErrorMessage(error) }) };
       }

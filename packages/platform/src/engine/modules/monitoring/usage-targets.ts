@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { RuntimeAdapter } from "@repo/adapters";
 import { repos } from "@repo/db";
 import type { DeploymentMeta } from "../../lib/deployment-runtime";
@@ -62,7 +63,7 @@ export async function resolveUsageTargets(
     inventory !== undefined
       ? inventory
       : runtime.supports("hostContainerQuery") && runtime.listAllContainers
-        ? await runtime.listAllContainers().catch(() => null)
+        ? await runtime.listAllContainers().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/monitoring/usage-targets"); return null; })
         : null;
   const inspectStatus = async (containerId: string | null): Promise<LiveServiceStatus> => {
     if (!containerId) return "unknown";
@@ -72,7 +73,8 @@ export async function resolveUsageTargets(
       if (info.status === "failed") return "failed";
       if (["queued", "building", "deploying"].includes(info.status)) return "starting";
       return "stopped";
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/monitoring/usage-targets");
       return "unknown";
     }
   };

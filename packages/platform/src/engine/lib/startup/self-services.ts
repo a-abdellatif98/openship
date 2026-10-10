@@ -19,6 +19,7 @@
  * socket, bare install, permissions) leaves the project exactly as it was.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import { safeErrorMessage } from "@repo/core";
 import {
@@ -77,7 +78,8 @@ export async function linkSelfAppServices(
   let runtime: DockerRuntime;
   try {
     runtime = await DockerRuntime.create();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/startup/self-services");
     return 0; // no docker reachable (bare install / no socket) → nothing to link
   }
 
@@ -115,7 +117,9 @@ export async function linkSelfAppServices(
         // release) without touching anything the operator may have edited.
         await repos.service
           .update(row.id, { image: spec.image, ports: spec.ports, sortOrder: spec.sortOrder })
-          .catch(() => {});
+          .catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "platform/engine/lib/startup/self-services");
+          });
       }
       linked += 1;
 
@@ -136,7 +140,9 @@ export async function linkSelfAppServices(
             hostPorts: live.hostPortByContainerPort ?? null,
             ip: live.ip ?? null,
           })
-          .catch(() => {});
+          .catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "platform/engine/lib/startup/self-services");
+          });
       }
     }
     // Heal an already-seeded phantom: the #231 app-materialize backfill once
@@ -149,16 +155,20 @@ export async function linkSelfAppServices(
     // guard in reconcileAppServiceRow; this clears instances that predate it.
     // Unconditional here, unlike that helper's own #589 repair, because the
     // control plane's units are known: none of them is ever a monorepo row.
-    const stale = await repos.service.listByProjectKind(projectId, "monorepo").catch(() => []);
+    const stale = await repos.service.listByProjectKind(projectId, "monorepo").catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/startup/self-services"); return []; });
     for (const row of stale) {
-      await repos.service.remove(row.id).catch(() => {});
+      await repos.service.remove(row.id).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/lib/startup/self-services");
+      });
     }
 
     return linked;
   } catch (err) {
-    console.warn(`[self-services] linking skipped: ${safeErrorMessage(err)}`);
+    errorDiagnostics.warn("platform/engine/lib/startup/self-services", `[self-services] linking skipped: ${safeErrorMessage(err)}`, err);
     return 0;
   } finally {
-    await runtime.dispose().catch(() => {});
+    await runtime.dispose().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/startup/self-services");
+    });
   }
 }

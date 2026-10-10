@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -151,7 +152,9 @@ export function SendingTab({ serverId, primaryDomain }: { serverId: string; prim
     mailAdminApi.domains
       .list(serverId)
       .then((r) => !cancelled && setDomainList(r.domains ?? []))
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/sending-tab");
+      });
     mailAdminApi.relay
       .get(serverId)
       .then((r) => {
@@ -159,7 +162,9 @@ export function SendingTab({ serverId, primaryDomain }: { serverId: string; prim
         setCurrent(r.relay);
         seedFromStatus(r.relay);
       })
-      .catch(() => {})
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/_components/admin/sending-tab");
+      })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;

@@ -129,7 +129,15 @@
     "acceptedTitle": "参加しました",
     "acceptedRedirect": "ダッシュボードにリダイレクトしています...",
     "errorTitle": "この招待を承認できません",
-    "backToDashboard": "ダッシュボードに戻る"
+    "backToDashboard": "ダッシュボードに戻る",
+    "invitedBy": "{name} からの招待",
+    "roleLabel": "ロール：",
+    "desktopOpen": "Desktop で開く",
+    "desktopCopy": "招待リンクをコピー",
+    "desktopCopied": "リンクをコピーしました",
+    "desktopFallback": "Desktop が開かない場合は、設定 → インスタンス → インスタンスに接続 にこの招待リンクを貼り付けてください。",
+    "desktopDescription": "Desktop を使うか、このブラウザーで続行してください。",
+    "switchAccount": "招待されたアカウントでログイン"
   },
   "cloudAuthorize": {
     "missingRedirect": "redirect パラメータがありません。",

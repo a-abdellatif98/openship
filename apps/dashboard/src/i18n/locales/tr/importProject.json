@@ -439,12 +439,12 @@
     "rowType": "Tür"
   },
   "configDiagnostics": {
-    "title": "Bu deponun openship.json dosyasının bir kısmı uygulanmadı",
-    "description": "Aşağıda listelenen alanlar atlandı; dosyanın kalanı uygulandı. Dağıtım devam edecek.",
+    "title": "Bazı depo dağıtım ayarları uygulanmadı",
+    "description": "Dağıtımdan önce aşağıdaki atlanan ayarları inceleyin.",
     "titleWholeFile": "Bu deponun openship.json dosyası yok sayıldı",
     "descriptionWholeFile": "Dosyanın hiçbir kısmı uygulanmadı. Dağıtım, Openship'in algıladığı ayarlarla devam edecek.",
     "refused": "Reddedildi",
     "unrecognized": "Tanınmadı",
-    "hint": "Sonraki dağıtımdan önce dosyayı denetlemek için depoda `openship config validate` komutunu çalıştırın."
+    "hint": "Sonraki dağıtımdan önce belirtilen yapılandırma dosyalarını kontrol edin ve desteklenmeyen ayarları güncelleyin."
   }
 }

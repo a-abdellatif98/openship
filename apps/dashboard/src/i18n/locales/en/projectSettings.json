@@ -929,7 +929,8 @@
       "error": "Error",
       "inactive": "Inactive",
       "external": "External TLS",
-      "manual": "Manual cert"
+      "manual": "Manual cert",
+      "unknown": "Unknown"
     },
     "typeCustom": "Custom domain",
     "typeFree": "Free subdomain",
@@ -1147,7 +1148,8 @@
         "manual_certificate": "This domain uses an uploaded certificate. Upload a valid replacement, then recheck it. Openship does not renew it automatically.",
         "managed_certificate": "TLS is managed by your external proxy or Openship Cloud. Check that provider’s configuration.",
         "route_missing": "This configured route has not been applied. Retry routing to apply it. No automatic routing retry is scheduled.",
-        "manual_dns": "This certificate uses manual TXT verification. Open HTTPS setup to confirm a new TXT record, or choose a connected DNS provider for automatic renewal."
+        "manual_dns": "This certificate uses manual TXT verification. Open HTTPS setup to confirm a new TXT record, or choose a connected DNS provider for automatic renewal.",
+        "managed_owner": "This hostname and its certificate are managed by the owning service. Check that service’s domain settings."
       }
     },
     "wildcard": {

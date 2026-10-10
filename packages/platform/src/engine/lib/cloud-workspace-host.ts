@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   CloudDockerRuntime,
   CloudServerConnection,
@@ -147,7 +148,7 @@ export async function measureCloudWorkspace(
   try {
     const [sample, storage, localProjects] = await Promise.all([
       sampleServerUsage(runtime.executor),
-      withTimeout(runtime.docker.df(), 15_000, "Storage inventory timed out").catch(() => null),
+      withTimeout(runtime.docker.df(), 15_000, "Storage inventory timed out").catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud-workspace-host"); return null; }),
       repos.project.listByWorkspace(id, organizationId),
     ]);
     const projects = [...new Map([
@@ -163,7 +164,7 @@ export async function measureCloudWorkspace(
             { timeout: 15_000 },
           )
           .then((raw) => raw.trim().split("\n"))
-          .catch(() => [])
+          .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud-workspace-host"); return []; })
       : [];
     const members = [];
     for (const [index, project] of projects.entries()) {

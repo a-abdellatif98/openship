@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
@@ -52,7 +53,8 @@ export function ServiceVolumesPanel({
     setLoading(true);
     servicesApi.volumeSizes(projectId, service.id)
       .then((result) => { if (active) setSizes(result); })
-      .catch(() => { if (active) setSizeError(true); })
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/services/ServiceVolumesPanel"); if (active) setSizeError(true); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [projectId, service.id, volumeKey, deployTarget, revision]);

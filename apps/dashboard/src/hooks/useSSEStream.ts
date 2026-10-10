@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { useCallback, useMemo, useRef } from 'react';
 import type { Terminal } from '@xterm/xterm';
 
@@ -92,7 +93,7 @@ export const useSSEStream = <T extends SSEMessage = SSEMessage>(
 
       return { bytes, text };
     } catch (err) {
-      console.error('Error processing log data:', err);
+      errorDiagnostics.error("dashboard/hooks/useSSEStream", 'Error processing log data:', err);
       return null;
     }
   }, []);
@@ -200,7 +201,7 @@ export const useSSEStream = <T extends SSEMessage = SSEMessage>(
         }
       }
     } catch (err) {
-      console.error('Error processing SSE chunk:', err);
+      errorDiagnostics.error("dashboard/hooks/useSSEStream", 'Error processing SSE chunk:', err);
       onError?.(err as Error);
     }
   }, [messageProcessor, processLogData, writeToTerminal, onRawMessage, onError, defaultParseMessage]);
@@ -275,7 +276,9 @@ export const useSSEStream = <T extends SSEMessage = SSEMessage>(
       });
       clearConnectTimer();
       if (!isCurrent()) {
-        await response.body?.cancel().catch(() => {});
+        await response.body?.cancel().catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "dashboard/hooks/useSSEStream");
+        });
         return;
       }
 
@@ -284,7 +287,9 @@ export const useSSEStream = <T extends SSEMessage = SSEMessage>(
         try {
           const json = await response.json();
           message = json.error || message;
-        } catch {}
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "dashboard/hooks/useSSEStream");
+        }
         throw Object.assign(new Error(`SSE connection failed: ${message}`), {
           status: response.status,
         });
@@ -329,7 +334,7 @@ export const useSSEStream = <T extends SSEMessage = SSEMessage>(
         isConnectedRef.current = false;
         onDisconnect?.();
       } else {
-        console.error('SSE connection error:', err);
+        errorDiagnostics.error("dashboard/hooks/useSSEStream", 'SSE connection error:', err);
         isConnectedRef.current = false;
         onError?.(err);
       }
@@ -337,7 +342,9 @@ export const useSSEStream = <T extends SSEMessage = SSEMessage>(
       clearConnectTimer();
       clearIdleTimer();
       releaseController();
-      await reader?.cancel().catch(() => {});
+      await reader?.cancel().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/hooks/useSSEStream");
+      });
       reader?.releaseLock();
     }
   }, [processSSEChunk, onConnect, onDisconnect, onError]);

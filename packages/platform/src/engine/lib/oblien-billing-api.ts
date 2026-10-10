@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { z } from "zod";
 import { AppError } from "@repo/core";
 import { OperationError } from "@repo/contracts";
@@ -310,7 +311,8 @@ export class OblienBillingApi {
         redirect: "error",
       });
       payload = await response.json();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/oblien-billing-api");
       throw new AppError("Cloud billing is temporarily unavailable. Please retry.", 503, "OBLIEN_BILLING_UNAVAILABLE");
     }
     if (!response.ok || (payload as { success?: unknown } | null)?.success !== true) {
@@ -325,7 +327,7 @@ export class OblienBillingApi {
       const providerFailure = PROVIDER_FAILURES.has(code) || /^ER_[A-Z0-9_]+$/.test(code) ||
         (!checkoutExpired && ![400, 404, 409, 422, 429].includes(response.status));
       const status = providerFailure ? 503 : response.status;
-      console.warn("[oblien:billing] Provider request failed", {
+      errorDiagnostics.warn("platform/engine/lib/oblien-billing-api", "[oblien:billing] Provider request failed", {
         method,
         operation: path
           .replace(/^\/billing\/policy\/[^/]+/, "/billing/policy/:namespace")

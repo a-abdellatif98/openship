@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { MailDeliveryHealth } from "@repo/contracts";
 import type { RelayProviderId } from "@repo/core";
 import { api, ApiError, getApiBaseUrl, getActiveOrganizationId, getApiErrorCode } from "./client";
@@ -554,7 +555,7 @@ export const mailApi = {
     // raises so callers unwrap it with getApiErrorMessage/getApiErrorCode;
     // throwing the raw body put a JSON blob in front of the operator.
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
+      const text = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/lib/api/mail"); return ""; });
       let body: unknown = text;
       try {
         body = JSON.parse(text);

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   NginxProvider,
   detectOpenRestyPaths,
@@ -47,7 +48,7 @@ export async function withOpenRestyRouting<T>(
   // GET routing read that blocked on a dead SSH connect with no liveness gate,
   // unlike delete/reconcile which already probe first. probeReachable is instant
   // when a live connection is cached, so the happy path pays nothing.
-  const reachable = await sshManager.probeReachable(serverId).catch(() => false);
+  const reachable = await sshManager.probeReachable(serverId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/openresty-paths"); return false; });
   if (!reachable) {
     throw new Error("Server is not reachable over SSH right now.");
   }
@@ -62,7 +63,7 @@ export async function withOpenRestyRouting<T>(
     const edgeExecutor = await rootOrDegrade(executor, {
       purpose: "Editing OpenResty configuration",
       consequence: "Reads still work; a write will fail with the permission error it earns.",
-      report: (message) => console.error(`[openresty] ${message}`),
+      report: (message) => errorDiagnostics.error("platform/engine/lib/openresty-paths", `[openresty] ${message}`),
     });
 
     const run = async (forceRefresh = false) => {

@@ -22,6 +22,7 @@ const MINUTE_MS = 60_000;
 
 /** All policy ids — keep in sync with `POLICIES` below. */
 export type PolicyId =
+  | "diagnostics"
   | "flood-ip"
   | "default-anon"
   | "default-authed"
@@ -37,6 +38,13 @@ export type PolicyId =
   | "support-reply";
 
 export const POLICIES: Record<PolicyId, RateLimitPolicy> = {
+  "diagnostics": {
+    id: "diagnostics",
+    limit: 20,
+    windowMs: MINUTE_MS,
+    subject: "ip",
+    description: "Bounded browser error batches, including before sign-in; never an unmetered log ingestion endpoint.",
+  },
   "support-reply": {
     id: "support-reply",
     limit: 30,

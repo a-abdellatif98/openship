@@ -19,6 +19,7 @@
  * break an app that was reading from it.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { repos } from "@repo/db";
 import {
   ValidationError,
@@ -120,7 +121,7 @@ export async function getObjectStorage(
 
   const listed = await repos.project
     .listByOrganization(ctx.organizationId, { perPage: 200 })
-    .catch(() => null);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-storage.service"); return null; });
   const sources = (listed?.rows ?? []).filter(
     (p) => p.id !== projectId && !!p.appTemplateId && STORAGE_TEMPLATE_IDS.has(p.appTemplateId),
   );
@@ -135,7 +136,7 @@ export async function getObjectStorage(
       // that's a prefill, not a requirement.
       defaultBucket: await getAppConnectionView(ctx, p.id)
         .then((v) => v.outputs.find((o) => o.id === SOURCE_BUCKET_OUTPUT)?.value ?? "")
-        .catch(() => ""),
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-storage.service"); return ""; }),
     })),
   );
 
@@ -381,12 +382,12 @@ async function clearBinding(
   if (!existing) return false;
 
   const keys = new Set(existing.envKeys ?? []);
-  const links = await repos.projectConnection.listByTarget(projectId).catch(() => []);
+  const links = await repos.projectConnection.listByTarget(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-storage.service"); return []; });
   for (const link of links) {
     if (!keys.has(link.envKey)) continue;
     if (existing.sourceProjectId && link.sourceProjectId !== existing.sourceProjectId) continue;
     await deleteConnection(ctx, projectId, link.id, { defer: true }).catch((err) => {
-      console.warn(`[object-storage] unlink ${link.envKey} failed: ${safeErrorMessage(err)}`);
+      errorDiagnostics.warn("platform/engine/modules/projects/project-storage.service", `[object-storage] unlink ${link.envKey} failed: ${safeErrorMessage(err)}`, err);
     });
     keys.delete(link.envKey);
   }
@@ -422,14 +423,14 @@ export async function unbindObjectStorage(
  * deploy anyway.
  */
 async function applyToTarget(ctx: RequestContext, projectId: string): Promise<void> {
-  const project = await repos.project.findById(projectId).catch(() => null);
+  const project = await repos.project.findById(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-storage.service"); return null; });
   if (!project?.activeDeploymentId) return;
   try {
     const { triggerDeployment } = await import("@repo/platform/engine/modules/deployments/build.service");
     await triggerDeployment(ctx, { projectId, trigger: "service-connection" });
   } catch (err) {
-    console.warn(
-      `[object-storage] apply-redeploy of ${projectId} failed (non-fatal): ${safeErrorMessage(err)}`,
+    errorDiagnostics.warn("platform/engine/modules/projects/project-storage.service",
+      `[object-storage] apply-redeploy of ${projectId} failed (non-fatal): ${safeErrorMessage(err)}`, err,
     );
   }
 }

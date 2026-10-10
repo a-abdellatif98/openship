@@ -25,6 +25,7 @@
  * fallback without changing the outcome of any deploy that already works.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { assembleGitClone, sq, type AmbientGitVia, type CommandExecutor } from "@repo/adapters";
 
 /** Probe budget. A reachable remote answers `ls-remote` in well under this. */
@@ -82,7 +83,8 @@ export async function probeServerGitAccess(opts: {
   let discovered: string;
   try {
     discovered = await opts.executor.exec(DISCOVER_SCRIPT, { timeout: DISCOVER_TIMEOUT_MS });
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/modules/github/server-git-ambient");
     return null;
   }
   if (!flag(discovered, "git")) return null;
@@ -118,7 +120,8 @@ export async function probeServerGitAccess(opts: {
           : `The build server can reach this repo with its own git credentials (${via}).`,
       );
       return { via };
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/github/server-git-ambient");
       // Not public, wrong account, or that mechanism isn't really wired up.
     }
   }

@@ -20,6 +20,7 @@
  *      as "not listening".
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { ExecOnly } from "../types";
 
 /** Minimal command surface this probe needs. A full `CommandExecutor` satisfies it. */
@@ -142,7 +143,8 @@ export async function probePortListeningOnce(
   for (const file of PROC_NET_TCP_FILES) {
     try {
       readable.push(await executor.exec(`cat ${file} 2>/dev/null`, { timeout: 5_000 }));
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/system/port-listen");
       // Try the other address family before declaring the probe inconclusive.
     }
   }
@@ -151,7 +153,8 @@ export async function probePortListeningOnce(
   try {
     const out = await executor.exec(buildPortProbeCommand(port), { timeout: 5_000 });
     return parsePortProbeOutput(out);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/system/port-listen");
     return null;
   }
 }
@@ -191,7 +194,8 @@ export async function waitForPortListening(
       if (remaining <= 0) break;
       await delay(Math.min(intervalMs, remaining));
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/system/port-listen");
     return { listening: false, checked: false };
   }
 
@@ -237,7 +241,8 @@ export async function waitForPortFree(
       if (remaining <= 0) break;
       await delay(Math.min(intervalMs, remaining));
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/system/port-listen");
     return { free: false, checked: false };
   }
 

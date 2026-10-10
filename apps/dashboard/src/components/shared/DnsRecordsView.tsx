@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -99,7 +100,8 @@ export function DnsRecordCard({
       await navigator.clipboard.writeText(text);
       setCopied(which);
       setTimeout(() => setCopied(null), 1200);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/shared/DnsRecordsView");
       // Non-HTTPS context - silently no-op.
     }
   };

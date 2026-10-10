@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { hostChannelHealth, type HostChannelHealth } from "@repo/adapters";
 import {
   HOST_CHANNEL_BLOCKED,
@@ -47,7 +48,7 @@ const IMPACT = [
 ];
 
 function defaultDeps(): HostChannelBannerDeps {
-  return { health: hostChannelHealth, log: (line) => console.error(line) };
+  return { health: hostChannelHealth, log: (line) => errorDiagnostics.error("api/lib/host-channel-banner", line) };
 }
 
 export async function reportHostChannelAtBoot(
@@ -63,7 +64,8 @@ export async function reportHostChannelAtBoot(
   let health: HostChannelHealth;
   try {
     health = await deps.health();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/lib/host-channel-banner");
     return "error";
   }
 

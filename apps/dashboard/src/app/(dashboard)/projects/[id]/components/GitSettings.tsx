@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectSettings } from "@/context/ProjectSettingsContext";
@@ -11,6 +12,8 @@ import { invalidateProjectCaches } from "@/hooks/useProjectEndpoints";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { Modal } from "@/components/ui/Modal";
 import { Toggle } from "@/components/project-settings/ServerSideSwitch";
+import { InstanceMoveLink } from "@/components/instance/InstanceMoveLink";
+import { usePlatform } from "@/context/PlatformContext";
 import { RepositoryList } from "../../../library/components/RepositoryList";
 import { AppSource } from "./AppSource";
 import { GitSettingsSkeleton } from "./GitSettingsSkeleton";
@@ -108,6 +111,7 @@ const GitProjectSettingsBody = ({ onUseReleaseImage }: { onUseReleaseImage?: () 
   const github = useGitHub();
   const { showToast } = useToast();
   const { t } = useI18n();
+  const { selfHosted } = usePlatform();
   const [isLinking, setIsLinking] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [togglingAuto, setTogglingAuto] = useState(false);
@@ -152,7 +156,8 @@ const GitProjectSettingsBody = ({ onUseReleaseImage }: { onUseReleaseImage?: () 
     try {
       const res = await projectsApi.getCloneToken(id);
       setCloneToken(res);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/[id]/components/GitSettings");
       setCloneToken({ hasToken: false, setAt: null });
     } finally {
       setCloneTokenLoading(false);
@@ -466,15 +471,20 @@ const GitProjectSettingsBody = ({ onUseReleaseImage }: { onUseReleaseImage?: () 
                         />
                       </div>
                       {cannotReceive && (
-                        <details className="max-w-64 text-xs text-muted-foreground">
-                          <summary className="flex cursor-pointer list-none items-center justify-end gap-1.5 rounded-md hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [&::-webkit-details-marker]:hidden">
-                            {t.projectSettings.git.webhookBanner.summary}
-                            <UiIcon name="info" className="size-3.5 shrink-0" />
-                          </summary>
-                          <p className="mt-2 text-start leading-relaxed">
-                            {t.projectSettings.git.webhookBanner.description}
-                          </p>
-                        </details>
+                        <div className="max-w-72 space-y-2 text-end">
+                          <details className="text-xs text-muted-foreground">
+                            <summary className="flex cursor-pointer list-none items-center justify-end gap-1.5 rounded-md hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 [&::-webkit-details-marker]:hidden">
+                              {t.projectSettings.git.webhookBanner.summary}
+                              <UiIcon name="info" className="size-3.5 shrink-0" />
+                            </summary>
+                            <p className="mt-2 text-start leading-relaxed">
+                              {selfHosted
+                                ? t.settings.instance.location.webhookAccessHint
+                                : t.projectSettings.git.webhookBanner.description}
+                            </p>
+                          </details>
+                          {selfHosted && <InstanceMoveLink />}
+                        </div>
                       )}
                     </div>
                   );

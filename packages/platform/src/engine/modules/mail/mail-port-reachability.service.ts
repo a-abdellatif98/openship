@@ -10,6 +10,7 @@
  * host/provider firewalls and NAT rules. Neither fact alone can diagnose both.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { scanPorts, type CommandExecutor, type TcpProbeFailure } from "@repo/adapters";
 import { isSyntheticDnsAddress } from "../../lib/dns-address";
 import { probePortsFromControlPlane } from "../../lib/port-reachability";
@@ -109,7 +110,7 @@ const healthCache = new Map<string, { expiresAt: number; value: Promise<MailPort
 export async function resolvePublicMailAddress(hostname: string): Promise<string> {
   const resolver = createPublicDnsResolver();
 
-  const v4 = await resolver.resolve4(hostname).catch(() => [] as string[]);
+  const v4 = await resolver.resolve4(hostname).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail-port-reachability.service"); return [] as string[]; });
   const usableV4 = v4.find((address) => !isSyntheticDnsAddress(address));
   if (usableV4) return usableV4;
   if (v4.length > 0) {
@@ -118,7 +119,7 @@ export async function resolvePublicMailAddress(hostname: string): Promise<string
     );
   }
 
-  const v6 = await resolver.resolve6(hostname).catch(() => [] as string[]);
+  const v6 = await resolver.resolve6(hostname).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail-port-reachability.service"); return [] as string[]; });
   const usableV6 = v6.find((address) => !isSyntheticDnsAddress(address));
   if (usableV6) return usableV6;
   if (v6.length > 0) {
@@ -145,7 +146,8 @@ export async function checkMailPortReachability(
   const value = runMailPortReachability(executor, hostname, options.dependencies);
   if (cacheId) {
     healthCache.set(cacheId, { expiresAt: now + HEALTH_CACHE_TTL_MS, value });
-    void value.catch(() => {
+    void value.catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/mail-port-reachability.service");
       // A forced refresh can replace an in-flight entry. An older rejected
       // promise must not delete the newer healthy reading.
       if (healthCache.get(cacheId)?.value === value) healthCache.delete(cacheId);
@@ -170,6 +172,7 @@ async function runMailPortReachability(
   try {
     address = await resolvePublicAddress(hostname);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/mail/mail-port-reachability.service");
     resolutionDetail = err instanceof Error ? err.message : "Public DNS lookup failed.";
   }
 

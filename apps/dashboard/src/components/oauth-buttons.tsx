@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import { useState } from "react";
@@ -72,6 +73,7 @@ export function OAuthButtons({
       // Success → better-auth redirects the browser; keep the spinner until the
       // navigation happens rather than flashing the button back.
     } catch (err) {
+      observeCaughtError(err, "dashboard/components/oauth-buttons");
       const msg = isAbortError(err)
         ? t.auth.errors.serverUnreachable
         : t.auth.errors.oauthFailed;

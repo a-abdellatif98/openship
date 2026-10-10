@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -48,6 +49,7 @@ export function LogsDrawer({
         }
       });
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/emails/_components/admin/_shared/logs-drawer");
       setError(err instanceof Error ? err.message : t.emailsAdmin.shared.logsLoadFailed);
     } finally {
       setLoading(false);

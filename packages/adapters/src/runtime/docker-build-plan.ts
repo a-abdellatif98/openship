@@ -4,6 +4,8 @@ import { packageManagerEnsureCommand, nodeBinDirs, normalizeImageRef } from "@re
 import { sq } from "./build-pipeline";
 import { normalizeDockerRootDirectory } from "./docker-paths";
 
+import { managedNodeDockerLines } from "./cloud/node-listener";
+
 const DOCKER_BUILD_EVENT_PREFIX = "[openship-build]";
 /**
  * Project env vars that must never reach the inline `export` prefix on a RUN line.
@@ -605,6 +607,7 @@ export function generateDockerfile(config: BuildConfig): string {
     const runtimeBinPath = nodeBinPathEnvLine(config.packageManager, ["/app"]);
     if (runtimeBinPath) lines.push(runtimeBinPath);
   }
+  lines.push(...managedNodeDockerLines(config));
   lines.push(`EXPOSE ${config.port}`);
   if (config.startCommand) {
     lines.push(`CMD ["sh", "-c", ${JSON.stringify(config.startCommand)}]`);

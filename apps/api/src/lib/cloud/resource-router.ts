@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { MiddlewareHandler } from "hono";
 import { resolveResourceAuthority, type CloudResourceType } from "@repo/platform/engine/lib/cloud/resource-authority";
 import { assertCloudProxyScope } from "@repo/platform/engine/lib/cloud/scope";
@@ -24,7 +25,7 @@ export function cloudResourceRouter(path: string, spec: PermissionSpec): Middlew
   if (!inPath && !inBody && !inQuery) return null;
   return async (c, next) => {
     const id = inPath ? c.req.param(param) : inQuery ? c.req.query(field)
-      : (await c.req.json().catch(() => ({})) as Record<string, unknown>)[field];
+      : (await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/lib/cloud/resource-router"); return ({}); }) as Record<string, unknown>)[field];
     if (typeof id !== "string" || !id) return next();
     const ctx = getRequestContext(c);
     if (await resolveResourceAuthority(type, id, ctx.organizationId) !== "cloud") return next();

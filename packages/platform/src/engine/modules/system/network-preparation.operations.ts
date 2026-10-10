@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash } from "node:crypto";
 import {
   AppError,
@@ -129,7 +130,7 @@ export async function runNetworkPreparation(
     await persist();
   };
   const logs = setInterval(() => {
-    if (dirty) void persist().catch(() => cancellation.abort());
+    if (dirty) void persist().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/network-preparation.operations"); return cancellation.abort(); });
   }, 1000);
   const lease = setInterval(() => {
     heartbeat = heartbeat
@@ -137,7 +138,8 @@ export async function runNetworkPreparation(
         if (signal.aborted) return;
         if (!(await repos.networkPreparation.heartbeat(id, generation))) cancellation.abort();
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/system/network-preparation.operations");
         cancellation.abort();
       });
   }, 20_000);
@@ -181,6 +183,7 @@ export async function runNetworkPreparation(
             "SSH connection and persistent machine identity verified.",
           );
         } catch (error) {
+          observeCaughtError(error, "platform/engine/modules/system/network-preparation.operations");
           await step(host, "connect", "failed", checkError(error).message);
         }
       },
@@ -234,6 +237,7 @@ export async function runNetworkPreparation(
               });
             }, signal);
           } catch (error) {
+            observeCaughtError(error, "platform/engine/modules/system/network-preparation.operations");
             if (!host.steps.some((item) => item.status === "failed")) {
               await step(
                 host,
@@ -289,7 +293,8 @@ export async function runNetworkPreparation(
     notifyNetworkSetup(ctx.organizationId, "preparation", id);
     record(ctx, operation.clusterId, "network.preparation.ready");
   } catch (error) {
-    await queue.catch(() => undefined);
+    observeCaughtError(error, "platform/engine/modules/system/network-preparation.operations");
+    await queue.catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/network-preparation.operations"); return undefined; });
     const message = networkSetupMessage(checkError(error).message);
     for (const host of hosts)
       for (const current of host.steps)
@@ -298,13 +303,13 @@ export async function runNetworkPreparation(
     await repos.networkPreparation
       .finish(id, generation, hosts, null, message)
       .then(() => notifyNetworkSetup(ctx.organizationId, "preparation", id))
-      .catch(() => undefined);
+      .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/network-preparation.operations"); return undefined; });
   } finally {
     clearInterval(logs);
     clearInterval(lease);
     cancellation.abort();
     await heartbeat;
-    await queue.catch(() => undefined);
+    await queue.catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/system/network-preparation.operations"); return undefined; });
   }
 }
 

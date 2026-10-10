@@ -1,3 +1,4 @@
+import { observedAllSettled, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { AppError } from "@repo/core";
 import { repos } from "@repo/db";
 import { deferBackgroundWork } from "../../lib/background-work";
@@ -46,11 +47,11 @@ export function createNetworkSetupLifecycle(dependencies: {
             workers.delete(owned);
           }
         })
-        .catch((error) => console.warn("[network-setup] background worker stopped:", error));
+        .catch((error) => errorDiagnostics.warn("platform/engine/modules/system/network-setup-lifecycle", "[network-setup] background worker stopped:", error));
     },
     async stop() {
       stopping = true;
-      const results = await Promise.allSettled(
+      const results = await observedAllSettled(
         [...workers].map(async (owned) => {
           try {
             await dependencies.interrupt(owned.worker);
@@ -59,7 +60,7 @@ export function createNetworkSetupLifecycle(dependencies: {
             // running remotely retain their own timeouts and rollback protection.
             owned.cancellation.abort();
           }
-        }),
+        }), "platform/engine/modules/system/network-setup-lifecycle",
       );
       const failures = results.filter((result) => result.status === "rejected");
       if (failures.length)

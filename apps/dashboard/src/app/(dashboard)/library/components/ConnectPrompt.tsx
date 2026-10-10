@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React from "react";
@@ -177,7 +178,9 @@ export function ConnectPrompt({
               verification_uri_complete), so copy + open is the shortest path. */}
           <button
             type="button"
-            onClick={() => void navigator.clipboard?.writeText(cliAction.userCode ?? "").catch(() => {})}
+            onClick={() => void navigator.clipboard?.writeText(cliAction.userCode ?? "").catch((diagnosticFailure) => {
+              observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/library/components/ConnectPrompt");
+            })}
             title={t.library.connect.deviceFlow.copyCode}
             className="inline-block px-6 py-3 bg-muted rounded-lg text-2xl font-mono font-bold tracking-widest text-foreground mb-4 hover:bg-muted/70 transition-colors"
           >

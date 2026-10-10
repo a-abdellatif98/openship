@@ -18,6 +18,7 @@
  * changes the configured retention window. Never throws.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { env } from "../config/env";
 import { cacheStore } from "./cache-store/index";
 import { resolveServerExecutor } from "./deployment-runtime";
@@ -88,9 +89,12 @@ export async function getHostDisk(
       : await read((await resolveServerExecutor(serverId, organizationId)).executor);
     // Only cache a real answer, so a briefly-unreachable box doesn't pin
     // "unknown" for the whole TTL.
-    if (disk.freeBytes !== null) await store.set(key, disk, TTL_SECONDS).catch(() => {});
+    if (disk.freeBytes !== null) await store.set(key, disk, TTL_SECONDS).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/host-disk");
+    });
     return disk;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/host-disk");
     return { ...UNKNOWN_DISK };
   }
 }

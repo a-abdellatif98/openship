@@ -1,4 +1,5 @@
 /** HTTP input, status, and cookie adapters for shared GitHub operations. */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context } from "hono";
 import { env, runtimeTarget } from "@repo/platform/engine/config/env";
 import { auth } from "@repo/platform/engine/lib/auth";
@@ -31,7 +32,7 @@ export async function getLocalStatus(c: Context) {
 }
 export async function connect(c: Context) {
   
-  const data = await operationData(c, ops().connect(call(c), await c.req.json().catch(() => ({}))));
+  const data = await operationData(c, ops().connect(call(c), await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/github/github.controller"); return ({}); })));
   return c.json(data, 200);
 }
 export async function claimInstallation(c: Context) {
@@ -45,7 +46,7 @@ export async function setInstanceToken(c: Context) {
   return c.json(data, 200);
 }
 export async function disconnect(c: Context) {
-  const body = await c.req.json().catch(() => ({}));
+  const body = await c.req.json().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "api/modules/github/github.controller"); return ({}); });
   const data = await operationData(c, ops().disconnect(call(c), { source: body.source ?? c.req.query("source") }));
   return c.json(data, 200);
 }
@@ -172,7 +173,8 @@ export async function connectRedirect(c: Context) {
   try {
     const ctx = getRequestContext(c);
     mode = await githubAuth.resolveGitHubAuthMode(ctx);
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/modules/github/github.controller");
     mode = githubAuth.getGitHubAuthMode();
   }
 
@@ -230,7 +232,8 @@ export async function connectRedirect(c: Context) {
       try {
         const body = (await result.json()) as { url?: string };
         redirectUrl = redirectUrl ?? body?.url ?? null;
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "api/modules/github/github.controller");
         // Ignore non-JSON bodies and fall back to headers-only handling.
       }
 
@@ -248,6 +251,7 @@ export async function connectRedirect(c: Context) {
       return c.redirect((result as { url: string }).url);
     }
   } catch (err) {
+    observeCaughtError(err, "api/modules/github/github.controller");
     /* fall through */
   }
 

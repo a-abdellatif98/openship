@@ -203,8 +203,8 @@
 			},
 			"environmentApply": {
 				"title": "Aplicar alterações de ambiente",
-        "applying": "Aplicando alterações…",
-        "applied": "Alterações de ambiente aplicadas",
+				"applying": "Aplicando alterações…",
+				"applied": "Alterações de ambiente aplicadas",
 				"hint": "Aplique as variáveis salvas a este serviço sem recompilar. O serviço será reiniciado.",
 				"saveFirst": "Salve as alterações antes de aplicá-las a este serviço.",
 				"restartBlocked": "{name} tem alterações de ambiente salvas que uma reinicialização normal não pode aplicar. Revise e aplique as alterações na aba Ambiente.",
@@ -370,6 +370,46 @@
 			},
 			"orBuildFromSource": "ou compilar a partir do código",
 			"imageHint": "Deixe vazio para compilar a partir de um Dockerfile abaixo."
+		},
+		"connection": {
+			"terminal": "Terminal",
+			"statusTitle": "Estado do serviço indisponível",
+			"statusHint": "O Openship não conseguiu confirmar o estado atual. O seu serviço pode continuar em execução.",
+			"checkingTitle": "A verificar o serviço",
+			"checkingHint": "A aguardar uma resposta do servidor. Já pode tentar abrir o terminal.",
+			"startingTitle": "A aguardar o serviço",
+			"startingHint": "O terminal estará disponível quando o serviço estiver em execução.",
+			"stoppedTitle": "Nenhum serviço em execução",
+			"openTerminal": "Abrir terminal",
+			"serviceSettings": "Definições do serviço",
+			"connectingTitle": "A abrir o terminal",
+			"connectingHint": "A estabelecer uma ligação segura a {name}.",
+			"reconnectingTitle": "A restabelecer ligação",
+			"reconnectingHint": "A tentar restaurar a sessão. O resultado anterior é mantido aqui.",
+			"attempt": "Tentativa {attempt}",
+			"connected": "Ligado",
+			"cancel": "Cancelar",
+			"reconnect": "Voltar a ligar",
+			"closedTitle": "Sessão terminada",
+			"closedHint": "Abra uma nova sessão para continuar.",
+			"exitCode": "Código de saída {code}",
+			"exitSignal": "Sinal {signal}",
+			"pausedTitle": "Ligação em pausa",
+			"pausedHint": "Volte a ligar quando quiser abrir uma consola.",
+			"errorTitle": "Terminal indisponível",
+			"errors": {
+				"auth": "Não foi possível verificar o seu acesso. Inicie sessão novamente ou verifique as permissões.",
+				"connect": "O Openship não conseguiu aceder à consola do serviço. Tente novamente quando o servidor estiver acessível.",
+				"notFound": "Este serviço está indisponível ou não tem acesso.",
+				"notDeployed": "Não existe um contentor em execução ao qual se possa ligar. Verifique o estado do serviço e tente novamente.",
+				"notSupported": "O ambiente de execução deste serviço não suporta um terminal interativo.",
+				"maxSessions": "Feche uma sessão de terminal que não esteja a usar e volte a ligar.",
+				"idleTimeout": "A sessão terminou por inatividade. Volte a ligar para continuar.",
+				"sessionCap": "Esta sessão atingiu o limite de tempo. Volte a ligar para continuar.",
+				"server": "Não foi possível abrir o terminal. Tente novamente.",
+				"maxReconnects": "Não foi possível restabelecer a ligação. Pode tentar ligar novamente.",
+				"transport": "A ligação foi interrompida. O seu serviço pode continuar em execução."
+			}
 		}
 	}
 }

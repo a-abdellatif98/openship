@@ -1,3 +1,4 @@
+import { observedAllSettled, reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { trackBackgroundWork } from "../../lib/background-work";
 import { authorization } from "../../lib/authorization";
@@ -93,7 +94,7 @@ async function fetchLiveBucketsBounded(
   });
   try {
     return await Promise.race([
-      trackBackgroundWork(fetchLiveBuckets(serverId, domain, fromMinute, toMinute)).catch(() => []),
+      trackBackgroundWork(fetchLiveBuckets(serverId, domain, fromMinute, toMinute)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/analytics/analytics.service"); return []; }),
       capped,
     ]);
   } finally {
@@ -472,8 +473,8 @@ export async function getAnalyticsOverview(
     // upstream outage look identical to "no traffic" (zeros with a 200). Settle
     // per-domain: use whatever succeeded, but if EVERY cloud fetch failed,
     // surface a real upstream error so the client can tell "broken" from "idle".
-    const settled = await Promise.allSettled(
-      sources.map((source) => fetchCloudTimeseries(ctx.organizationId, source.domain, params)),
+    const settled = await observedAllSettled(
+      sources.map((source) => fetchCloudTimeseries(ctx.organizationId, source.domain, params)), "platform/engine/modules/analytics/analytics.service",
     );
     const ok = settled.filter(
       (r): r is PromiseFulfilledResult<CloudTimeseriesResponse | null> => r.status === "fulfilled",
@@ -527,7 +528,9 @@ export async function getAnalyticsOverview(
   // continuously running scheduler is not guaranteed. Start after the snapshot
   // reads, and reuse the scraper's per-server throttle and in-flight request.
   for (const serverId of new Set(selfHostedSources.map((source) => source.serverId))) {
-    void trackBackgroundWork(scrapeServerIfStale(serverId)).catch(() => {});
+    void trackBackgroundWork(scrapeServerIfStale(serverId)).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/analytics/analytics.service");
+    });
   }
   if (allBuckets.length === 0) return { summary: EMPTY_SUMMARY, periods: [] };
   return {

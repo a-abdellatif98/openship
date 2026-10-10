@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
 
 import React, { useEffect, useState } from "react";
@@ -256,6 +257,7 @@ export function ServiceSettingsForm({ service, siblingServiceNames = [], onSubmi
     try {
       await onSubmit(payload);
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/projects/[id]/components/services/ServiceSettingsForm");
       setError(err instanceof Error ? err.message : f.errors.saveFailed);
     } finally {
       setSaving(false);

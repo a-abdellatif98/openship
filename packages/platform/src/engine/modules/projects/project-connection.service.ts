@@ -9,6 +9,7 @@
  * URL is encrypted at rest and saved atomically with its link.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos, type Project } from "@repo/db";
 import {
@@ -164,7 +165,7 @@ export async function listConsumers(
   const links = await repos.projectConnection.listBySource(sourceProjectId);
   const out: ConnectionConsumerView[] = [];
   for (const l of links) {
-    const target = await repos.project.findById(l.targetProjectId).catch(() => null);
+    const target = await repos.project.findById(l.targetProjectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-connection.service"); return null; });
     // Same-org only. A link can't be cross-org (createConnection enforces it), so
     // a mismatch here means data drift — skip rather than leak a foreign name.
     if (target && target.organizationId !== ctx.organizationId) continue;
@@ -202,16 +203,16 @@ async function applyConnectionToTarget(
   ctx: RequestContext,
   targetProjectId: string,
 ): Promise<void> {
-  const target = await repos.project.findById(targetProjectId).catch(() => null);
+  const target = await repos.project.findById(targetProjectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-connection.service"); return null; });
   if (!target?.activeDeploymentId) return;
   try {
     const { triggerDeployment } = await import("../deployments/build.service");
     await triggerDeployment(ctx, { projectId: targetProjectId, trigger: "service-connection" });
   } catch (err) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/modules/projects/project-connection.service",
       `[service-connection] apply-redeploy of ${targetProjectId} failed (non-fatal): ${
         err instanceof Error ? err.message : String(err)
-      }`,
+      }`, err,
     );
   }
 }
@@ -335,7 +336,7 @@ async function resolveProjectHost(project: Project): Promise<ProjectHost> {
     return { kind: "workspace", id: workspace.id };
   }
   const dep = project.activeDeploymentId
-    ? await findActiveDeployment(project).catch(() => null)
+    ? await findActiveDeployment(project).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-connection.service"); return null; })
     : null;
   const meta = (dep?.meta ?? null) as { deployTarget?: string; serverId?: string } | null;
   if (meta?.deployTarget === "cloud") return { kind: "cloud" };
@@ -345,11 +346,11 @@ async function resolveProjectHost(project: Project): Promise<ProjectHost> {
 
   const row = await repos.server
     .getInOrganization(serverId, project.organizationId)
-    .catch(() => null);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-connection.service"); return null; });
   // A row we cannot read is not PROVABLY this box, so it stays its own machine — the
   // failure mode of guessing "local" here is a dead alias, which is what this check
   // exists to prevent.
-  return row && (await isLocalHostRow(row).catch(() => false))
+  return row && (await isLocalHostRow(row).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-connection.service"); return false; }))
     ? { kind: "box" }
     : { kind: "server", id: serverId };
 }
@@ -681,7 +682,7 @@ export async function unlinkConsumersOfSource(
   const errors: string[] = [];
 
   for (const link of links) {
-    const target = await repos.project.findById(link.targetProjectId).catch(() => null);
+    const target = await repos.project.findById(link.targetProjectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-connection.service"); return null; });
     const name = target?.name ?? link.targetProjectId;
     try {
       // A target that's already gone leaves nothing to clean up — its own delete
@@ -701,6 +702,7 @@ export async function unlinkConsumersOfSource(
         envKey: link.envKey,
       });
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/projects/project-connection.service");
       errors.push(
         `${link.envKey} on ${name}: ${err instanceof Error ? err.message : String(err)}`,
       );

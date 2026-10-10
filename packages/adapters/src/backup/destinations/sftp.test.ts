@@ -1,3 +1,4 @@
+import { errorReporter } from "@repo/core/diagnostics";
 import { PassThrough, Readable, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BackupDestination, BackupDestinationRow } from "../types";
@@ -171,7 +172,8 @@ describe("SFTP destination control deadlines and temporary uploads", () => {
       expect(body.destroyed).toBe(true);
       expect(sftp.createWriteStream).not.toHaveBeenCalled();
       expect(fake.clients.every((client) => client.ended)).toBe(true);
-      expect(vi.getTimerCount()).toBe(0);
+      await errorReporter.flush(); // Drain diagnostics before checking operation timers.
+    expect(vi.getTimerCount()).toBe(0);
     } finally {
       fake.clients.forEach((client) => client.emit("close"));
       await pending;
@@ -197,7 +199,8 @@ describe("SFTP destination control deadlines and temporary uploads", () => {
         failed: [{ key: "stalled.zst", error: expect.stringContaining("timed out") }],
       });
       expect(fake.clients.every((client) => client.ended)).toBe(true);
-      expect(vi.getTimerCount()).toBe(0);
+      await errorReporter.flush(); // Drain diagnostics before checking operation timers.
+    expect(vi.getTimerCount()).toBe(0);
     } finally {
       fake.clients.forEach((client) => client.emit("close"));
       await pending;
@@ -270,7 +273,8 @@ describe("SFTP destination control deadlines and temporary uploads", () => {
       expect(fake.clients).toHaveLength(2);
       expect(fake.clients.every((client) => client.ended)).toBe(true);
       expect(body.destroyed).toBe(true);
-      expect(vi.getTimerCount()).toBe(0);
+      await errorReporter.flush(); // Drain diagnostics before checking operation timers.
+    expect(vi.getTimerCount()).toBe(0);
     },
   );
 
@@ -291,7 +295,8 @@ describe("SFTP destination control deadlines and temporary uploads", () => {
       expect(failure).toMatchObject({ message: "upload failed" });
       await put;
       expect(fake.clients.every((client) => client.ended)).toBe(true);
-      expect(vi.getTimerCount()).toBe(0);
+      await errorReporter.flush(); // Drain diagnostics before checking operation timers.
+    expect(vi.getTimerCount()).toBe(0);
     },
   );
 
@@ -382,6 +387,7 @@ describe("SFTP restore stream lifecycle", () => {
     await failure;
     expect(source.destroyed).toBe(true);
     expect(fake.clients.every(client => client.ended)).toBe(true);
+    await errorReporter.flush(); // Drain diagnostics before checking operation timers.
     expect(vi.getTimerCount()).toBe(0);
   });
 

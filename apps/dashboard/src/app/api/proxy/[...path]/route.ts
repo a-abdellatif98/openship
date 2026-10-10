@@ -25,6 +25,7 @@
  *   the client.
  */
 
+import { diagnosticId, reportError, type ErrorContext } from "@repo/core/diagnostics";
 import type { NextRequest } from "next/server";
 
 // Hop-by-hop headers — MUST NOT be forwarded by a proxy.
@@ -118,19 +119,26 @@ function buildForwardedHeaders(req: NextRequest, upstream: URL): Headers {
  * verbs would only work for GET (Next router quirk).
  */
 async function proxy(req: NextRequest, pathSegments: string[]): Promise<Response> {
+  const requestId = diagnosticId();
+  const context: ErrorContext = {
+    source: "dashboard", kind: "http", component: "dashboard-proxy",
+    requestId, traceId: requestId, method: req.method, route: "/api/proxy/:path", handled: true,
+  };
   if (process.env.NEXT_PUBLIC_API_PROXY !== "true") {
+    reportError("API proxy is disabled", { ...context, statusCode: 503 });
     // Defensive: the helpers shouldn't be routing here when the flag
     // is off, but a stray dev fetch shouldn't 200-with-loopback-data.
     return new Response(
       JSON.stringify({
         error: "API proxy is disabled. Set NEXT_PUBLIC_API_PROXY=true to enable single-host mode.",
       }),
-      { status: 503, headers: { "content-type": "application/json" } },
+      { status: 503, headers: { "content-type": "application/json", "X-Request-ID": requestId } },
     );
   }
 
   const upstream = buildUpstreamUrl(req, pathSegments);
   const headers = buildForwardedHeaders(req, upstream);
+  headers.set("X-Request-ID", requestId);
 
   // Body: pass through directly. fetch accepts a ReadableStream and
   // won't double-buffer it.  duplex:'half' lets the body stream upstream
@@ -152,12 +160,13 @@ async function proxy(req: NextRequest, pathSegments: string[]): Promise<Response
   try {
     upstreamRes = await fetch(upstream, init);
   } catch (err) {
+    reportError(err, { ...context, statusCode: 502 });
     const message = err instanceof Error ? err.message : String(err);
     return new Response(
       JSON.stringify({
         error: `Upstream API unreachable at ${upstream.origin}: ${message}`,
       }),
-      { status: 502, headers: { "content-type": "application/json" } },
+      { status: 502, headers: { "content-type": "application/json", "X-Request-ID": requestId } },
     );
   }
 
@@ -178,6 +187,12 @@ async function proxy(req: NextRequest, pathSegments: string[]): Promise<Response
   // only spec-correct way to read multiples off a fetch Response.
   for (const cookie of upstreamRes.headers.getSetCookie()) {
     responseHeaders.append("set-cookie", cookie);
+  }
+
+  if (!responseHeaders.has("X-Request-ID")) {
+    responseHeaders.set("X-Request-ID", requestId);
+    // Older APIs may not supply an authoritative diagnostic reference yet.
+    if (!upstreamRes.ok) reportError(`HTTP ${upstreamRes.status}`, { ...context, statusCode: upstreamRes.status });
   }
 
   // Stream the body straight through — for SSE (text/event-stream)

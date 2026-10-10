@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -88,7 +89,8 @@ const ComposeDeploymentProcessing: React.FC<Props> = ({ onRedeploy }) => {
     if (deploymentStatus === "ready" && !showDecision && projectId && state.deploymentId) {
       void projectsApi.getInfo(projectId).then(response => {
         if (active) setLiveDeploymentId(response.data?.project?.activeDeploymentId ?? null);
-      }).catch(() => { /* Keep build history when current ownership cannot be verified. */ });
+      }).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/import-project/compose/ComposeDeploymentProcessing"); /* Keep build history when current ownership cannot be verified. */ });
     }
     return () => { active = false; };
   }, [deploymentStatus, showDecision, projectId, state.deploymentId]);
@@ -177,7 +179,8 @@ const ComposeDeploymentProcessing: React.FC<Props> = ({ onRedeploy }) => {
     if (state.deploymentId) {
       try {
         await deployApi.keep(state.deploymentId);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "dashboard/components/import-project/compose/ComposeDeploymentProcessing");
         // Best-effort: dismiss locally even if the confirm call fails — the
         // banner reappears from the server flag on refresh if it didn't persist.
       }
@@ -225,6 +228,7 @@ const ComposeDeploymentProcessing: React.FC<Props> = ({ onRedeploy }) => {
       const newId = res?.data?.deployment?.id;
       router.push(newId ? `/build/${newId}` : `/projects/${state.projectId}`);
     } catch (err) {
+      observeCaughtError(err, "dashboard/components/import-project/compose/ComposeDeploymentProcessing");
       if (showCloudPricing(err)) {
         // A quota refusal created no build. Keep the failed-service retry available.
         setDecisionResolved(false);
@@ -645,7 +649,8 @@ function terminalBytes(log: ParsedLogLine) {
       bytes[index] = binary.charCodeAt(index);
     }
     return bytes;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/components/import-project/compose/ComposeDeploymentProcessing");
     return terminalLine(log);
   }
 }

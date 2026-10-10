@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -218,7 +219,8 @@ function initialFeed(): boolean {
   if (typeof window === "undefined") return false;
   try {
     return window.localStorage.getItem(FEED_KEY) === "1";
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/components/monitoring/VisitorMap");
     return false;
   }
 }
@@ -325,7 +327,8 @@ export const VisitorMap: React.FC<Props> = ({ data, isLoading, domainSelector, l
     setShowFeed(next);
     try {
       window.localStorage.setItem(FEED_KEY, next ? "1" : "0");
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/monitoring/VisitorMap");
       /* private mode — applies for this session */
     }
   };
@@ -384,7 +387,8 @@ export const VisitorMap: React.FC<Props> = ({ data, isLoading, domainSelector, l
     setColorMode(mode);
     try {
       window.localStorage.setItem(MODE_KEY, mode);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/monitoring/VisitorMap");
       // Private mode / storage disabled. The choice still applies for this session.
     }
   };

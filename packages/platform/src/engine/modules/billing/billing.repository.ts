@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { requireWorkspaceServer } from "../../lib/cloud-workspace-scope";
 /** Live provider billing state plus read access to historical billing records. */
 
@@ -123,7 +124,7 @@ export async function getCreditAlerts(orgId: string) {
     try {
       return { state: (await readBillingCreditState(orgId, workspace.id)).state, unavailable: null };
     } catch (error) {
-      console.warn(`[billing] Credit state unavailable for ${workspace.id}: ${safeErrorMessage(error)}`);
+      errorDiagnostics.warn("platform/engine/modules/billing/billing.repository", `[billing] Credit state unavailable for ${workspace.id}: ${safeErrorMessage(error)}`, error);
       return { state: null, unavailable: workspace.id };
     }
   });
@@ -142,7 +143,7 @@ export async function getBillingState(orgId: string, workspaceId?: CloudWorkspac
   // Catalog availability must not hide the balance or subscription controls.
   const plan = grant ? await complimentaryCloudPlan(grant) : tier === "free" ? null
     : await cloudPlan(tier, providerSubscription).catch(error => {
-        console.warn(`[billing] Plan details are temporarily unavailable: ${safeErrorMessage(error)}`);
+        errorDiagnostics.warn("platform/engine/modules/billing/billing.repository", `[billing] Plan details are temporarily unavailable: ${safeErrorMessage(error)}`, error);
         return null;
       });
   const subscription = presentCloudSubscription(providerSubscription);
@@ -158,9 +159,9 @@ export async function getBillingState(orgId: string, workspaceId?: CloudWorkspac
   const [buildMinutes, freeSubdomains, servicesUsed, projectsUsed, providerCapacity, binding] = await Promise.all([
     getBuildMinuteUsage(orgId, { tier, limits: planLimitsForTier }, owner.workspaceId),
     getFreeSubdomainUsage(orgId, { tier, limits: planLimitsForTier }, owner.workspaceId),
-    repos.service.countRunningForOrg(orgId, [], undefined, undefined, owner.workspaceId).catch(() => null),
-    repos.project.countGroupsForOrganization(orgId, owner.workspaceId).catch(() => null),
-    readCloudCapacity(entitlement.namespace).catch(() => ({})),
+    repos.service.countRunningForOrg(orgId, [], undefined, undefined, owner.workspaceId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/billing/billing.repository"); return null; }),
+    repos.project.countGroupsForOrganization(orgId, owner.workspaceId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/billing/billing.repository"); return null; }),
+    readCloudCapacity(entitlement.namespace).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/billing/billing.repository"); return ({}); }),
     owner.workspaceId ? repos.cloudDockerWorkspace.find({ ownerWorkspaceId: owner.workspaceId }, orgId) : null,
   ]);
   const serviceResources = tier === "free" ? null : planServiceResources(planLimitsForTier);

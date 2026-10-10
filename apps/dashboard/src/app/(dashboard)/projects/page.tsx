@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Icon } from "@repo/ui/icons";
@@ -40,11 +41,13 @@ export default function ProjectsPage() {
     try {
       const saved = localStorage.getItem(viewKey);
       if (saved === "grid" || saved === "list") setView(saved);
-    } catch { /* Preferences are optional. */ }
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/page"); /* Preferences are optional. */ }
   }, [viewKey]);
   const changeView = (next: ProjectView) => {
     setView(next);
-    try { localStorage.setItem(viewKey, next); } catch { /* Preferences are optional. */ }
+    try { localStorage.setItem(viewKey, next); } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/page"); /* Preferences are optional. */ }
   };
 
   useEffect(() => {
@@ -53,7 +56,9 @@ export default function ProjectsPage() {
       .then(response => {
         if (!cancelled) setUpdatesBehind(new Set(response.data.map(update => update.projectId)));
       })
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/projects/page");
+      });
     return () => { cancelled = true; };
   }, []);
 

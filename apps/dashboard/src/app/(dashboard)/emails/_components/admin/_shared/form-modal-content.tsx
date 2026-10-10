@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -60,6 +61,7 @@ export function FormModalContent({
     try {
       await onSubmit();
     } catch (err) {
+      observeCaughtError(err, "dashboard/app/(dashboard)/emails/_components/admin/_shared/form-modal-content");
       setError(err instanceof Error ? err.message : t.emailsAdmin.shared.actionFailed);
     } finally {
       setSubmitting(false);

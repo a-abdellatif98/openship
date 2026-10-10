@@ -14,6 +14,8 @@
  *
  * No client-side cookies or tokens are ever involved.
  */
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
+import { currentErrorContext } from "@repo/core/diagnostics/node";
 import { repos } from "@repo/db";
 import { SDK_SCOPE_HEADER } from "@repo/contracts";
 import { createHash } from "node:crypto";
@@ -91,6 +93,8 @@ export async function cloudFetch(
   let res: Response;
   try {
     const headers = new Headers(init?.headers);
+    const requestId = currentErrorContext().requestId;
+    if (requestId) headers.set("X-Request-ID", requestId);
     if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
     headers.set(OPENSHIP_VERSION_HEADER, APP_VERSION);
     headers.set(OPENSHIP_PLATFORM_HEADER, env.DEPLOY_MODE);
@@ -104,7 +108,7 @@ export async function cloudFetch(
       signal: init?.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal,
     });
   } catch (err) {
-    console.warn(`[cloud-client] fetch failed ${targetUrl}: ${(err as Error).message}`);
+    errorDiagnostics.warn("platform/engine/lib/cloud/transport", `[cloud-client] fetch failed ${targetUrl}: ${(err as Error).message}`, err);
     return null;
   } finally {
     clearTimeout(timer);
@@ -115,12 +119,14 @@ export async function cloudFetch(
   // Do not deliver the previous account's inventory, credentials or response.
   const current = await readCloudSession(userId);
   if (!current || !sameCloudIdentity(session, current)) {
-    await res.body?.cancel().catch(() => {});
+    await res.body?.cancel().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/transport");
+    });
     return null;
   }
 
   if (res.status === 401) {
-    console.warn(
+    errorDiagnostics.warn("platform/engine/lib/cloud/transport",
       `[cloud-client] 401 from SaaS for ${path} — leaving stored session intact; caller should surface the auth error.`,
     );
   }
@@ -146,13 +152,18 @@ function pinnedCloudStream(response: Response, userId: string, identity: CloudId
           if (!ended && (!current || !sameCloudIdentity(identity, current))) {
             ended = true; clearInterval(timer);
             controller.close();
-            void reader.cancel().catch(() => {});
+            void reader.cancel().catch((diagnosticFailure) => {
+              observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/transport");
+            });
           }
-        }).catch(() => {
+        }).catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/transport");
           if (ended) return;
           ended = true; clearInterval(timer);
           controller.close();
-          void reader.cancel().catch(() => {});
+          void reader.cancel().catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/transport");
+          });
         }).finally(() => { checking = false; });
       }, 5_000);
       timer.unref?.();
@@ -164,6 +175,7 @@ function pinnedCloudStream(response: Response, userId: string, identity: CloudId
         if (next.done) { ended = true; clearInterval(timer); controller.close(); }
         else controller.enqueue(next.value);
       } catch (error) {
+        observeCaughtError(error, "platform/engine/lib/cloud/transport");
         if (!ended) { ended = true; clearInterval(timer); controller.error(error); }
       }
     },
@@ -189,7 +201,7 @@ function pinnedCloudStream(response: Response, userId: string, identity: CloudId
 export async function resolveOrgCloudUserId(organizationId: string): Promise<string | null> {
   const linked = await repos.settings
     .findOrgOwnerCloudLink(organizationId)
-    .catch(() => undefined);
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/transport"); return undefined; });
   return linked?.userId ?? null;
 }
 
@@ -213,7 +225,7 @@ export async function cloudFetchAsOrgOwner(
     // never logs it, and the caller (e.g. preflight) just sees null and
     // reports "unreachable". Make it visible so org/owner-link mismatches
     // are diagnosable instead of opaque.
-    console.warn(
+    errorDiagnostics.warn("platform/engine/lib/cloud/transport",
       `[cloud-client] cloudFetchAsOrgOwner: no owner cloud-link for org ${organizationId} → ${path} not sent`,
     );
     return null;
@@ -237,7 +249,8 @@ export async function readCloudJson<T>(res: Response): Promise<T | null> {
   }
   try {
     return (await res.json()) as T;
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/cloud/transport");
     return null;
   }
 }

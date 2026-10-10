@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { RouteRuleSpec } from "@repo/core";
 
@@ -209,7 +210,7 @@ describe("pushProjectRules", () => {
     listByProject.mockResolvedValue([]);
     listDomains.mockResolvedValue([domain("d1", "a.com"), domain("d2", "b.com")]);
     postEdgeMgmt.mockRejectedValueOnce(new Error("tunnel closed")).mockResolvedValue({ ok: true });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(errorDiagnostics, "warn").mockImplementation(() => {});
 
     await expect(pushProjectRules("p1", "srv1")).resolves.toBeUndefined();
     expect(postEdgeMgmt).toHaveBeenCalledTimes(2);

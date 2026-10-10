@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Readable } from "node:stream";
 import type { Artifact, ExecExitInfo } from "../types";
 
@@ -29,7 +30,9 @@ export async function* yieldArtifact(
   awaitExit: Promise<ExecExitInfo>,
   describeFailure: (exit: ExecExitInfo) => string,
 ): AsyncGenerator<Artifact> {
-  void awaitExit.catch(() => {});
+  void awaitExit.catch((diagnosticFailure) => {
+    observeCaughtError(diagnosticFailure, "adapters/backup/common/artifact-stream");
+  });
   try {
     yield artifact;
     const exit = await awaitExit;
@@ -38,6 +41,8 @@ export async function* yieldArtifact(
     artifact.stream.destroy();
     // Preserve the original upload/process error; completion still observes and
     // settles teardown before the source connection can be disposed.
-    await awaitExit.catch(() => {});
+    await awaitExit.catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/backup/common/artifact-stream");
+    });
   }
 }

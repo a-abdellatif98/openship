@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { execFile, spawn } from "node:child_process";
 import { createServer, type AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
@@ -44,7 +45,7 @@ export async function openSystemSshReverseTunnel(
   const sockets = new Set<Duplex>();
   const server = createServer((socket) => {
     sockets.add(socket);
-    socket.on("error", () => {});
+    socket.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/system/reverse-tunnel"); });
     socket.once("close", () => sockets.delete(socket));
     opts.onConnection(socket);
   });
@@ -56,7 +57,7 @@ export async function openSystemSshReverseTunnel(
     });
   });
   const localPort = (server.address() as AddressInfo).port;
-  server.on("error", () => {});
+  server.on("error", (eventDiagnosticError) => { observeCaughtError(eventDiagnosticError, "adapters/system/reverse-tunnel"); });
   const closeServer = () => new Promise<void>((resolve) => {
     for (const socket of sockets) socket.destroy();
     sockets.clear();
@@ -95,7 +96,7 @@ export async function openSystemSshReverseTunnel(
           const port = Number(stderr.match(/Allocated port (\d+) for remote forward to/)?.[1]);
           if (Number.isInteger(port) && port > 0 && port <= 65535) finish(undefined, port);
         });
-        child.on("error", error => finish(error));
+        child.on("error", error => { observeCaughtError(error, "adapters/system/reverse-tunnel"); return finish(error); });
         child.once("close", code => {
           finish(new Error(`SSH reverse tunnel closed (${code}): ${stderr.trim()}`));
           void close();
@@ -133,7 +134,9 @@ export async function openSystemSshReverseTunnel(
       sshBin,
       [...opts.baseArgs, "-O", "cancel", "-R", forwardSpec(remotePort), opts.target],
       { env: opts.env, timeout: 5_000 },
-    ).catch(() => {});
+    ).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/system/reverse-tunnel");
+    });
     await closeServer();
   };
 

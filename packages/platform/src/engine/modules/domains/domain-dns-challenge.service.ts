@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Resolver } from "node:dns/promises";
 import {
   ConflictError,
@@ -153,6 +154,7 @@ export async function dnsChallengeVisible(name: string, value: string): Promise<
   try {
     return (await resolver.resolveTxt(name)).some((parts) => parts.join("") === value);
   } catch (error) {
+    observeCaughtError(error, "platform/engine/modules/domains/domain-dns-challenge.service");
     if (["ENODATA", "ENOTFOUND"].includes((error as NodeJS.ErrnoException).code ?? ""))
       return false;
     throw new Error(
@@ -171,7 +173,7 @@ async function runDnsChallenge(
   const lease = row.leaseId!;
   let logs: Promise<unknown> = Promise.resolve();
   const log = (message: string) => {
-    logs = logs.then(() => repository.log(row.domainId, lease, message)).catch(() => undefined);
+    logs = logs.then(() => repository.log(row.domainId, lease, message)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain-dns-challenge.service"); return undefined; });
   };
   let lostLease = false;
   let heartbeat: Promise<unknown> = Promise.resolve();
@@ -181,7 +183,8 @@ async function runDnsChallenge(
         const current = await repository.heartbeat(row.domainId, lease);
         if (!current) lostLease = true;
       })
-      .catch(() => {
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain-dns-challenge.service");
         lostLease = true;
       });
   }, 15_000);
@@ -347,7 +350,8 @@ async function runDnsChallenge(
     );
     await finish("completed");
   } catch (error) {
-    const current = await repository.find(row.domainId).catch(() => undefined);
+    observeCaughtError(error, "platform/engine/modules/domains/domain-dns-challenge.service");
+    const current = await repository.find(row.domainId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain-dns-challenge.service"); return undefined; });
     if (current?.leaseId !== lease) return;
     if (current.status === "cancelling") {
       log("Certificate setup cancelled. You may remove this attempt's TXT value.");
@@ -364,7 +368,7 @@ async function runDnsChallenge(
     await heartbeat;
     await logs;
     // Cancellation may have won between the final ownership check and save.
-    const current = await repository.find(row.domainId).catch(() => undefined);
+    const current = await repository.find(row.domainId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain-dns-challenge.service"); return undefined; });
     if (current?.leaseId === lease && current.status === "cancelling") await finish("cancelled");
   }
 }

@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import {
   AppError,
   validateClusterDatabaseImportArtifact,
@@ -107,7 +108,8 @@ export async function listDatabaseImports(ctx: ExecutionContext, projectId: stri
     for (const artifact of run.artifacts ?? []) {
       try {
         validateClusterDatabaseImportArtifact(artifact);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/cluster-database-import");
         continue;
       }
       options.push({

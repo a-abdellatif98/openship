@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { Pool } from "pg";
 import { sleep } from "@repo/core";
 
@@ -72,9 +73,9 @@ export async function awaitPgReady(
       // `docker logs` without burying it.
       if (attempt === 1 || attempt % 10 === 0) {
         const reason = err instanceof Error ? err.message : String(err);
-        console.warn(
+        errorDiagnostics.warn("db/pg-ready",
           `[db] postgres not ready yet (attempt ${attempt}, ${Math.round(elapsed / 1000)}s` +
-            `/${Math.round(budgetMs / 1000)}s): ${reason}`,
+            `/${Math.round(budgetMs / 1000)}s): ${reason}`, err,
         );
       }
       await sleep(retryMs);

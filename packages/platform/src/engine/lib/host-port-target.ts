@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { createHash, randomUUID } from "node:crypto";
 
 import type { CommandExecutor } from "@repo/adapters";
@@ -103,7 +104,8 @@ async function readValidatedTargetId(
       stableTargetIds.set(executor, found);
       return found;
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/host-port-target");
     // Fall through to the existing OpenShip target id, then the locator.
   }
   try {
@@ -113,7 +115,8 @@ async function readValidatedTargetId(
       stableTargetIds.set(executor, found);
       return found;
     }
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "platform/engine/lib/host-port-target");
     // A deterministic connection locator is the last-resort identity.
   }
   return null;
@@ -151,7 +154,8 @@ async function ensureTargetHostId(executor: CommandExecutor): Promise<string | n
     try {
       const value = normalizeTargetHostId(await executor.exec(command));
       if (value) return value;
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "platform/engine/lib/host-port-target");
       // Try the elevated form, then return an unstable locator identity.
     }
   }

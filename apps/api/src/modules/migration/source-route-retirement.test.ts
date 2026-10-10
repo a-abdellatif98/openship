@@ -1,3 +1,4 @@
+import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostPortTargetIdentity } from "@repo/platform/engine/lib/host-port-target";
 
@@ -88,7 +89,7 @@ describe("retireSourceManagedRoutes", () => {
   });
 
   it("retains every claim when any route removal is uncertain", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(errorDiagnostics, "warn").mockImplementation(() => {});
     const routing = {
       removeRoute: vi
         .fn()
@@ -110,14 +111,16 @@ describe("retireSourceManagedRoutes", () => {
     expect(routing.removeRoute).toHaveBeenCalledTimes(2);
     expect(h.converge).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith(
+      expect.any(String),
       expect.stringContaining("host-port claims retained"),
       "source edge unavailable",
+      expect.any(Error),
     );
     warn.mockRestore();
   });
 
   it("keeps completed cutover best-effort when the strict scan or database convergence fails", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(errorDiagnostics, "warn").mockImplementation(() => {});
     h.converge.mockRejectedValueOnce(new Error("strict edge scan unavailable"));
 
     await expect(
@@ -135,8 +138,10 @@ describe("retireSourceManagedRoutes", () => {
     // and stale claims must not survive forever when the workloads are gone.
     expect(h.converge).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(
+      expect.any(String),
       expect.stringContaining("claims retained"),
       "strict edge scan unavailable",
+      expect.any(Error),
     );
     warn.mockRestore();
   });

@@ -2,6 +2,7 @@
  * Project CRUD service - create, read, update, list, ensure.
  */
 
+import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { activeDeploymentForProject, findActiveDeployment, listActiveServiceDeployments } from "@repo/platform/engine/lib/active-deployment";
 import {
   repos,
@@ -196,7 +197,7 @@ async function loadActiveMigration(projectId: string) {
   try {
     return readActiveMigration(await repos.dockerMigrationRun.findActiveForProject(projectId));
   } catch (err) {
-    console.error(`[projects] active-migration lookup failed for ${projectId}:`, err);
+    errorDiagnostics.error("platform/engine/modules/projects/project-crud.service", `[projects] active-migration lookup failed for ${projectId}:`, err);
     return null;
   }
 }
@@ -209,7 +210,7 @@ async function loadActiveMigrations(
   try {
     return await repos.dockerMigrationRun.findActiveForProjects(projectIds);
   } catch (err) {
-    console.error("[projects] batched active-migration lookup failed:", err);
+    errorDiagnostics.error("platform/engine/modules/projects/project-crud.service", "[projects] batched active-migration lookup failed:", err);
     return new Map();
   }
 }
@@ -330,7 +331,7 @@ export async function enrichProjectsBatch(
     .filter((id): id is string => Boolean(id));
   const deployments = await repos.deployment
     .findManyById(activeDeploymentIds)
-    .catch(() => new Map<string, Deployment>());
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return new Map<string, Deployment>(); });
 
   const serverIds = new Set<string>();
   for (const project of projects) {
@@ -346,7 +347,7 @@ export async function enrichProjectsBatch(
   }
   const servers = await repos.server
     .getMany(Array.from(serverIds))
-    .catch(() => new Map<string, Server>());
+    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return new Map<string, Server>(); });
 
   // ONE statement for every project's live run, so the "Migrating" pill on a list of 50
   // projects costs a query rather than 50. The map is empty on cloud (no migrations there)
@@ -403,6 +404,7 @@ function normalizeReleaseSource(input: ReleaseSource): ReleaseSource {
   try {
     artifactKind = releaseArtifactKind(input);
   } catch (err) {
+    observeCaughtError(err, "platform/engine/modules/projects/project-crud.service");
     throw new ValidationError(safeErrorMessage(err));
   }
 
@@ -502,6 +504,7 @@ function normalizeReleaseSource(input: ReleaseSource): ReleaseSource {
       const tag = source.pinnedVersion ?? "v1.2.3";
       renderReleaseImage(source.imageTemplate, { version: tag.replace(/^v/i, ""), tag });
     } catch (err) {
+      observeCaughtError(err, "platform/engine/modules/projects/project-crud.service");
       throw new ValidationError(safeErrorMessage(err));
     }
   } else if (source.imageTemplate) {
@@ -776,7 +779,7 @@ async function persistMonorepoApps(projectId: string, data: TCreateProjectBody):
     data.monorepoApps.some((app) => hasMaskedValue(app.environment)) ||
     customHostnamesOf(data.monorepoApps).length > 0;
   const storedRows = needsRows
-    ? await repos.service.listByProjectKind(projectId, "monorepo").catch(() => [])
+    ? await repos.service.listByProjectKind(projectId, "monorepo").catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return []; })
     : [];
   const storedEnvByName = new Map<string, Record<string, string>>(
     storedRows.map((row) => [row.name, (row.environment as Record<string, string> | null) ?? {}]),
@@ -842,7 +845,7 @@ async function persistComposeServices(
   // carry, so re-syncing a project that holds a bad one isn't refused outright.
   // Only reads the rows when a custom hostname is actually in play.
   if (customHostnamesOf(data.services).length) {
-    const rows = await repos.service.listByProject(projectId).catch(() => []);
+    const rows = await repos.service.listByProject(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return []; });
     assertValidCustomDomains(data.services, { known: customHostnamesOf(rows) });
   }
 
@@ -851,7 +854,7 @@ async function persistComposeServices(
     // Same precedence as requestBuildAccess: stored rows first, then the upload
     // session — for a fresh scan the uploaded compose is the newer truth.
     const realEnvByName = new Map<string, Record<string, string>>();
-    for (const row of await repos.service.listByProject(projectId).catch(() => [])) {
+    for (const row of await repos.service.listByProject(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return []; })) {
       realEnvByName.set(row.name, (row.environment as Record<string, string> | null) ?? {});
     }
     const session = data.uploadSessionId ? getFolderSession(data.uploadSessionId) : undefined;
@@ -865,7 +868,7 @@ async function persistComposeServices(
       const restored = unmaskEnv(svc.environment, realEnvByName.get(svc.name) ?? null);
       if (Object.keys(restored).length < Object.keys(svc.environment ?? {}).length) {
         // Warn so a secret lost this way is traceable (mirrors createService).
-        console.warn(
+        errorDiagnostics.warn("platform/engine/modules/projects/project-crud.service",
           `[ensureProject] service "${svc.name}": dropped masked env value(s) with no stored source` +
             (data.uploadSessionId ? "" : " — pass uploadSessionId to restore them"),
         );
@@ -942,7 +945,7 @@ async function createProductionProject(
   if (
     env.CLOUD_MODE ||
     getWebhookStrategy() === "app" ||
-    (await hasActiveGitHubSource(organizationId).catch(() => false))
+    (await hasActiveGitHubSource(organizationId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return false; }))
   ) {
     const owner = data.gitOwner?.trim();
     data.installationId = owner
@@ -998,7 +1001,9 @@ async function createProductionProject(
     return created;
   } catch (err) {
     if (appCreated) {
-      await repos.projectGroup.softDelete(app.id).catch(() => {});
+      await repos.projectGroup.softDelete(app.id).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service");
+      });
     }
     throw err;
   }
@@ -1074,7 +1079,9 @@ export async function createServicesProjectWithId(opts: {
     await persistProjectRouteState(created.id, routing.publicEndpoints);
     return created;
   } catch (err) {
-    await repos.projectGroup.softDelete(group.id).catch(() => {});
+    await repos.projectGroup.softDelete(group.id).catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service");
+    });
     throw err;
   }
 }
@@ -1111,13 +1118,14 @@ export async function linkProjectRepo(
     async (project): Promise<LinkProjectRepoOutcome> => {
       try {
         assertResourceInOrg(project, "Project", organizationId, projectId);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service");
         return { ok: false, code: "not_found" } as const;
       }
       assertNotExternal(project);
 
       const sourceWebBaseUrl = await resolveGitHubWebBaseUrl(organizationId, owner).catch(
-        () => null,
+        (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return null; },
       );
       const gitUrl = sourceWebBaseUrl
         ? `${sourceWebBaseUrl.replace(/\/+$/, "")}/${owner}/${repo}.git`
@@ -1175,7 +1183,7 @@ export async function linkProjectRepo(
         const webhookUrl =
           strategy === "domain" ? domainWebhookUrl(project!.webhookDomain!) : undefined;
         const hookId = await ensureSharedWebhook(ctx, project!, owner, repo, webhookUrl).catch(
-          () => null,
+          (diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return null; },
         );
         if (hookId) {
           gitFields.webhookId = hookId;
@@ -1345,7 +1353,7 @@ async function resolveEnvVersion(row: Project, latest: Deployment | null): Promi
     return latest?.releaseVersion ?? pinned ?? null;
   }
   if (row.isApp && !row.gitOwner) {
-    const services = await repos.service.listByProject(row.id).catch(() => []);
+    const services = await repos.service.listByProject(row.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return []; });
     const svc = services.find((s) => s.exposed && s.image) ?? services.find((s) => s.image);
     const ref = svc?.image;
     if (ref) return ref.includes(":") ? (ref.split(":").pop() ?? null) : "latest";
@@ -1597,7 +1605,7 @@ export async function ensureProject(data: EnsureProjectBody, organizationId: str
         await persistProjectRouteState(project.id, nextRoutes.publicEndpoints, nextRoutes.projectDomains);
       } catch (err) {
         if (data.publicEndpoints !== undefined || update.slug !== undefined) throw err;
-        console.warn(`[ensureProject] route sync failed (non-fatal): ${safeErrorMessage(err)}`);
+        errorDiagnostics.warn("platform/engine/modules/projects/project-crud.service", `[ensureProject] route sync failed (non-fatal): ${safeErrorMessage(err)}`, err);
       }
     }
 
@@ -1726,12 +1734,12 @@ async function reapplyCompleteProjectRouting(
   };
   await reapplyProjectLiveRoutes(project, previousHostnames, { ...options, onWarning }).catch((err) => {
     const message = safeErrorMessage(err);
-    console.warn(`[updateProject] project route re-apply failed: ${message}`);
+    errorDiagnostics.warn("platform/engine/modules/projects/project-crud.service", `[updateProject] project route re-apply failed: ${message}`, err);
     onWarning(message);
   });
   await applyProjectRouting(project.id, { onWarning }).catch((err) => {
     const message = safeErrorMessage(err);
-    console.warn(`[updateProject] service/topology route re-apply failed: ${message}`);
+    errorDiagnostics.warn("platform/engine/modules/projects/project-crud.service", `[updateProject] service/topology route re-apply failed: ${message}`, err);
     onWarning(message);
   });
   if (warnings.length) {
@@ -1819,7 +1827,7 @@ export async function updateProject(
     const normalize = (s: string) => s.trim().replace(/^\/+/, "").replace(/\/+$/, "").toLowerCase();
     const prefixes = data.monorepoSharedPaths.map(normalize).filter((s) => s.length > 0);
     if (prefixes.length > 0) {
-      const services = await repos.service.listByProject(projectId).catch(() => []);
+      const services = await repos.service.listByProject(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return []; });
       const serviceRoots = services
         .map((s) => normalize(s.rootDirectory ?? ""))
         .filter((s) => s.length > 0);
@@ -1866,7 +1874,7 @@ export async function updateProject(
       // slug: internalAlias == slug is the same single-app container answering to
       // both names, not a collision. Runs BEFORE repos.project.update below.
       if (alias !== normalizeAliasStrict(p.internalAlias)) {
-        const siblings = await repos.service.listByProject(projectId).catch(() => []);
+        const siblings = await repos.service.listByProject(projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return []; });
         if (aliasConflictsWithSiblings(alias, siblings)) {
           throw new ValidationError(
             "internalAlias collides with a service name or alias on this project",
@@ -1894,7 +1902,7 @@ export async function updateProject(
     // Snapshot the live hostnames before the sync so re-application can tear
     // down any the edit drops — AND so the free-cloud gate only fires for
     // NET-NEW free routes.
-    const beforeState = nextRoutes ?? await resolveProjectRouteState(p).catch(() => null);
+    const beforeState = nextRoutes ?? await resolveProjectRouteState(p).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return null; });
     const previousHostnames = beforeState?.projectDomains.map((d) => d.hostname) ?? [];
 
     // Best-effort ONLY for an incidental re-sync (a port edit) — the field edit
@@ -1911,7 +1919,7 @@ export async function updateProject(
       }
     } catch (err) {
       if (data.publicEndpoints !== undefined) throw err;
-      console.warn(`[updateProject] route sync failed (non-fatal): ${safeErrorMessage(err)}`);
+      errorDiagnostics.warn("platform/engine/modules/projects/project-crud.service", `[updateProject] route sync failed (non-fatal): ${safeErrorMessage(err)}`, err);
     }
 
     // Re-apply the live route so a domain/port edit takes effect without a
@@ -1938,8 +1946,8 @@ export async function updateProject(
           markOnFailure: true,
           clearOnSuccess: routeWarnings.length === 0,
         }).catch((err) =>
-          console.warn(
-            `[updateProject] managed edge sync failed (non-fatal): ${safeErrorMessage(err)}`,
+          errorDiagnostics.warn("platform/engine/modules/projects/project-crud.service",
+            `[updateProject] managed edge sync failed (non-fatal): ${safeErrorMessage(err)}`, err,
           ),
         );
       }
@@ -2267,7 +2275,7 @@ export function unresolvedUpstreamDrift(p: Project): UpstreamDrift {
 
 /** Image services whose upstream digest is worth resolving (image-only, enabled). */
 async function imageServicesOf(p: Project) {
-  const services = await repos.service.listByProject(p.id).catch(() => []);
+  const services = await repos.service.listByProject(p.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return []; });
   return services.filter((s) => s.image && !s.build && (s.enabled ?? true));
 }
 
@@ -2325,7 +2333,7 @@ export async function resolveUpstreamDrift(
     // no releaseSource (they deploy via localPath/migration), so they'd otherwise
     // fall through to unsupported.
     if (!isReleaseProvider(p.gitProvider)) {
-      const latestVersion = await resolveLatestReleaseTag(GITHUB_REPO).catch(() => null);
+      const latestVersion = await resolveLatestReleaseTag(GITHUB_REPO).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return null; });
       return {
         supported: true,
         mode: "release",
@@ -2356,14 +2364,14 @@ export async function resolveUpstreamDrift(
     const digestByRef: Record<string, string | null> = {};
     await Promise.all(
       refs.map(async (ref) => {
-        digestByRef[ref] = await resolveLatestImageDigest(ref).catch(() => null);
+        digestByRef[ref] = await resolveLatestImageDigest(ref).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return null; });
       }),
     );
     return { supported: true, mode: "image", digestByRef };
   }
 
   const head = ctx
-    ? await getLatestCommit(ctx, p.gitOwner!, p.gitRepo!, projectBranch(p)).catch(() => null)
+    ? await getLatestCommit(ctx, p.gitOwner!, p.gitRepo!, projectBranch(p)).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return null; })
     : null;
   return {
     supported: true,
@@ -2394,7 +2402,7 @@ export async function resolveDeployedDrift(
   if (mode === "commit") {
     let deployedSha: string | null = null;
     if (p.activeDeploymentId) {
-      const dep = await findActiveDeployment(p).catch(() => null);
+      const dep = await findActiveDeployment(p).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return null; });
       deployedSha = dep?.commitSha ?? null;
     }
     return { mode: "commit", deployedSha };
@@ -2408,7 +2416,7 @@ export async function resolveDeployedDrift(
     }
     let currentVersion: string | null = null;
     if (p.activeDeploymentId) {
-      const dep = await findActiveDeployment(p).catch(() => null);
+      const dep = await findActiveDeployment(p).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return null; });
       currentVersion = dep?.releaseVersion ?? null;
     }
     if (!currentVersion && p.appTemplateId === "openship") currentVersion = readApiVersion();
@@ -2417,7 +2425,7 @@ export async function resolveDeployedDrift(
 
   const deployedByService = new Map<string, { ref?: string; digest?: string }>();
   if (p.activeDeploymentId) {
-    const sds = await listActiveServiceDeployments(p).catch(() => []);
+    const sds = await listActiveServiceDeployments(p).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/projects/project-crud.service"); return []; });
     for (const sd of sds) {
       deployedByService.set(sd.serviceId, {
         digest: sd.imageDigest ?? undefined,

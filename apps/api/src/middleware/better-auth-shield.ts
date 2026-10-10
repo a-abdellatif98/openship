@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { Context, Next } from "hono";
 import { auth } from "@repo/platform/engine/lib/auth";
 import { repos } from "@repo/db";
@@ -123,7 +124,8 @@ async function filterFullOrganization(c: Context, next: Next, userId: string): P
   let data: unknown;
   try {
     data = await res.clone().json();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/middleware/better-auth-shield");
     return; // not JSON — leave untouched
   }
   if (!data || typeof data !== "object") return;
@@ -168,7 +170,8 @@ async function extractTargetOrgId(
       if (path.endsWith("/set-active") && typeof body?.organizationSlug === "string" && body.organizationSlug) {
         return (await repos.organization.findBySlug(body.organizationSlug))?.id ?? null;
       }
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "api/middleware/better-auth-shield");
       return null;
     }
   }
@@ -195,7 +198,8 @@ export async function betterAuthShield(c: Context, next: Next) {
   let session: Awaited<ReturnType<typeof auth.api.getSession>> | null;
   try {
     session = await auth.api.getSession({ headers: c.req.raw.headers });
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/middleware/better-auth-shield");
     return c.json({ error: "Authorization unavailable" }, 503);
   }
 
@@ -225,7 +229,8 @@ export async function betterAuthShield(c: Context, next: Next) {
       return c.json({ error: "Forbidden" }, 403);
     }
     role = member.role ?? "member";
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "api/middleware/better-auth-shield");
     return c.json({ error: "Authorization unavailable" }, 503);
   }
 

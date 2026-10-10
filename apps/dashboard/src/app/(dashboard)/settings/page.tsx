@@ -52,6 +52,7 @@ import { NotificationsTab } from "./_components/NotificationsTab";
 import { EmailSettings } from "./_components/EmailSettings";
 import { Credentials } from "./_components/Credentials";
 import { DataTransferTab } from "./_components/DataTransferTab";
+import { InstanceLocation } from "@/components/instance/InstanceLocation";
 import {
   SettingsSidebar,
   SettingsMobileTabs,
@@ -201,6 +202,16 @@ function SettingsPageInner() {
 
           {activeTab === "instance" && (
             <>
+              {selfHosted && (
+                <InstanceLocation
+                  moveRequested={searchParams.get("move") === "1"}
+                  onMoveOpened={() => {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("move");
+                    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+                  }}
+                />
+              )}
               <InstanceInfo />
               {/* Instance-wide default product mode (Openship Mail vs the full
                   platform). Owner-gated inside; self-hosted only. */}

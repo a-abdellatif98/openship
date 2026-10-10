@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -45,7 +46,9 @@ export function AppCatalog({ embedded = false }: { embedded?: boolean } = {}) {
     appsApi
       .catalog()
       .then((r) => setCatalog(r.data ?? []))
-      .catch(() => {});
+      .catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "dashboard/components/apps/AppCatalog");
+      });
 
   const removeCustomApp = async (app: AppCatalogEntry) => {
     try {

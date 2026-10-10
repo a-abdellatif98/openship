@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Icon as UiIcon } from "@repo/ui/icons";
 
 /**
@@ -74,7 +75,7 @@ export default function WebmailPage() {
       const servers = await mailApi
         .listMailServers()
         .then((r) => r.servers)
-        .catch(() => [] as MailServerRow[]);
+        .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/webmail/page"); return [] as MailServerRow[]; });
       if (cancelled) return;
 
       if (servers.length === 0) {
@@ -100,7 +101,7 @@ export default function WebmailPage() {
       // A failed read returns the "no install" shape (the API swallows an
       // unreachable box), so this falls through to the install offer — the same
       // thing the overview tab's webmail CTA does on an unreachable server.
-      const status = await mailApi.getStatus(server.id).catch(() => null);
+      const status = await mailApi.getStatus(server.id).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/emails/webmail/page"); return null; });
       if (cancelled) return;
       const webmail = status?.webmail;
 

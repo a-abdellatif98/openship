@@ -477,6 +477,14 @@ r.post(
 );
 
 /* ─── Retry routing and domain checks (no rebuild) ──────────────────────── */
+r.get(
+  "/:id/routing/retry/stream",
+  {
+    tag: "project:read",
+    mcpExcluded: "Read-only SSE replay of an existing routing repair session.",
+  },
+  ctrl.retryRoutingStream,
+);
 r.post(
   "/:id/routing/retry/stream",
   {

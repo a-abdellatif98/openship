@@ -1,5 +1,6 @@
 "use client";
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import type { CloudSupportCategory, CloudSupportCustomerInput } from "@repo/contracts";
@@ -58,7 +59,8 @@ export function NewSupportTicket({
     try {
       const receipt = await cloudSupportApi.create(attempt.current);
       if (mounted.current) onCreated(receipt.id);
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "dashboard/components/support/NewSupportTicket");
       if (mounted.current) setFailed(true);
     } finally {
       busy.current = false;

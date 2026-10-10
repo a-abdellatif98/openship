@@ -1,11 +1,12 @@
-
 /** Shared run formatting/status helpers for the jobs UI (list, detail, logs). */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 export function formatTime(iso: string | null): string {
   if (!iso) return "—";
   try {
     return new Date(iso).toLocaleString();
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "dashboard/components/jobs/jobFormat");
     return "—";
   }
 }

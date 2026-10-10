@@ -18,6 +18,7 @@
  * on the next boot, and vice versa.
  */
 
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { CommandExecutor } from "../../types";
 import type { EdgeStatus, EdgeStopTarget, SystemLog, SystemLogCallback } from "../types";
 import {
@@ -130,7 +131,8 @@ export async function writeJournal(
     const privileged = await journalFileExecutor(executor);
     await privileged.mkdir(JOURNAL_DIR);
     await privileged.writeFile(JOURNAL_PATH, JSON.stringify(journal, null, 2));
-  } catch {
+  } catch (diagnosticFailure) {
+    observeCaughtError(diagnosticFailure, "adapters/system/proxy/takeover-journal");
     // Non-fatal: an in-process rollback still works; only crash-recovery is lost.
   }
 }

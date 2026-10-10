@@ -10,6 +10,7 @@
  *                                          the API will not infer "no limits" from an empty list.
  *   revoke  DELETE /tokens/:id             → { data: { revoked: true } }
  */
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { Command } from "commander";
 import chalk from "chalk";
 import { getShipClient } from "../lib/ship-client";
@@ -58,6 +59,7 @@ const listCmd = new Command("list")
         ["id", "name", "prefix", "readOnly", "scoped", "expires", "lastUsed", "revoked"],
       );
     } catch (e) {
+      observeCaughtError(e, "cli/commands/token");
       fail(e);
     }
   });
@@ -112,6 +114,7 @@ const createCmd = new Command("create")
       info("  Copy this token now — it will not be shown again:");
       process.stdout.write(chalk.cyan(`  ${result.token}\n`));
     } catch (e) {
+      observeCaughtError(e, "cli/commands/token");
       sp?.fail("Create failed");
       fail(e);
     }
@@ -128,6 +131,7 @@ const revokeCmd = new Command("revoke")
       if (isJsonMode()) printJson({ id, revoked: true });
       else ok(`  Token ${id} revoked`);
     } catch (e) {
+      observeCaughtError(e, "cli/commands/token");
       sp?.fail("Revoke failed");
       fail(e);
     }

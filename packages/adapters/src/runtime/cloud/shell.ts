@@ -1,3 +1,4 @@
+import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { PassThrough, Writable } from "node:stream";
 import { randomUUID } from "node:crypto";
 import type { Runtime } from "oblien";
@@ -36,16 +37,24 @@ export async function openCloudShell(rt: Runtime, opts?: ShellOptions, workspace
   let rejectOpen: (error: Error) => void = () => {};
 
   stdout.on("error", () => {
-    void finish().catch(() => {});
+    void finish().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+    });
   });
   stderr.on("error", () => {
-    void finish().catch(() => {});
+    void finish().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+    });
   });
   stdout.on("close", () => {
-    void finish().catch(() => {});
+    void finish().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+    });
   });
   stderr.on("close", () => {
-    void finish().catch(() => {});
+    void finish().catch((diagnosticFailure) => {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+    });
   });
 
   function finish(code: number | null = null, signal?: string): Promise<void> {
@@ -55,7 +64,8 @@ export async function openCloudShell(rt: Runtime, opts?: ShellOptions, workspace
     rejectOpen(new Error("The server terminal connection closed before it was ready"));
     try {
       socket?.close();
-    } catch {
+    } catch (diagnosticFailure) {
+      observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
       /* socket already gone */
     }
     stdout.end();
@@ -63,7 +73,8 @@ export async function openCloudShell(rt: Runtime, opts?: ShellOptions, workspace
     for (const listener of listeners) {
       try {
         listener(code, signal);
-      } catch {
+      } catch (diagnosticFailure) {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
         /* isolate subscriber failures */
       }
     }
@@ -79,19 +90,27 @@ export async function openCloudShell(rt: Runtime, opts?: ShellOptions, workspace
       // No flow-control method exists in the provider socket. Bound output while
       // the consumer attaches or stalls instead of buffering indefinitely.
       if (stdout.readableLength + stdout.writableLength + bytes.byteLength > 1024 * 1024) {
-        void finish(null, "output_overflow").catch(() => {});
+        void finish(null, "output_overflow").catch((diagnosticFailure) => {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+        });
         return;
       }
       stdout.write(Buffer.from(bytes));
     });
     ws.onTerminalExit((id, code) => {
-      if (id === terminalId) void finish(code ?? null).catch(() => {});
+      if (id === terminalId) void finish(code ?? null).catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+      });
     });
     ws.onClose(() => {
-      void finish().catch(() => {});
+      void finish().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+      });
     });
     ws.onError(() => {
-      void finish().catch(() => {});
+      void finish().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+      });
     });
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -119,15 +138,18 @@ export async function openCloudShell(rt: Runtime, opts?: ShellOptions, workspace
           ws.writeTerminalInput(terminalId, chunk);
           callback();
         } catch (error) {
+          observeCaughtError(error, "adapters/runtime/cloud/shell");
           callback(error instanceof Error ? error : new Error("Terminal input failed"));
         }
       },
       final(callback) {
-        void finish().then(() => callback(), error => callback(error));
+        void finish().then(() => callback(), error => { /* diagnostics-ignore: The Writable callback propagates the failure to the consumer. */ return callback(error); });
       },
     });
     stdin.on("error", () => {
-      void finish().catch(() => {});
+      void finish().catch((diagnosticFailure) => {
+        observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+      });
     });
     return {
       stdin,
@@ -141,8 +163,11 @@ export async function openCloudShell(rt: Runtime, opts?: ShellOptions, workspace
             clampShellWindow(c, 80, 1000),
             clampShellWindow(r, 24, 500),
           );
-        } catch {
-          void finish().catch(() => {});
+        } catch (diagnosticFailure) {
+          observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+          void finish().catch((diagnosticFailure) => {
+            observeCaughtError(diagnosticFailure, "adapters/runtime/cloud/shell");
+          });
         }
       },
       close: async () => {
