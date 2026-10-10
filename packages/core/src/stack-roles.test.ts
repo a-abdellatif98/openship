@@ -9,12 +9,14 @@ const jobs: StackRole = {
   name: "jobs",
   kind: "worker",
   command: "exec bin/jobs",
+  stopGracePeriod: "10s",
   when: { deps: ["solid_queue"], files: ["bin/jobs"] },
 };
 const sidekiq: StackRole = {
   name: "sidekiq",
   kind: "worker",
   command: "exec bundle exec sidekiq",
+  stopGracePeriod: "30s",
   when: { deps: ["sidekiq"] },
 };
 const defaultRoles = [jobs, sidekiq];
@@ -118,6 +120,22 @@ describe("STACKS.rails.defaultRoles (issue #935)", () => {
     const roles = STACKS.rails.defaultRoles;
     expect(roles?.map((r) => r.name)).toEqual(["jobs", "sidekiq"]);
     expect(roles?.every((r) => r.kind === "worker")).toBe(true);
+  });
+
+  it("gives sidekiq more stop grace than Solid Queue, both parser-valid", () => {
+    const roles: readonly StackRole[] = STACKS.rails.defaultRoles ?? [];
+    expect(roles.map((r) => r.stopGracePeriod)).toEqual(["10s", "30s"]);
+    // Presets bypass the parser, so run each value through it here.
+    const { config, errors } = parseOpenshipConfig({
+      roles: roles.map(({ name, kind, command, stopGracePeriod }) => ({
+        name,
+        kind,
+        command,
+        stopGracePeriod,
+      })),
+    });
+    expect(errors).toEqual([]);
+    expect(config?.roles?.map((r) => r.stopGracePeriod)).toEqual(["10s", "30s"]);
   });
 
   it("resolves against Gemfile-shaped deps end to end", () => {

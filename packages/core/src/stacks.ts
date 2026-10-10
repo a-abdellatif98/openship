@@ -757,17 +757,26 @@ export const STACKS = {
     // Only one queue backend is registered per app in practice, but a repo can
     // carry both gems mid-migration - resolveStackRoles drops the worker role
     // entirely when that happens rather than guessing which one runs.
+    //
+    // The two grace periods differ because the workers' own shutdown timeouts
+    // do: Solid Queue's `shutdown_timeout` defaults to 5s and Sidekiq's
+    // `timeout` to 25s, each measured to exit ~0.5s after it (solid_queue
+    // 1.7.0, sidekiq 8.1.7). Sidekiq under Docker's 10s default is SIGKILLed
+    // mid-drain and the in-flight job is lost, not requeued. Raising either
+    // worker's own timeout means raising its grace period with it.
     defaultRoles: [
       {
         name: "jobs",
         kind: "worker",
         command: "exec bin/jobs",
+        stopGracePeriod: "10s",
         when: { deps: ["solid_queue"], files: ["bin/jobs"] },
       },
       {
         name: "sidekiq",
         kind: "worker",
         command: "exec bundle exec sidekiq",
+        stopGracePeriod: "30s",
         when: { deps: ["sidekiq"] },
       },
     ],
