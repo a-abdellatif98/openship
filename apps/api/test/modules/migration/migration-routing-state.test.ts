@@ -218,4 +218,30 @@ describe("persisted migration routing through service edits and deletion", () =>
     expect((await repos.project.findById(projectId))?.compositeRoutes).toEqual(topology);
     expect(await repos.domain.findByHostname("replacement.example.com")).toBeUndefined();
   });
+
+  it("persists path-only routes on the project and re-renders them after service edits", async () => {
+    await saveMigrationRoutes(ctx, projectId, {
+      backend: [
+        { domainType: "custom", customDomain: "api.onvo.me", exposedPort: "9000", targetPath: "/v3" },
+        { domainType: "custom", customDomain: "api.onvo.me", exposedPort: "9000", targetPath: "/mcp", exact: true },
+      ],
+    }, () => {});
+    const domain = await repos.domain.findByHostname("api.onvo.me");
+    expect(domain).toMatchObject({ projectId, serviceId: null, targetPort: null, verified: false });
+    expect((await render()).base.some(route => route.hostname === "api.onvo.me")).toBe(false);
+    const expected = {
+      hostname: "api.onvo.me",
+      isCustomDomain: true,
+      notFound: true,
+      proxyLocations: [
+        { pathPrefix: "/v3", targetUrl: `http://${api.id}:9000` },
+        { pathPrefix: "/mcp", targetUrl: `http://${api.id}:9000`, exact: true },
+      ],
+    };
+    expect((await render()).topology.find(route => route.hostname === "api.onvo.me")).toEqual(expected);
+    await updateService(ctx, projectId, api.id, { ports: ["9000", "9100"] }, { applyLiveRoutes: false });
+    expect((await render()).topology.find(route => route.hostname === "api.onvo.me")).toEqual(expected);
+    await repos.domain.remove(domain!.id);
+    expect((await render()).topology.some(route => route.hostname === "api.onvo.me")).toBe(false);
+  });
 });

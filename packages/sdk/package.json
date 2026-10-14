@@ -25,6 +25,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@sinclair/typebox": "^0.34.48",
     "ws": "^8.21.3",
     "@repo/core": "workspace:*",
     "@repo/contracts": "workspace:*",

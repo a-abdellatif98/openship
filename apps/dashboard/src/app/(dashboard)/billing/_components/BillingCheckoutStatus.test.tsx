@@ -455,12 +455,11 @@ describe("confirmed Cloud subscription welcome", () => {
     expect(dialog()).toBeNull();
   });
 
-  it("celebrates the verified plan with its live allowances and a first-project action", async () => {
+  it("welcomes the verified plan without inventing capacity from quota-only metadata", async () => {
     await render(subscription);
     expect(dialog()?.textContent).toContain("Welcome to Launch");
-    expect(dialog()?.querySelector("dl")?.textContent).toContain("13");
-    expect(dialog()?.querySelector("dl")?.textContent).toContain("7");
-    expect(dialog()?.querySelector("dl")?.textContent).toContain("321 min / month");
+    expect(dialog()?.querySelector("dl")).toBeNull();
+    expect(dialog()?.textContent).not.toContain("321 min / month");
     expect(dialog()?.querySelector('a[href="/library"]')).not.toBeNull();
     expect(dialog()?.querySelector('a[href="/billing/overview"]')).not.toBeNull();
     expect(mocks.router.refresh).toHaveBeenCalledOnce();

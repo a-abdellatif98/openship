@@ -20,7 +20,119 @@
     "useGeneratedDomains": "استخدام نطاقات مجانية",
     "editDomains": "تعديل النطاقات",
     "routePortCloudDesc": "خاص بمساحة العمل هذه على Cloud. أضف نطاقًا للحصول على رابط عام.",
-    "exposeTitle": "النطاقات والتوجيه"
+    "exposeTitle": "النطاقات والتوجيه",
+    "install": "تثبيت",
+    "installing": "جارٍ التثبيت…",
+    "advanced": "خيارات النشر المتقدمة",
+    "nameLabel": "الاسم",
+    "nameHint": "كيف يظهر هذا التطبيق في Openship.",
+    "domainTitle": "أين يجب أن يتواجد؟",
+    "domainFree": "نطاق فرعي مجاني",
+    "domainFreeHint": "نطاق فرعي مجاني على {domain}",
+    "domainCustom": "نطاقك الخاص",
+    "domainCustomPlaceholder": "app.example.com",
+    "domainNone": "بدون رابط عام",
+    "domainNoneHint": "داخلي فقط — بدون عنوان عام.",
+    "customRequired": "أدخل نطاقك، أو اختر خياراً آخر.",
+    "progressPreparing": "جارٍ التحضير…",
+    "progressDeploying": "جارٍ النشر…",
+    "progressLive": "تطبيقك قيد التشغيل الآن",
+    "openApp": "فتح التطبيق",
+    "goToApp": "الانتقال إلى التطبيق",
+    "installFailed": "فشل التثبيت",
+    "installFailedBody": "توقف التثبيت قبل تشغيل جميع المكونات. تحتوي التفاصيل الفنية على سجل البناء الكامل.",
+    "installCancelledSelf": "لقد قمت بإيقاف هذا التثبيت.",
+    "installCancelledBody": "تمت إزالة الحاويات والصور التي تم إنشاؤها، وتم الاحتفاظ بوحدات تخزين البيانات — يؤدي التثبيت مرة أخرى إلى إعادة استخدامها. تم ترك أي شيء قيد التشغيل بالفعل دون مساس.",
+    "settledAtPhase": "توقف عند مرحلة {phase}",
+    "viewDetails": "عرض التفاصيل الفنية",
+    "showLogs": "عرض السجلات",
+    "hideLogs": "إخفاء السجلات",
+    "deployLogs": "سجلات النشر",
+    "logsWaiting": "في انتظار المخرجات…",
+    "logsEmpty": "لم يتم تسجيل أي مخرجات.",
+    "back": "رجوع",
+    "phaseImages": "تحضير الصور",
+    "phaseServices": "بدء الخدمات",
+    "phaseAppSetup": "إنهاء الإعداد",
+    "phaseReady": "قيد التشغيل",
+    "phaseQueued": "في قائمة الانتظار…",
+    "stepperTitle": "خطوات التثبيت",
+    "firstLoginTitle": "أول تسجيل دخول",
+    "firstLoginUser": "اسم المستخدم",
+    "firstLoginPassword": "كلمة المرور",
+    "destinationTitle": "مكان التثبيت",
+    "destinationHint": "اختر الخادم أو السحابة التي يعمل عليها هذا التطبيق.",
+    "descMore": "المزيد",
+    "descLess": "أقل",
+    "needsTitle": "المتطلبات",
+    "needsMemory": "{value} ذاكرة",
+    "needsCpu": "{value}",
+    "hostFitTitle": "هذا الخادم أصغر مما يحتاجه {app}",
+    "hostFitMemory": "يحتاج {needed} من الذاكرة — يتوفر في هذا الخادم {available}",
+    "hostFitCpu": "يحتاج {needed} — يتوفر في هذا الخادم {available}",
+    "routePortLabel": "منفذ فقط (بدون نطاق)",
+    "routePortDesc": "يمكن الوصول إليه من خلال عنوان المضيف والمنفذ — لا يلزم وجود نطاق أو سحابة.",
+    "routeFreeLabel": "نطاق فرعي مجاني",
+    "routeFreeDesc": "نطاق فرعي مجاني على {domain}، يتم توجيهه بواسطة Openship Cloud.",
+    "routeFreeNeedsCloud": "اربط Openship Cloud لاستخدام نطاق فرعي مجاني.",
+    "routeCustomLabel": "نطاقك الخاص",
+    "routeCustomDesc": "وجه نطاقاً تملكه إلى هذا التطبيق.",
+    "routeDomainLabel": "النطاق",
+    "routeDomainDesc": "الوصول إليه عبر نطاق — نطاق فرعي مجاني أو نطاقك الخاص.",
+    "httpBadge": "ويب",
+    "tcpBadge": "قاعدة بيانات",
+    "tcpPublishLabel": "نشر المنفذ",
+    "tcpPublishDesc": "انشره على المضيف حتى تتمكن الأدوات الخارجية من الاتصال.",
+    "tcpInternalLabel": "داخلي فقط",
+    "tcpInternalDesc": "يمكن فقط للخدمات الأخرى في هذا التطبيق الوصول إليه.",
+    "tcpFirewallNote": "افتح المنفذ {port} في جدار حماية الخادم للاتصال من الخارج.",
+    "desktopReachNote": "على سطح المكتب يمكنك فتحه على localhost — أو إعادة توجيه المنفذ من الخوادم ← المنافذ لخادم بعيد.",
+    "statusInstalling": "جارٍ التثبيت",
+    "statusLive": "قيد التشغيل",
+    "statusCancelled": "ملغى",
+    "statusFailed": "فشل",
+    "stopInstall": "إيقاف التثبيت",
+    "stopping": "جارٍ الإيقاف…",
+    "installCancelled": "تم إلغاء التثبيت",
+    "startOver": "البدء من جديد",
+    "breadcrumbApps": "التطبيقات",
+    "appEyebrow": "تطبيق",
+    "stopFailed": "تعذر إيقاف التثبيت",
+    "progressStep": "الخطوة {current} من {total}",
+    "progressServicesReady": "{done} من {total} خدمات جاهزة",
+    "summaryTitle": "التكوين",
+    "summaryDestination": "الوجهة",
+    "summaryServices": "الخدمات",
+    "mail": {
+      "title": "إعداد البريد",
+      "subtitle": "انشر بريد الويب على نطاقك الخاص، أو اربط صندوق بريد موجود.",
+      "chooseSelf": "استضافة خادم بريد ذاتياً",
+      "chooseSelfDesc": "SMTP/IMAP كامل + بريد ويب (iRedMail) على خادمك — نقوم بتهيئة كل شيء.",
+      "chooseConnect": "ربط صندوق بريد موجود",
+      "chooseConnectDesc": "انشر واجهة بريد الويب فقط، موجهة إلى أي مزود SMTP/IMAP خارجي — Amazon SES أو Oracle Cloud أو Gmail أو Fastmail والمزيد.",
+      "provider": "المزود",
+      "presets": {
+        "custom": "مخصص",
+        "ses": "Amazon SES",
+        "gmail": "Gmail",
+        "fastmail": "Fastmail"
+      },
+      "sendOnlyNote": "{provider} يرسل البريد فقط — ولا يحتفظ بصناديق البريد. يجب أن يشير IMAP إلى المكان الذي يتم فيه تخزين بريدك فعلياً.",
+      "sendOnlyNoInbox": "ليس لديك صندوق وارد بعد؟ قم بإعداد خادم بريد هنا، ثم قم بترحيل الإرسال عبر {provider} ←",
+      "imapOnOurServer": "تتم قراءة صناديق البريد من {host} — خادم البريد الخاص بهذا المثيل. يمر الإرسال فقط عبر {provider}.",
+      "relayNote": "يقوم هذا المثيل بالفعل بتشغيل خادم بريد. إذا كانت صناديق البريد عليه، فقم بترحيل الإرسال من علامة تبويب التسليم ← الإرسال بدلاً من ذلك: يظل IMAP محلياً وينتقل الإرسال فقط إلى {provider}، لكل نطاق أو لكل عنوان، ويستمر بريد الويب الخاص به في العمل.",
+      "relayCta": "تكوين المرحل بدلاً من ذلك ←",
+      "hostname": "عنوان بريد الويب",
+      "hostnameHint": "الرابط العام الذي يفتحه الأشخاص لقراءة بريدهم، على سبيل المثال mail.example.com.",
+      "imapHost": "مضيف IMAP",
+      "imapPort": "منفذ IMAP",
+      "smtpHost": "مضيف SMTP",
+      "smtpPort": "منفذ SMTP",
+      "deploy": "نشر بريد الويب",
+      "deploying": "جارٍ النشر…",
+      "hostnameRequired": "أدخل عنوان بريد الويب.",
+      "hostsRequired": "أدخل كلاً من مضيف IMAP ومضيف SMTP."
+    }
   },
   "settingSection": {
     "edit": "تعديل",
@@ -263,6 +375,10 @@
         "failed": "تعذّر تحديث اسم المضيف الداخلي",
         "invalid": "أدخل حرفًا أو رقمًا واحدًا على الأقل"
       }
+    },
+    "export": {
+      "title": "تصدير المشروع",
+      "description": "تنزيل جميع إعدادات المشروع وقيم البيئة وبيانات الاعتماد بصيغة JSON."
     }
   },
   "backup": {
@@ -731,7 +847,12 @@
     "linkedTitleOne": "مشروع واحد مرتبط بهذا التطبيق",
     "linkedTitleOther": "{count} مشاريع مرتبطة بهذا التطبيق",
     "linkedNote": "ستستمر في العمل وبياناتها كما هي — ستفقد هذا الاتصال فقط. أعد نشرها ليصبح ذلك ساريًا.",
-    "linkedNoteRecordOnly": "ستستمر في العمل، لكن الربط يُحذف مع السجل — واستيراد التطبيق لاحقًا لن يعيده."
+    "linkedNoteRecordOnly": "ستستمر في العمل، لكن الربط يُحذف مع السجل — واستيراد التطبيق لاحقًا لن يعيده.",
+    "recordOnlyLabel": "إزالة من Openship فقط",
+    "recordOnlyDesc": "يبقي التطبيق وبياناته قيد التشغيل على خادمك — تتم إزالة سجل Openship فقط. يمكنك إعادة استيراده لاحقاً.",
+    "recordOnlyReversible": "قابل للتراجع — يبقى التطبيق على خادمك.",
+    "recordOnlyNote": "لا يتم المساس بأي شيء على الخادم — يستمر التطبيق في العمل مع بياناته. تتم فقط إزالة سجل Openship، ويمكن إعادة استيراده لاحقاً.",
+    "confirmRecordOnly": "إزالة السجل"
   },
   "routing": {
     "title": "التوجيه",
@@ -762,7 +883,9 @@
       "expired": "منتهي الصلاحية",
       "error": "خطأ",
       "inactive": "غير نشط",
-      "unknown": "غير معروف"
+      "unknown": "غير معروف",
+      "external": "TLS خارجي",
+      "manual": "شهادة يدوية"
     },
     "typeCustom": "نطاق مخصّص",
     "typeFree": "نطاق فرعي مجاني",
@@ -811,7 +934,13 @@
       "includeWwwDesc": "أنشئ أيضًا سجلات لـ www.{domain}",
       "includeWwwFallback": "yourdomain.com",
       "adding": "جارٍ الإضافة...",
-      "submit": "إضافة نطاق"
+      "submit": "إضافة نطاق",
+      "servesPath": "مسار الخدمة",
+      "servesPathHint": "تتم خدمة الطلبات الموجهة إلى هذا النطاق من هذا المسار في مخرجات البناء.",
+      "servesPathRedeploy": "تسري المسارات الجديدة عند النشر التالي.",
+      "externalIngress": "دخول وTLS خارجي",
+      "externalIngressDesc": "ينتهي TLS عند البروكسي العكسي (Cloudflare Tunnel أو Nginx Proxy Manager أو موازن التحميل). لا يلزم أن يشير النطاق إلى هذا الخادم، ولن يصدر Openship شهادة.",
+      "noWww": "هذا النطاق موجود بالفعل في هذا المشروع."
     },
     "dns": {
       "title": "سجلات DNS",
@@ -863,7 +992,8 @@
       "title": "تعديل المسار",
       "internalOnly": "داخلي فقط",
       "close": "إغلاق",
-      "disabledWarning": "الخدمة معطّلة - المسارات غير نشطة حتى تُعاد إعادة تفعيل الخدمة."
+      "disabledWarning": "الخدمة معطّلة - المسارات غير نشطة حتى تُعاد إعادة تفعيل الخدمة.",
+      "save": "حفظ التغييرات"
     },
     "menu": {
       "editRoute": "تعديل المسار",
@@ -874,7 +1004,8 @@
       "renewing": "جارٍ التجديد...",
       "renewSsl": "تجديد SSL",
       "rechecking": "جارٍ إعادة الفحص...",
-      "recheckSsl": "إعادة فحص SSL"
+      "recheckSsl": "إعادة فحص SSL",
+      "uploadCert": "رفع الشهادة"
     },
     "toast": {
       "enterPort": "أدخِل المنفذ الذي يجب أن يُوجَّه إليه هذا النطاق (1–65535).",
@@ -905,7 +1036,11 @@
       "enterPortShort": "أدخِل المنفذ الذي يجب أن يُوجَّه إليه هذا النطاق.",
       "noServicePort": "لا توجد خدمة تنشر المنفذ {port}. أضِف ذلك المنفذ إلى خدمة أولًا.",
       "enterCustom": "أدخِل نطاقًا مخصّصًا.",
-      "enterSubdomain": "أدخِل نطاقًا فرعيًا."
+      "enterSubdomain": "أدخِل نطاقًا فرعيًا.",
+      "certUploaded": "تم تثبيت الشهادة لـ {hostname}.",
+      "certUploadFailed": "فشل تثبيت الشهادة لـ {hostname}.",
+      "publishing": "جارٍ النشر — يتم النشر لتثبيت الـ edge وتطبيق نطاقك…",
+      "publishFailed": "تم حفظ النطاق، ولكن لم يبدأ النشر — أعد النشر لتطبيقه."
     },
     "edge": {
       "setUp": "إعداد الحافة",
@@ -941,7 +1076,11 @@
     },
     "records": {
       "failed": "تعذّر تحميل سجلات DNS لهذا النطاق.",
-      "retry": "إعادة المحاولة"
+      "retry": "إعادة المحاولة",
+      "toggle": "سجلات DNS",
+      "hint": "أضف هذه السجلات لدى مزود DNS الخاص بك، ثم انقر فوق تحقق.",
+      "loading": "جارٍ تحميل السجلات…",
+      "none": "لا توجد سجلات لإضافتها لهذا النطاق."
     },
     "outputHint": {
       "body": "لم يتم العثور على مخرجات بناء في {path} — تحقق من دليل المخرجات وأعد النشر.",
@@ -984,6 +1123,32 @@
         "cancelled": "أُلغي التحقق",
         "expired": "انتهت صلاحية التحقق بسجل TXT"
       }
+    },
+    "verifyMissing": {
+      "both": "لا يتم تحليل سجل CNAME ولا TXT بعد — أضف السجلات أدناه، وانتظر حتى ينتشر DNS، ثم انقر فوق تحقق.",
+      "cname": "سجل CNAME لا يتم تحليله بعد — أضفه أدناه، وانتظر حتى ينتشر DNS، ثم انقر فوق تحقق.",
+      "txt": "سجل التحقق TXT لا يتم تحليله بعد — أضفه أدناه، وانتظر حتى ينتشر DNS، ثم انقر فوق تحقق."
+    },
+    "portHint": {
+      "body": "لم يستجب أي شيء على المنفذ {port} — قد تُرجع الطلبات رمز 502 حتى يستمع التطبيق هناك.",
+      "bodyService": "الخدمة \"{service}\": لم يستجب أي شيء على المنفذ {port} — قد تُرجع الطلبات رمز 502 حتى تستمع هناك."
+    },
+    "certUpload": {
+      "title": "رفع الشهادة",
+      "desc": "خدمة TLS من شهادتك الخاصة (الشهادة الخاصة بك أو Cloudflare Origin CA) بدلاً من Let's Encrypt. استخدم هذا عندما يكون هناك بروكسي علوي يواجه هذا النطاق ولا يزال الأصل بحاجة إلى شهادة حقيقية (Cloudflare Full-strict). يتم تعطيل Certbot لهذا النطاق بمجرد رفع الشهادة — قم بالتجديد عن طريق رفع شهادة جديدة.",
+      "certLabel": "الشهادة (سلسلة كاملة PEM)",
+      "certPlaceholder": "-----BEGIN CERTIFICATE-----",
+      "keyLabel": "المفتاح الخاص (PEM)",
+      "keyPlaceholder": "-----BEGIN PRIVATE KEY-----",
+      "submit": "تثبيت الشهادة",
+      "submitting": "جارٍ التثبيت...",
+      "close": "إلغاء"
+    },
+    "removeRoute": {
+      "title": "إزالة المسار",
+      "description": "يستمر التطبيق في العمل — تتم إزالة هذا المسار وتسجيله على edge فقط. يمكنك إضافته مرة أخرى في أي وقت.",
+      "confirm": "إزالة المسار",
+      "removing": "جارٍ الإزالة…"
     }
   },
   "serviceEnvironment": {
@@ -1002,5 +1167,69 @@
     "server": "الخادم المُدار",
     "serverDescription": "قدّم الملفات من حاوية nginx على خادمك المُدار.",
     "nextDeploy": "تُطبّق تغييرات الاستضافة المحفوظة عند النشر التالي."
+  },
+  "deploymentChecks": {
+    "title": "فحوصات النشر على GitHub",
+    "description": "اعرض نتائج النشر والخدمات على الالتزام المنشور.",
+    "customize": "تخصيص الفحوصات",
+    "deployment": "نتيجة النشر",
+    "services": "جميع الخدمات، بما فيها الجديدة",
+    "selectedServices": "اختر الخدمات",
+    "includeErrors": "تضمين تفاصيل الفشل",
+    "errorsHint": "تُشارك ملخصات الأخطاء بعد حجب البيانات الحساسة مع من يمكنهم قراءة هذا المستودع.",
+    "emptySelection": "اختر فحصًا واحدًا على الأقل أو أوقف إرسال النتائج.",
+    "connectionHint": "يتطلب تطبيق GitHub لديه صلاحية كتابة الفحوصات.",
+    "connection": "اتصال GitHub",
+    "deliveryFailed": "تعذّر إرسال الفحوصات",
+    "saveFailed": "تعذّر حفظ إعدادات فحوصات GitHub."
+  },
+  "appSource": {
+    "title": "المصدر",
+    "description": "ينشر هذا التطبيق من إصدار — لا يوجد مستودع لدفع التغييرات إليه؛ يتم شحن التحديثات كإصدارات جديدة.",
+    "sourceType": "المصدر",
+    "kindRelease": "إصدار",
+    "kindImage": "صورة الحاوية",
+    "current": "الإصدار الحالي",
+    "latest": "أحدث إصدار",
+    "repository": "المستودع",
+    "notChecked": "لم يتم الفحص بعد",
+    "upToDate": "محدث إلى أحدث إصدار",
+    "updateAvailable": "يتوفر تحديث",
+    "checkForUpdates": "التحقق من وجود تحديثات",
+    "checkFailed": "تعذر التحقق من وجود تحديثات",
+    "update": "تحديث",
+    "updateTo": "تحديث إلى {version}",
+    "updating": "جارٍ التحديث…",
+    "updateFailed": "فشل التحديث",
+    "toastTitle": "المصدر",
+    "cliManaged": "هذه هي لوحة تحكم Openship — يتم تحديثها ذاتياً. قم بتشغيل \"openship update\" على المضيف لترقيتها؛ لا يوجد شيء لتغييره هنا."
+  },
+  "routeRules": {
+    "pathLabel": "بادئة المسار (اختياري)",
+    "rps": "الطلبات / ثانية",
+    "burst": "الاندفاع (Burst)",
+    "methods": "السماح فقط بالطرق",
+    "banIps": "حظر عناوين IP / CIDRs",
+    "banCountries": "حظر البلدان (ISO)",
+    "allowCountries": "السماح فقط بالبلدان (ISO)",
+    "denyCidrs": "رفض CIDRs",
+    "allowReferers": "الحماية من الارتباط الساخن: السماح بـ Referers",
+    "banUserAgents": "حظر وكلاء المستخدم (User-Agents)",
+    "blockEmptyUa": "حظر وكيل المستخدم الفارغ",
+    "blockStatus": "رمز استجابة الحظر",
+    "add": "إضافة قاعدة",
+    "remove": "إزالة",
+    "enabled": "مفعل",
+    "disabled": "معطل",
+    "saved": "تم حفظ القاعدة",
+    "saveFailed": "فشل حفظ القاعدة",
+    "loadFailed": "فشل تحميل القواعد",
+    "title": "قواعد التوجيه",
+    "empty": "لا توجد قواعد توجيه بعد.",
+    "description": "قواعد تحديد المعدل والحظر والسماح/الرفض المفروضة على مستوى الـ edge — تُطبق فورياً، دون إعادة نشر.",
+    "loading": "جارٍ تحميل القواعد…",
+    "allHosts": "جميع أسماء المضيفين",
+    "allPaths": "جميع المسارات",
+    "addTitle": "إضافة قاعدة"
   }
 }

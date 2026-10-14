@@ -173,3 +173,6 @@ export const isMaskedValue = (value: unknown): boolean => value === ENV_MASK;
  * which is the point. Existing NULL rows were backfilled by migration 0096.
  */
 export const DEFAULT_RETAIN_COUNT = 7;
+
+/** Startup advisory shared by the engine and its live-health recovery UI. */
+export const SERVICE_STARTING_HEALTH_WARNING = "healthcheck has not reported healthy yet";

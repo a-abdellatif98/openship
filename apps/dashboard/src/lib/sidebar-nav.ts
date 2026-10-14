@@ -59,7 +59,7 @@ const MAIN_ITEMS: NavItem[] = [
   { key: "home", href: "/", icon: "home" },
   { key: "projects", href: "/projects", icon: "project" },
   { key: "apps", href: "/apps", icon: "grid" },
-  { key: "deployments", href: "/deployments", icon: "rocket" },
+  { key: "actions", href: "/actions", icon: "play-circle" },
   // MAIN, not infrastructure: `/api/issues` reports project, domain and update items on
   // the SaaS too (only the server/container sources resolve empty there), and the
   // infrastructure section is `if (selfHosted)` — putting Issues in it would delete the
@@ -90,10 +90,12 @@ export function getNavSections(
   // Keep audit history alongside account settings and billing.
   settingsItems.push({ key: "audit", href: "/audit", icon: "clipboard-list" });
 
-  const infraItems: NavItem[] = [{ key: "servers", href: "/servers", icon: "server" }];
-  if (selfHosted) {
-    infraItems.push({ key: "emails", href: "/emails", icon: "mail" });
-  }
+  // Cloud's Emails entry connects existing IMAP/SMTP backends through the
+  // generic webmail app; local control planes retain mail-server administration.
+  const infraItems: NavItem[] = [
+    { key: "servers", href: "/servers", icon: "server" },
+    { key: "emails", href: "/emails", icon: "mail" },
+  ];
   infraItems.push({ key: "jobs", href: "/jobs", icon: "clock" });
   // infraItems.push(
   //   { key: "monitoring", href: "/monitoring", icon: Activity },

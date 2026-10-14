@@ -11,12 +11,12 @@ const mocks = vi.hoisted(() => ({
   volumes: vi.fn(), getEnv: vi.fn(), update: vi.fn(), policies: vi.fn(), backup: vi.fn(),
   createPolicy: vi.fn(), destinations: vi.fn(),
   refresh: vi.fn(), push: vi.fn(), toast: vi.fn(), domainProps: vi.fn(),
+  deployMode: "local", saveTunnel: vi.fn(), startTunnel: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.toast }) }));
-vi.mock("@/context/PlatformContext", () => ({ usePlatform: () => ({ baseDomain: "opsh.test" }) }));
+vi.mock("@/context/PlatformContext", () => ({ usePlatform: () => ({ baseDomain: "opsh.test", deployMode: mocks.deployMode }) }));
 vi.mock("@/components/theme-provider", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }));
-vi.mock("@/hooks/useLocalhostForward", () => ({ useLocalhostForward: () => ({ canForward: false }) }));
 vi.mock("@/hooks/useCloudDeployPricing", () => ({ useCloudDeployPricing: () => () => false }));
 vi.mock("./ServiceDomainsPanel", () => ({ ServiceDomainsPanel: (props: unknown) => { mocks.domainProps(props); return <div>Service domains</div>; } }));
 vi.mock("../UseInProjectModal", () => ({ UseInProjectModal: () => null }));
@@ -30,6 +30,7 @@ vi.mock("@/lib/api", async (original) => {
   const actual = await original<typeof import("@/lib/api")>();
   return {
     ...actual,
+    systemApi: { ...actual.systemApi, saveTunnel: mocks.saveTunnel, startTunnel: mocks.startTunnel },
     backupsApi: { ...actual.backupsApi, listPolicies: mocks.policies, runNow: mocks.backup, createPolicy: mocks.createPolicy },
     backupDestinationsApi: { ...actual.backupDestinationsApi, list: mocks.destinations },
   };
@@ -61,6 +62,10 @@ let root: Root;
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.deployMode = "local";
+  mocks.saveTunnel.mockResolvedValue({ id: "private-tunnel" });
+  mocks.startTunnel.mockResolvedValue({ url: "http://localhost:49100" });
+  vi.spyOn(window, "open").mockReturnValue(null);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.getEnv.mockResolvedValue({ success: true, vars: [] });
   mocks.volumes.mockResolvedValue(measured);
@@ -105,6 +110,200 @@ async function editMount(n: number, side: "host" | "service", value: string) {
 }
 
 describe("service overview and volumes", () => {
+  it("opens a private service's TCP port through its live container IP without publishing it", async () => {
+    mocks.deployMode = "desktop";
+    let started!: (value: { url: string }) => void;
+    mocks.startTunnel.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          started = resolve;
+        }),
+    );
+    const privateService = {
+      ...service,
+      ports: ["5432/tcp"],
+      exposed: false,
+      exposedPort: null,
+      domain: null,
+      customDomain: null,
+      publicEndpoints: null,
+    };
+    await render("overview", {
+      service: privateService,
+      serverId: "server-db",
+      container: {
+        serviceId: service.id,
+        serviceName: service.name,
+        containerId: "private-db",
+        status: "running",
+        ip: "172.22.0.3",
+        hostPort: null,
+        imageRef: service.image,
+      },
+    });
+    const open = button(baseDictionary.projects.connections.openLocalhost);
+    expect(open.disabled).toBe(false);
+    await act(async () => {
+      open.click();
+      open.click();
+    });
+    expect(mocks.saveTunnel).toHaveBeenCalledExactlyOnceWith("server-db", {
+      remoteHost: "172.22.0.3",
+      remotePort: 5432,
+    });
+    expect(mocks.startTunnel).toHaveBeenCalledExactlyOnceWith(
+      "server-db",
+      "private-tunnel",
+    );
+    expect(open.disabled).toBe(true);
+    expect(window.open).not.toHaveBeenCalled();
+    await act(async () => started({ url: "http://localhost:49100" }));
+    expect(window.open).toHaveBeenCalledExactlyOnceWith(
+      "http://localhost:49100",
+      "_blank",
+      "noopener",
+    );
+    expect(open.disabled).toBe(false);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("uses the observed host port when a running service has no container IP", async () => {
+    mocks.deployMode = "desktop";
+    await render("overview", {
+      serverId: "server-web",
+      container: {
+        serviceId: service.id,
+        serviceName: service.name,
+        containerId: "web",
+        status: "running",
+        ip: null,
+        hostPort: 49123,
+        imageRef: service.image,
+      },
+    });
+    await click(baseDictionary.projects.connections.openLocalhost);
+    expect(mocks.saveTunnel).toHaveBeenCalledExactlyOnceWith("server-web", {
+      remoteHost: "127.0.0.1",
+      remotePort: 49123,
+    });
+  });
+
+  it.each([
+    { status: "unknown", ip: "172.22.0.3", hostPort: 49123 },
+    { status: "stopped", ip: "172.22.0.3", hostPort: 49123 },
+    { status: "running", ip: null, hostPort: null },
+  ])(
+    "does not guess a localhost target from saved ports when runtime is $status and IP is $ip",
+    async ({ status, ip, hostPort }) => {
+      mocks.deployMode = "desktop";
+      await render("overview", {
+        serverId: "server-db",
+        service: {
+          ...service,
+          ports: ["5432"],
+          exposed: false,
+          exposedPort: null,
+          domain: null,
+          customDomain: null,
+          publicEndpoints: null,
+        },
+        container: {
+          serviceId: service.id,
+          serviceName: service.name,
+          containerId: "private-db",
+          status,
+          ip,
+          hostPort,
+          imageRef: service.image,
+        },
+      });
+      const open = button(baseDictionary.projects.connections.openLocalhost);
+      expect(open.disabled).toBe(true);
+      await act(async () => open.click());
+      expect(mocks.saveTunnel).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([{ ports: null }, { ports: ["53/udp"] }])(
+    "asks for a TCP port instead of guessing when saved ports are $ports",
+    async ({ ports }) => {
+      mocks.deployMode = "desktop";
+      await render("overview", {
+        serverId: "server-private",
+        service: {
+          ...service,
+          ports,
+          exposed: false,
+          exposedPort: null,
+          domain: null,
+          customDomain: null,
+          publicEndpoints: null,
+        },
+        container: {
+          serviceId: service.id,
+          serviceName: service.name,
+          containerId: "private-service",
+          status: "running",
+          ip: "172.22.0.3",
+          hostPort: null,
+          imageRef: service.image,
+        },
+      });
+      await click(baseDictionary.projects.connections.openLocalhost);
+      expect(mocks.saveTunnel).not.toHaveBeenCalled();
+      const dialog = document.querySelector('[role="dialog"]')!;
+      expect(dialog).not.toBeNull();
+      const input = dialog.querySelector<HTMLInputElement>(
+        'input[type="number"]',
+      )!;
+      const submit = dialog.querySelector<HTMLButtonElement>(
+        'button[type="submit"]',
+      )!;
+      expect(submit.disabled).toBe(true);
+      for (const value of ["65536", "5432"]) {
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(
+            HTMLInputElement.prototype,
+            "value",
+          )!.set!.call(input, value);
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        expect(submit.disabled).toBe(value === "65536");
+      }
+      mocks.startTunnel.mockRejectedValueOnce(new Error("SSH connection lost"));
+      await act(async () => submit.click());
+      expect(window.open).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+      expect(submit.disabled).toBe(false);
+      expect(input.value).toBe("5432");
+      await act(async () => submit.click());
+      expect(mocks.saveTunnel).toHaveBeenNthCalledWith(2, "server-private", {
+        remoteHost: "172.22.0.3",
+        remotePort: 5432,
+      });
+      expect(mocks.saveTunnel).toHaveBeenCalledTimes(2);
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(window.open).toHaveBeenCalledExactlyOnceWith(
+        "http://localhost:49100",
+        "_blank",
+        "noopener",
+      );
+      expect(mocks.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["local", "cloud"])(
+    "does not start a browser-local listener in %s mode",
+    async (mode) => {
+      mocks.deployMode = mode;
+      await render("overview", { serverId: "server-db" });
+      expect(host.textContent).not.toContain(
+        baseDictionary.projects.connections.openLocalhost,
+      );
+      expect(mocks.saveTunnel).not.toHaveBeenCalled();
+    },
+  );
+
   it("uses the project policy for the selected service's one-click backup", async () => {
     mocks.policies.mockResolvedValue({ data: [{ ...policy, serviceId: null }] });
     await render("volumes");

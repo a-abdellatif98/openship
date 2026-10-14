@@ -9,14 +9,16 @@ import { tlsIssuedElsewhere } from "../../lib/domain-ssl";
 export interface DomainRetrySchedule {
   cron: string | null;
   unavailable: boolean;
+  /** Periodic observation also revisits active certificates after a failed read. */
+  healthCheckIntervalMs?: number;
 }
 
 /** Read the actual operator-controlled job, never invent a retry interval. A
  * missing/unreadable schedule is reported as unknown instead of a promise. */
-async function readRetrySchedule(): Promise<DomainRetrySchedule> {
+async function readRetrySchedule(jobKey = "domains:verify-pending"): Promise<DomainRetrySchedule> {
   if (!nativeJobsEnabled()) return { cron: null, unavailable: false };
   try {
-    const job = await repos.job.findByKey("domains:verify-pending");
+    const job = await repos.job.findByKey(jobKey);
     if (!job) return { cron: null, unavailable: true };
     return {
       cron: job.enabled && job.scheduleType === "recurring" ? job.cronExpression : null,
@@ -85,13 +87,15 @@ export function domainDiagnostics(
   let automaticRetry: DomainDiagnostics["automaticRetry"] = schedule.unavailable
     ? "unavailable"
     : "disabled";
-  // A healthy retained certificate is not in the pending-certificate sweep.
-  // Its last failed read is actionable, but must not promise that sweep will run it.
-  const automatic = !domain.verified || domain.sslStatus !== "active" || sslExpired;
+  // Cloud's observer revisits active TLS; the issuance sweep only takes pending
+  // certificates. Report the job that actually owns this domain's next check.
+  const automatic = !!schedule.healthCheckIntervalMs || !domain.verified || domain.sslStatus !== "active" || sslExpired;
   if (automatic && schedule.cron) {
     try {
       const eligible = domainRetryEligibleAt(domain, domain.verified ? 0 : undefined);
-      const currentDate = new Date(Math.max(now.getTime(), eligible.getTime() - 1));
+      const observedAfter = schedule.healthCheckIntervalMs && domain.lastCheckedAt
+        ? new Date(domain.lastCheckedAt).getTime() + schedule.healthCheckIntervalMs : 0;
+      const currentDate = new Date(Math.max(now.getTime(), eligible.getTime() - 1, observedAfter - 1));
       nextRetryAt = cronParser.parseExpression(schedule.cron, { currentDate }).next().toISOString();
       automaticRetry = "scheduled";
     } catch (diagnosticFailure) {
@@ -102,7 +106,7 @@ export function domainDiagnostics(
   return {
     state: failed || sslExpired ? "failed" : nextRetryAt ? "pending" : "waiting",
     reason: domain.verified ? "certificate" : "verification",
-    retryAction: "verify",
+    retryAction: schedule.healthCheckIntervalMs ? "verify_ssl" : "verify",
     nextRetryAt,
     automaticRetry,
   };
@@ -115,18 +119,31 @@ export async function withDomainDiagnostics(
   services?: Pick<Service, "id" | "enabled" | "exposed">[],
 ) {
   if (domains.length === 0) return [];
-  const schedule = await readRetrySchedule();
+  const cloudHealthCheck = (domain: Domain) => !!project.workspaceId && domain.verified &&
+    domain.domainType === "custom" && !domain.manualSsl && !domain.externalIngress && !domain.hostname.includes("*");
+  const [schedule, cloudSchedule] = await Promise.all([
+    readRetrySchedule(),
+    domains.some(cloudHealthCheck) ? readRetrySchedule("domains:check-https") : null,
+  ]);
   const serviceRows =
     services ??
     (domains.some((row) => row.serviceId) ? await repos.service.listByProject(project.id) : []);
   return domains.map((domain) => {
-    const diagnostics = domainDiagnostics(
-      domain,
-      project,
-      schedule,
-      !domain.serviceId ||
-        serviceRows.some((row) => row.id === domain.serviceId && row.enabled && row.exposed),
-    );
+    const serviceEnabled = !domain.serviceId ||
+      serviceRows.some((row) => row.id === domain.serviceId && row.enabled && row.exposed);
+    let diagnostics = domainDiagnostics(domain, project, schedule, serviceEnabled);
+    if (cloudSchedule && cloudHealthCheck(domain)) {
+      const observation = domainDiagnostics(domain, project, {
+        ...cloudSchedule, healthCheckIntervalMs: SYSTEM.DOMAINS.SSL_HEALTH_CHECK_INTERVAL_MS,
+      }, serviceEnabled);
+      // Pending TLS may also be checked by the existing issuance sweep. Show
+      // the earliest enabled check, including when either job is disabled.
+      const candidates = [diagnostics, observation].filter((entry) => entry !== null);
+      diagnostics = candidates.filter((entry) => entry.nextRetryAt)
+        .sort((a, b) => Date.parse(a.nextRetryAt!) - Date.parse(b.nextRetryAt!))[0]
+        ?? candidates.find((entry) => entry.automaticRetry === "unavailable")
+        ?? observation ?? diagnostics;
+    }
     return {
       ...domain,
       // Older releases left completed failures labelled pending. Every reader

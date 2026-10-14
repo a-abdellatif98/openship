@@ -1891,7 +1891,7 @@ export class NginxProvider implements RoutingProvider, SslProvider {
     const configPath = join(this.sitesDir, `${slug}.conf`);
     if ("staticRoot" in route && route.staticRoot) {
       assertValidStaticRoot(route.staticRoot, { adopted: route.staticRootAdopted });
-    } else {
+    } else if (!route.notFound) {
       assertValidUpstream((route as { targetUrl: string }).targetUrl);
     }
     // A canonical host redirect REPLACES the body — this host serves no content of
@@ -1900,11 +1900,13 @@ export class NginxProvider implements RoutingProvider, SslProvider {
     const hostRedirect = renderHostRedirect(route);
     const locationBody = hostRedirect
       ? hostRedirect
-      : "staticRoot" in route && route.staticRoot
-        ? `root ${route.staticRoot};
+      : route.notFound
+        ? "return 404;"
+        : "staticRoot" in route && route.staticRoot
+          ? `root ${route.staticRoot};
         index index.html;
         ${renderStaticTryFiles(route)}`
-        : `proxy_pass ${(route as { targetUrl: string }).targetUrl};
+          : `proxy_pass ${(route as { targetUrl: string }).targetUrl};
         ${PROXY_HEADERS}`;
 
     // `cleanUrls` / `trailingSlash` redirects. They live INSIDE `location /` so they

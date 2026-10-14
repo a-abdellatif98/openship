@@ -34,6 +34,7 @@
     "local": "Local"
   },
   "card": {
+    "more": "More",
     "liveVersion": "Live version v{version}",
     "appBadge": "App",
     "sourceLocal": "Local",
@@ -115,6 +116,8 @@
     "unlinkedTitle": "Connected projects updated"
   },
   "connections": {
+    "nativeClusterHint": "Choose a project on this database’s cluster. Only linked projects receive private access.",
+    "nativeNoTargets": "No other project uses this cluster yet.",
     "useInProject": "Use in a project",
     "title": "Use in a project",
     "subtitle": "Share this service with another project using a connection.",
@@ -300,7 +303,10 @@
     "noTransfer": "No transfer yet"
   },
   "analytics": {
-    "loadFailed": "Couldn't load traffic analytics"
+    "loadFailed": "Couldn't load traffic analytics",
+    "loadFailedDescription": "Retry to load the latest data.",
+    "sectionsUnavailable": "Unavailable: {sections}.",
+    "staleData": "Showing the last available data."
   },
   "monitoring": {
     "noDataTitle": "No monitoring data yet",
@@ -365,7 +371,11 @@
       "disable": "Turn off Top Paths"
     },
     "liveFeed": "Recent hits",
-    "liveFeedHint": "Show the recent-hit list on the map (the Logs tab has the full detail)"
+    "liveFeedHint": "Show the recent-hit list on the map (the Logs tab has the full detail)",
+    "dataUnavailable": "Some monitoring data is unavailable",
+    "connecting": "Connecting…",
+    "liveUnavailable": "Live requests unavailable",
+    "liveUnavailableDescription": "Historical traffic is still shown. Reconnect for live requests."
   },
   "services": {
     "application": "Application",

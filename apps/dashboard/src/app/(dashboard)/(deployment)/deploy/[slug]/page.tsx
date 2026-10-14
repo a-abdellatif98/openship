@@ -1,5 +1,9 @@
 "use client";
 
+import { hasComposeGpuRequest } from "@repo/core";
+import { DeployActions } from "@/components/actions/DeployActions";
+import { DeployGitHubChecks } from "@/components/import-project/DeployGitHubChecks";
+
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import ProjectSettings from "@/components/import-project/ProjectSettings";
@@ -139,6 +143,7 @@ const DeployRepository: React.FC = () => {
             ? t.billing.workspaces.uploadDestinationHint
             : config.projectId && config.workspaceId ? t.billing.workspaces.savedDestinationHint : undefined,
         forDeployment: true,
+        needsGpu: (config.services ?? []).some(service => hasComposeGpuRequest(service.advanced)),
         autoSelectFirst: savedTargetState === "none",
         useSavedDefault: savedTargetState === "none",
         onSelect: (server) => updateConfig({
@@ -317,6 +322,8 @@ const DeployRepository: React.FC = () => {
                 onChange={(next) => updateConfig({ readiness: next ?? null })}
             />
             <ProjectName />
+            <DeployActions />
+            <DeployGitHubChecks />
             {(config.projectType === "app" || isMonorepoFlow) && <RoutingSection />}
         </>
     );

@@ -68,6 +68,7 @@ export class PlanUpgradeRequiredError extends AppError {
       | "project-limit",
     /** The tier that refused, for telemetry and copy. */
     public readonly planTierId: string,
+    public readonly workspaceId?: string | null,
   ) {
     super(message, 402, "PLAN_UPGRADE_REQUIRED");
     this.name = "PlanUpgradeRequiredError";
@@ -111,6 +112,12 @@ async function planFor(organizationId: string, workspaceId?: CloudWorkspaceScope
 /** The org's tier, for callers that need to name it in their own error. */
 export async function currentPlanTier(organizationId: string, workspaceId?: CloudWorkspaceScope): Promise<PlanTierId> {
   return (await planFor(organizationId, workspaceId)).tier;
+}
+
+/** Existing paid snapshots without a build cap retain their saved terms. */
+export async function planBuildConcurrency(organizationId: string, workspaceId: string): Promise<number | null> {
+  if (!env.CLOUD_MODE) return null;
+  return (await planFor(organizationId, workspaceId)).limits.concurrentBuilds ?? null;
 }
 
 /* ─── Static-only workloads ──────────────────────────────────────────────── */
@@ -203,6 +210,7 @@ export async function assertPlanAllowsServices(organizationId: string, workspace
       "Your plan can deploy static sites only. Databases, one-click apps and multi-service stacks need a paid plan.",
       "static-only",
       tier,
+      workspaceId,
     );
   }
 }
@@ -227,13 +235,14 @@ export async function assertPlanAllowsResourceTier(
   if (!env.CLOUD_MODE) return;
 
   const { tier, limits } = await planFor(organizationId, workspaceId);
-  assertResourcesFitPlan(tier, requested, limits);
+  assertResourcesFitPlan(tier, requested, limits, workspaceId);
 }
 
 export function assertResourcesFitPlan(
   tier: PlanTierId,
   requested: { tier?: string | null; cpuCores?: number | null; memoryMb?: number | null },
   limits: PlanLimits,
+  workspaceId?: CloudWorkspaceScope,
 ): void {
   const ceiling = planServiceResources(limits);
   if (ceiling === null) return;
@@ -242,6 +251,7 @@ export function assertResourcesFitPlan(
       `Your plan allows up to ${formatCpuCores(ceiling.cpuCores)} and ${formatMemoryMb(ceiling.memoryMb)} RAM per service. Upgrade for bigger machines.`,
       "resource-tier",
       tier,
+      workspaceId,
     );
   };
 
@@ -315,9 +325,10 @@ async function assertServiceAllowance(
           : Math.max(counted, services?.length ?? 1);
       if (used > limit)
         throw new PlanUpgradeRequiredError(
-          `Your plan includes ${limit} services. Stop and disable a service, remove it, or upgrade before deploying.`,
+          `This deployment needs ${used} service slots in total; your plan includes ${limit}. Stop a service or upgrade before deploying.`,
           "running-services",
           tier,
+          workspaceId,
         );
     }
   }
@@ -345,6 +356,7 @@ export async function assertCloudDeploymentLimits(organizationId: string, input:
       tier,
       resolveInheritedResources(service.advanced?.resources, input.resources),
       limits,
+      workspaceId,
     );
   }
   if (input.mainApplication ?? (!services && input.runsApplication)) {
@@ -352,6 +364,7 @@ export async function assertCloudDeploymentLimits(organizationId: string, input:
       tier,
       resolveRuntimeResources(input.resources),
       limits,
+      workspaceId,
     );
   }
 }
@@ -377,7 +390,7 @@ export async function assertCloudRuntimeLimits(organizationId: string,
       throw new AppError("Cannot verify this container's resource allocation. Retry when its host is reachable or redeploy it before starting.",
         409, "RESOURCE_LIMITS_UNAVAILABLE");
     }
-    assertResourcesFitPlan(tier, resources, limits);
+    assertResourcesFitPlan(tier, resources, limits, workspaceId);
   }
 }
 
@@ -425,9 +438,10 @@ export async function assertRunningServiceQuota(
   throw new PlanUpgradeRequiredError(
     limit === 0
       ? "Choose a Cloud plan to run apps, databases and workers."
-      : `Your plan includes ${limit} service slots and ${used} are reserved. Stop and disable a service, remove it, or upgrade to run more.`,
+      : `This action needs ${addingCount} service slots. ${used} of ${limit} are reserved. Stop a service or upgrade to run more.`,
     "running-services",
     tier,
+    workspaceId,
   );
 }
 

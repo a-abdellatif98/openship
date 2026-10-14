@@ -75,6 +75,9 @@
       "onFailureWarn": "Keep the deploy live and flag it for review",
       "onFailureFail": "Fail the deploy and keep the previous version serving"
     },
+    "runtimeVersionLabel": "Runtime version",
+    "runtimeVersionDefault": "Default",
+    "runtimeVersionDesc": "Uses matching build and runtime images for the selected version. Requires an Openship-generated Docker build.",
     "buildImageLabel": "Build Image",
     "buildImageDesc": "Builder container image for cloud or server builds. Override it when the detected base image is wrong.",
     "productionPathsLabel": "Production Paths",
@@ -111,7 +114,9 @@
     "releaseDescription": "Optional commands after build. Failure stops deployment. Docker and Bare apps only.",
     "releaseCommand": "Command {number}",
     "addReleaseCommand": "Add command",
-    "removeReleaseCommand": "Remove command {number}"
+    "removeReleaseCommand": "Remove command {number}",
+    "runtimeImageLabel": "Runtime image",
+    "runtimeImageDesc": "Optional production base image for Docker builds. It must match the selected runtime and generated recipe; leave blank for the managed default."
   },
   "projectSettings": {
     "framework": "Framework",
@@ -329,7 +334,14 @@
       "changePort": "Change port",
       "skip": "Skip",
       "applied": "Routing updated to port {port}.",
-      "changeError": "Couldn't update the port. Please try again."
+      "changeError": "Couldn't update the port. Please try again.",
+      "loopbackTitle": "The app cannot receive routed traffic",
+      "loopbackNote": "The deployment is running, but a routed port needs attention.",
+      "loopbackBody": "Port {port} only listens inside the container.",
+      "loopbackBodyService": "Service \"{service}\" only listens inside the container on port {port}.",
+      "loopbackHelp": "For a routed app, listen on 0.0.0.0 and redeploy, or route to its intended proxy.",
+      "openSettings": "Open settings",
+      "skipError": "Couldn't dismiss this warning. Please try again."
     },
     "title": {
       "cancelled": "Deployment Cancelled",
@@ -366,6 +378,17 @@
     "detailBranch": "Branch",
     "detailDomains": "Domains",
     "detailDomain": "Domain"
+  },
+  "deploymentHealth": {
+    "recheck": "Recheck health",
+    "checking": "Checking…",
+    "healthy": "Services are healthy",
+    "atDeployment": "Warning recorded at deployment",
+    "currentHealth": "Current service status",
+    "startupHint": "If the app is still starting, wait a moment and recheck. If it keeps restarting or reports an error, open its logs to find the cause.",
+    "viewLogs": "View logs",
+    "unavailable": "Current health could not be verified. Recheck when the server is reachable.",
+    "historical": "This is no longer the active deployment. Open the project to check its current services."
   },
   "composeDeployment": {
     "title": {

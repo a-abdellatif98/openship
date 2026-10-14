@@ -201,5 +201,42 @@
     "next": "下一页",
     "pageOf": "第 {page} 页，共 {total} 页",
     "range": "第 {from}–{to} 条部署，共 {total} 条"
+  },
+  "cloudBuildQueue": {
+    "label": "云构建队列",
+    "title": "构建已排队",
+    "position": "构建已排队 · 队列位置 {position}",
+    "concurrency": "正在等待可用的并行构建名额。",
+    "resources": "正在等待服务器上可用的 CPU 或内存。",
+    "server": "正在等待服务器接受此构建。",
+    "automaticStart": "构建将自动开始。",
+    "allowance": "套餐允许的并行构建数：{count}。",
+    "unlimited": "您的套餐不限制并行构建数量。",
+    "active": "正在运行的构建数：{count}。",
+    "comparePlans": "比较套餐",
+    "optionalUpgrade": "升级是可选的，您可以继续等待。",
+    "compareConcurrency": "比较套餐以增加并行构建数量。您的构建可以继续在队列中等待。",
+    "compareResources": "比较套餐以获得更多 CPU 或内存。您也可以继续等待服务器资源可用。"
+  },
+  "monitoring": {
+    "title": "部署概览",
+    "scope": "所选项目与搜索 · UTC 日历日 · 保留的部署历史",
+    "period": "时间范围",
+    "days": "{count} 天",
+    "refresh": "刷新",
+    "attempts": "部署尝试",
+    "window": "所选时间范围内",
+    "successRate": "成功率",
+    "rateHint": "成功 /（成功 + 失败）；不含取消",
+    "failedHint": "包含部分失败及被阻止的发布",
+    "activeHint": "此范围内正在运行或排队的尝试",
+    "unavailable": "概览不可用。请尝试刷新。",
+    "trend": "每日结果",
+    "avgBuild": "成功构建平均耗时",
+    "empty": "此时间范围内没有部署。",
+    "projects": "项目明细",
+    "projectHint": "按失败数、活跃尝试数排序的前 6 个项目",
+    "failedShort": "失败",
+    "history": "部署历史"
   }
 }

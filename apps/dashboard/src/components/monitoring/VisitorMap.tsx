@@ -32,6 +32,7 @@ import { formatCount } from "./format";
 import { CountryDonut, type DonutSlice } from "./CountryDonut";
 import { CHART_TOOLTIP_STYLE } from "@/lib/chart-theme";
 import { LiveHitFeed, RippleLayer, countryCentre, type LiveHit } from "./LiveHits";
+import { ConnectionNotice } from "@/components/shared/ConnectionNotice";
 
 const PATHS = (countryPaths as { paths: Record<string, string> }).paths;
 
@@ -253,6 +254,7 @@ interface Props {
     feed: LiveHit[];
     /** Set while connecting or when the edge refused; shown next to the switch. */
     status?: string | null;
+    onReconnect?: () => void;
   };
 }
 
@@ -520,12 +522,12 @@ export const VisitorMap: React.FC<Props> = ({ data, isLoading, domainSelector, l
                     Pulses only while streaming — a static dot next to the word "Live" is
                     indistinguishable from a working one. */}
                 <span className="relative flex size-1.5 shrink-0">
-                  {live.enabled && (
+                  {live.enabled && !live.status && (
                     <span className="absolute inline-flex size-full animate-ping rounded-full bg-info opacity-75" />
                   )}
                   <span
                     className={`relative inline-flex size-1.5 rounded-full ${
-                      live.enabled ? "bg-info" : "bg-muted-foreground/40"
+                      live.enabled && !live.status ? "bg-info" : "bg-muted-foreground/40"
                     }`}
                   />
                 </span>
@@ -600,6 +602,18 @@ export const VisitorMap: React.FC<Props> = ({ data, isLoading, domainSelector, l
         )}
         </div>
       </div>
+
+      {live?.enabled && live.status && (
+        <div className="mb-4">
+          <ConnectionNotice
+            title={live.status === "connecting" ? m.connecting : m.liveUnavailable}
+            message={m.liveUnavailableDescription}
+            onRetry={live.onReconnect}
+            retrying={live.status === "connecting"}
+            retryLabel={m.reconnect}
+          />
+        </div>
+      )}
 
       {/* An unresolvable edge and a quiet site both produce zero countries. Saying
           which is the difference between "nothing happened" and "something is

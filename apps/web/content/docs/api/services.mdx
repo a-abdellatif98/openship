@@ -114,7 +114,7 @@ curl -X POST "$OPENSHIP_URL/api/projects/proj_123/services" \
     environment: { type: 'Record<string, string>', description: 'Compose environment defaults baked into the service. On update this map is merged, not replaced, and accepts nulls — see Update a service.' },
     volumes: { type: 'string[]', description: 'Volume mappings (max 50 entries, each ≤500 chars).' },
     command: { type: 'string', description: 'Override the container command (max 1000).' },
-    advanced: { type: 'object', description: 'Extended compose settings. Currently a healthcheck block: { test, interval, timeout, retries, startPeriod, disable }. Unknown keys are rejected.' },
+    advanced: { type: 'object', description: 'Extended Compose settings, including healthcheck, readiness and extraHosts (hostname to IPv4/IPv6 address or Docker host-gateway). Unknown keys are rejected; null removes an individual setting.' },
     exposed: { type: 'boolean', description: 'Whether this service is publicly routed.' },
     exposedPort: { type: 'string', description: 'Container port to expose publicly (max 50).' },
     domain: { type: 'string', description: 'Free subdomain label for this service (max 255).' },

@@ -25,6 +25,7 @@ import { ModalProvider } from "@/context/ModalContext";
 // crash that no user can hit.
 import { DashboardProviders } from "../../providers";
 import ServerDetailPage from "./page";
+import { baseDictionary } from "@/i18n";
 
 // React 19 requires this flag before act() will drive updates.
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -130,7 +131,7 @@ const CHECK_FAILURES: Array<{ name: string; status: number; body: unknown }> = [
   { name: "opaque gateway error", status: 502, body: "<html>502 Bad Gateway</html>" },
 ];
 
-function stubFetch(checkFailure: { status: number; body: unknown }) {
+function stubFetch(checkFailure: { status: number; body: unknown }, server: Record<string, unknown> = OFFLINE_SERVER) {
   return vi.fn(async (input: unknown) => {
     const url = String(
       typeof input === "string" ? input : (input as Request)?.url ?? input,
@@ -144,7 +145,7 @@ function stubFetch(checkFailure: { status: number; body: unknown }) {
           });
 
     if (url.includes("system/check")) return json(checkFailure.body, checkFailure.status);
-    if (/system\/servers\/srv_1(\?|$)/.test(url)) return json(OFFLINE_SERVER);
+    if (/system\/servers\/srv_1(\?|$)/.test(url)) return json(server);
     if (url.includes("system/servers/destinations")) return json({ servers: [OFFLINE_SERVER] });
     if (url.includes("system/servers")) return json([OFFLINE_SERVER]);
     if (url.includes("auth/get-session")) return json(null);
@@ -173,8 +174,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function mountOfflineServer(checkFailure: { status: number; body: unknown }) {
-  vi.stubGlobal("fetch", stubFetch(checkFailure));
+async function mountOfflineServer(checkFailure: { status: number; body: unknown }, server?: Record<string, unknown>) {
+  vi.stubGlobal("fetch", stubFetch(checkFailure, server));
 
   await act(async () => {
     root = createRoot(container, {
@@ -201,6 +202,27 @@ async function mountOfflineServer(checkFailure: { status: number; body: unknown 
   }
   return container.textContent ?? "";
 }
+
+describe("linked Cloud server connection recovery", () => {
+  it.each(["ssh", "networking", "settings", "overview"])("shows sign-in and skips server control reads on %s", async tab => {
+    searchParams = new URLSearchParams({ tab, remove: "true" });
+    const text = await mountOfflineServer(CHECK_FAILURES[0]!, {
+      ...OFFLINE_SERVER, connection: "cloud", capabilities: { networkSettings: true, hostConfiguration: false },
+      managed: { id: "link", serverId: "srv_1", name: "Production", state: "unreachable",
+        connectionIssue: "not_connected", subscriptionStatus: "unavailable", planTierId: "unknown", resources: null,
+        projectCount: 0, operation: null, createdAt: "2026-10-01T00:00:00Z" },
+    });
+    expect(errors).toEqual([]);
+    const copy = baseDictionary.servers.managedControls.cloudConnection;
+    expect(text).toContain(copy.labels.not_connected);
+    expect(text).toContain(copy.titles.not_connected);
+    expect(text).not.toContain(baseDictionary.billing.workspaces.deleteHint);
+    expect(text).not.toContain(baseDictionary.billing.workspaces.provisioned);
+    expect(container.querySelector('[aria-label="Remove server"]')).toBeNull();
+    const requests = vi.mocked(fetch).mock.calls.map(([input]) => String(input));
+    expect(requests.filter(url => /\/managed\/|\/usage(?:\?|$)/.test(url))).toEqual([]);
+  });
+});
 
 describe("server detail page with an unreachable server", () => {
   for (const failure of CHECK_FAILURES) {

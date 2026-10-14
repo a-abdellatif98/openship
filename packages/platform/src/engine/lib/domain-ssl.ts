@@ -321,15 +321,18 @@ function notLocalResult(hostname: string): SslResult {
   return { domain: hostname, expiresAt: "", issuer: "", verified: true, reason: "not_local" };
 }
 
-async function persistSslResult(
+export async function persistSslResult(
   domainId: string,
   currentStatus: string | null | undefined,
   result: SslResult,
 ) {
   const patch = resolveSslPatch(currentStatus, result);
   // A negative probe is not an issuance in progress. Its caller records the
-  // completed failure once, with its reason; only proof updates the certificate.
-  if (patch?.sslStatus === "active") await repos.domain.updateSsl(domainId, patch);
+  // completed failure once, with its reason. Only proof or an explicitly pending
+  // provider request updates certificate state here.
+  if (patch && (patch.sslStatus === "active" || result.reason === "pending")) {
+    await repos.domain.updateSsl(domainId, patch);
+  }
 }
 
 /**
@@ -713,19 +716,24 @@ export async function manageDomainSsl(
         await applyMailCertificate(authorized.owner.serverId, authorized.domainRecord.hostname);
       }
     } catch (error) {
-      await repos.domain.recordSslFailure(authorized.domainRecord.id, safeErrorMessage(error));
+      await repos.domain.recordSslFailure(
+        authorized.domainRecord.id, safeErrorMessage(error), opts.action === "verify" ? "unknown" : "operation",
+      );
       throw error;
     }
+    if (result.reason === "pending") return result;
     const expired = !!result.expiresAt && new Date(result.expiresAt).getTime() <= Date.now();
     if (result.reason !== "not_local" && (!result.verified || !result.expiresAt || expired)) {
       await repos.domain.recordSslFailure(
         authorized.domainRecord.id,
-        expired
+        result.detail ?? (expired
           ? "The HTTPS certificate on the server has expired. Retry to renew it."
           : result.reason === "read_error"
             ? "The HTTPS certificate could not be read on the server. Check the server connection and retry."
-            : "No usable HTTPS certificate was found on the server. Check DNS and the certificate configuration, then retry.",
-        expired || result.reason === "missing" || result.reason === "invalid",
+            : "No usable HTTPS certificate was found on the server. Check DNS and the certificate configuration, then retry."),
+        result.reason === "read_error" ? "unknown"
+          : expired || result.reason === "missing" || result.reason === "invalid" || result.reason === "edge_invalid"
+            ? "invalid" : "operation",
       );
       return { ...result, verified: false };
     }
@@ -869,7 +877,19 @@ async function provisionAuthorizedDomainCert(
       const result = await createProvisionLock(sslIssueLockKey(domainRecord.hostname)).run(
         async () => {
           if (!opts.force) {
-            const existing = await ssl.verifyCert(domainRecord.hostname).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/lib/domain-ssl"); return null; });
+            const existing = await ssl.verifyCert(domainRecord.hostname).catch((diagnosticFailure) => {
+              observeCaughtError(diagnosticFailure, "platform/engine/lib/domain-ssl");
+              // An unreachable provider API cannot authorize another order.
+              return ssl.certificateManagement === "provider" ? {
+                domain: domainRecord.hostname, verified: false, expiresAt: "", issuer: "", reason: "read_error" as const,
+              } : null;
+            });
+            // An issued provider certificate served incorrectly is an edge
+            // problem. Automatic sweeps may observe it, never burn another
+            // issuance on every retry. Connection loss is not evidence that a
+            // fresh order is needed either. Explicit Renew retains its path.
+            if (ssl.certificateManagement === "provider" && existing &&
+              ["edge_invalid", "read_error", "pending"].includes(existing.reason ?? "")) return existing;
             if (existing && certComfortablyValid(existing)) {
               await ssl.activateCert?.(domainRecord.hostname);
               opts.onLog?.(

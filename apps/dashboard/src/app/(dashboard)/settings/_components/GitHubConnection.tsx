@@ -512,6 +512,9 @@ export function GitHubConnection() {
                 cloudConnected={cloudConnected}
                 connecting={connecting}
                 showSignIn={!ghConnected}
+                hostCliLogin={
+                  isSelfHosted && ghConnected && ghMethod === "host-cli" ? ghLogin : undefined
+                }
                 showApp={!appConnected && !customSourcesConfigured}
                 onSignIn={() => connect("cli")}
                 onConnectApp={() => connect("oauth")}
@@ -839,6 +842,8 @@ function MethodChooser(props: {
   cloudConnected: boolean;
   connecting: boolean;
   showSignIn: boolean;
+  /** A detected host login still needs an explicit selection for repository operations. */
+  hostCliLogin?: string;
   showApp: boolean;
   primary?: boolean;
   primaryMethod?: MethodKind | null;
@@ -854,6 +859,7 @@ function MethodChooser(props: {
     cloudConnected,
     connecting,
     showSignIn,
+    hostCliLogin,
     showApp,
     primary,
     primaryMethod,
@@ -901,6 +907,17 @@ function MethodChooser(props: {
   // Every row is gated on the BACKEND's verdict. A method the resolver would
   // refuse is never rendered, so the UI cannot advertise a dead path.
   const others = [
+    ...(hostCliLogin
+      ? [
+          row(
+            "host-cli",
+            "terminal",
+            t.settings.github.ghCli.use,
+            interpolate(t.settings.github.ghCli.loggedInAs, { login: hostCliLogin }),
+            onSignIn,
+          ),
+        ]
+      : []),
     ...(showApp && can("app") && lead !== "app" ? [appRow] : []),
     ...(can("ssh-key")
       ? [

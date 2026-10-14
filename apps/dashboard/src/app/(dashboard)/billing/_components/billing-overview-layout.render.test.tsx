@@ -114,12 +114,16 @@ describe("plan comparison", () => {
     const copy = baseDictionary.billing.resourcesGuide;
     expect(cards).toHaveLength(4);
     for (const card of cards) {
-      expect(card).toContain(copy.buildTime);
-      expect(card).toContain(copy.buildIncluded);
+      expect(card).toContain("vCPU");
+      expect(card).toContain("RAM");
+      expect(card).toContain("Storage");
+      expect(card).toContain(copy.concurrentBuilds);
+      expect(card).not.toContain(copy.buildIncluded);
       expect(card).not.toMatch(/credits|Shared across|More features/i);
     }
     for (const [index, card] of cards.entries()) {
-      for (const feature of plans[index]!.features) expect(card).not.toContain(feature);
+      expect(card).toContain(String(plans[index]!.limits.maxProjects));
+      expect(card).toContain(String(plans[index]!.limits.runningServices));
     }
     const compute = baseDictionary.billing.compute;
     for (const note of [...Object.values(compute.features), compute.extras])

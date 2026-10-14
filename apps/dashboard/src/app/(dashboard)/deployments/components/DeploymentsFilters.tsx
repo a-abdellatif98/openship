@@ -2,6 +2,7 @@
 
 import { Icon as UiIcon } from "@repo/ui/icons";
 
+import type { DeploymentHistoryFilter } from "@repo/core";
 import React, { useState, useEffect, useRef } from "react";
 import { useI18n } from "@/components/i18n-provider";
 import { Input } from "@/components/ui/input";
@@ -9,11 +10,11 @@ import { ProjectFilter } from "./ProjectFilter";
 import type { Project } from "../types";
 
 interface DeploymentsFiltersProps {
-  filter: "all" | "success" | "failed" | "building" | "pending" | "canceled";
+  filter: "all" | DeploymentHistoryFilter;
   searchQuery: string;
   selectedProjectId: string | "all";
   projects: Project[];
-  onFilterChange: (filter: "all" | "success" | "failed" | "building" | "pending" | "canceled") => void;
+  onFilterChange: (filter: "all" | DeploymentHistoryFilter) => void;
   onSearchChange: (query: string) => void;
   onProjectChange: (projectId: string | "all") => void;
   isProject: boolean;
@@ -24,6 +25,7 @@ const FILTERS = [
   { value: "success" },
   { value: "failed" },
   { value: "building" },
+  { value: "active" },
   { value: "canceled" },
 ] as const;
 
@@ -99,7 +101,7 @@ export const DeploymentsFilters: React.FC<DeploymentsFiltersProps> = React.memo(
           scrollable row keeps the control's height constant. */}
       <div className="max-w-full shrink-0 overflow-x-auto scrollbar-hide">
         <div className="inline-flex items-center gap-1">
-          {FILTERS.map((f) => (
+          {FILTERS.filter(f => !isProject || f.value !== "active").map((f) => (
             <button
               key={f.value}
               type="button"
@@ -111,7 +113,7 @@ export const DeploymentsFilters: React.FC<DeploymentsFiltersProps> = React.memo(
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
-              {t.deployments.filters[f.value]}
+              {f.value === "active" ? t.deployments.stats.inProgress : t.deployments.filters[f.value]}
             </button>
           ))}
         </div>

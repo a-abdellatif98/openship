@@ -1333,15 +1333,16 @@ export async function renewDomainSsl(ctx: RequestContext, domainId: string) {
   const result = await manageDomainSsl(domain.hostname, {
     action: "renew",
   });
-  if (!result.verified) {
-    throw new ValidationError("Renewal did not produce a valid certificate on the serving host.");
+  if (!result.verified && result.reason !== "pending") {
+    throw new ValidationError(result.detail ?? "Renewal did not produce a valid certificate on the serving host.");
   }
 
   return {
     domain: domain.hostname,
-    sslStatus: result.expiresAt ? "active" : "provisioning",
+    sslStatus: result.verified && result.expiresAt ? "active" : "provisioning",
     expiresAt: result.expiresAt,
     issuer: result.issuer,
+    ...(result.detail ? { message: result.detail } : {}),
   };
 }
 

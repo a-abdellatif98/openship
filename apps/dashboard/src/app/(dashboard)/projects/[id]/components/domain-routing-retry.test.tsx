@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   listDomains: vi.fn(),
   verifySsl: vi.fn(),
+  checkPorts: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock("@/context/ProjectSettingsContext", () => ({ useProjectSettings: () => mocks.settings }));
@@ -39,7 +40,7 @@ vi.mock("@/lib/api", async (original) => {
     domainsApi: { ...actual.domainsApi, list: mocks.listDomains, verifySsl: mocks.verifySsl },
     deployApi: {
       ...actual.deployApi,
-      checkPorts: async () => ({ data: [] }),
+      checkPorts: mocks.checkPorts,
       checkOutput: async () => ({ data: [] }),
     },
   };
@@ -58,6 +59,7 @@ const ports = [4010, 3021, 3022];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.checkPorts.mockResolvedValue({ data: [] });
   sessionStorage.clear();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("fetch", mocks.fetch);
@@ -149,6 +151,48 @@ async function startRetry(strict = false) {
 }
 
 describe("routing retry on the Domains page", () => {
+  it("shows the binding issue on its domain without suggesting a routing repair", async () => {
+    mocks.settings.domainsData.domains = names.map((name) =>
+      savedDomain({
+        id: `dom-${name}`,
+        hostname: `${name}.example.com`,
+        serviceId: `svc-${name}`,
+        verified: true,
+        status: "active",
+        sslStatus: "active",
+        diagnostics: null,
+      }),
+    );
+    mocks.checkPorts.mockResolvedValue({
+      data: [
+        {
+          port: 4010,
+          serviceId: "svc-api",
+          serviceName: "api",
+          listening: true,
+          checked: true,
+          loopbackOnly: true,
+        },
+        {
+          port: 3021,
+          serviceId: "svc-app",
+          serviceName: "app",
+          listening: true,
+          checked: false,
+          loopbackOnly: true,
+        },
+      ],
+    });
+    await render();
+    expect(host.textContent).toContain(
+      'Service "api" only listens inside the container on port 4010.',
+    );
+    expect(host.textContent).not.toContain('Service "app" only listens');
+    expect(host.textContent).toContain("0.0.0.0");
+    expect(retryButtons()).toHaveLength(0);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])(
     "keeps routing retry in the domain menu when routing is healthy (service view: %s)",
     async (serviceView) => {

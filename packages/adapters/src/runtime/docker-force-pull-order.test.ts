@@ -19,6 +19,23 @@ const CONFIG: MultiServiceDeployConfig = {
 };
 
 describe("Docker service replacement ordering", () => {
+  it("does not stop the live container when an immutable prepared image disappeared", async () => {
+    const stop = vi.fn();
+    const remove = vi.fn();
+    const docker = {
+      getImage: vi.fn(() => ({ inspect: vi.fn().mockRejectedValue(Object.assign(new Error("No such image"), { statusCode: 404 })) })),
+      getContainer: vi.fn(() => ({ stop, remove })), createContainer: vi.fn(),
+    };
+    const runtime = await DockerRuntime.create({ dockerSocketPath: "/tmp/openship-test-absent.sock" });
+    (runtime as unknown as { _docker: unknown })._docker = docker;
+    await expect(runtime.deployServiceWorkload(GROUP, {
+      ...CONFIG, image: `sha256:${"a".repeat(64)}`, imageAlreadyPrepared: true,
+    })).rejects.toThrow("No such image");
+    expect(docker.getContainer).not.toHaveBeenCalled();
+    expect(stop).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(docker.createContainer).not.toHaveBeenCalled();
+  });
   it("reuses an existing local image after checking it before container removal", async () => {
     const inspectImage = vi.fn(async () => ({}));
     const stop = vi.fn(async () => undefined);

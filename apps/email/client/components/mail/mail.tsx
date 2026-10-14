@@ -319,7 +319,7 @@ export function MailLayout() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const { data: session, isPending } = useSession();
-  useMailRefresh(!!session?.user);
+  useMailRefresh(!!session?.user, folder);
   const prevFolderRef = useRef(folder);
   const { enableScope, disableScope } = useHotkeysContext();
   const { data: activeConnection } = useActiveConnection();

@@ -340,3 +340,20 @@ same usage interface), so both sampling and its retention prune run in that mode
 
 The dashboard reads one shape either way: a single resolver reports whether a project's
 traffic source is self-hosted or cloud, and the tab does not know the difference.
+
+## Clearing incident history
+
+In Monitoring → History, an organization owner or administrator can select
+**Clear history** and confirm removal of resolved incidents in the current workspace.
+Active incidents, other workspaces, audit logs, notifications and workloads are kept.
+The operation uses one organization-scoped database delete with a fixed server-side
+cutoff, so incidents resolving after it starts remain. It clears all matching history,
+including entries beyond the feed's 200-row limit. A failed request leaves the control
+retryable; retrying after a lost success response is safe.
+
+This is available on Desktop and self-hosted instances, through the same engine
+operation in HTTP (`DELETE /api/issues/history`) and the SDK
+(`ship.issues.clearHistory()`). The CLI exposes
+`openship monitoring clear-history --yes`; without `--yes` it asks for confirmation.
+Read-only or restricted credentials cannot clear organization history, and Cloud
+does not expose this self-hosted incident-history operation.

@@ -6,6 +6,11 @@ import { withCloudWorkspaceActivity } from "./cloud-workspace-lock";
 /** Locks already owned by the current async call tree (nested helpers are safe). */
 const heldProjectRuntimeLocks = new AsyncLocalStorage<ReadonlyMap<string, { active: boolean }>>();
 
+/** Detached deployment workers must acquire their own project ownership. */
+export function runOutsideProjectRuntimeLock<T>(work: () => T): T {
+  return heldProjectRuntimeLocks.exit(work);
+}
+
 /**
  * One cross-process critical section for a project's live routing/runtime state.
  *

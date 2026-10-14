@@ -6,9 +6,10 @@ export function createRemoteIssueOperations(http: HttpClient): IssueOperations {
   return Object.freeze({
     ...createRemoteScopedOperations(http, IssueCollectionSchemas, {
       list: { method: "GET", path: () => "/issues", response: value => {
-        const body = value as { data?: unknown; counts?: unknown; status?: unknown };
-        return { issues: body?.data, counts: body?.counts, status: body?.status };
+        const body = value as { data?: unknown; counts?: unknown; status?: unknown; canClearHistory?: unknown };
+        return { issues: body?.data, counts: body?.counts, status: body?.status, canClearHistory: body?.canClearHistory };
       } },
+      clearHistory: { method: "DELETE", path: () => "/issues/history", envelope: "data" },
       summary: { method: "GET", path: () => "/issues/summary", envelope: "data" },
       health: { method: "GET", path: () => "/issues/health", response: value => {
         const { data, ...rest } = (value ?? {}) as Record<string, unknown>;

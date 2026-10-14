@@ -101,6 +101,7 @@
     }
   },
   "plansRoute": {
+    "requestedPlanUnavailable": "Seçilen plan artık mevcut değil. Aşağıdan başka bir plan seçin.",
     "loadError": "Planlar yüklenemedi",
     "genericError": "Bir sorun oluştu",
     "tryAgain": "Tekrar dene",
@@ -292,7 +293,8 @@
     "cancelNotice": "Ödenen dönem sonunda yenileme durdurulacak. Aboneliğiniz o zamana kadar devam eder.",
     "confirmCancel": "Yenilemeyi durdur",
     "keepPlan": "Aboneliği koru",
-    "error": "Aboneliğiniz güncellenemedi. Lütfen tekrar deneyin."
+    "error": "Aboneliğiniz güncellenemedi. Lütfen tekrar deneyin.",
+    "manage": "Aboneliği yönet"
   },
   "checkout": {
     "checking": "Satın alma işleminiz doğrulanıyor…",
@@ -343,6 +345,7 @@
     }
   },
   "resourcesGuide": {
+    "concurrentBuilds": "Eşzamanlı derlemeler",
     "title": "Cloud kullanımı nasıl hesaplanır?",
     "credits": "Cloud kredileri",
     "creditsHint": "Derlemeler ve çalışan uygulamalar CPU, bellek, disk etkinliği ve veri aktarımı için kredi tüketir. Daha büyük iş yükleri kredileri daha hızlı tüketir.",
@@ -582,7 +585,7 @@
     "save": "Kaydet",
     "delete": "Sunucunı sil",
     "confirmDelete": "Bu boş sunucuyu sil",
-    "deleteHint": "Önce tüm projeleri kaldırın ve aboneliği sonlandırın. Bu işlem boş sunucuyu ve kalan disk verilerini kalıcı olarak siler.",
+    "deleteHint": "Projeleri silmek aboneliği iptal etmez. Abonelikli bir sunucuyu silmeden önce Faturalandırma bölümünden yenilemeyi durdurun ve ödenen dönemin bitmesini bekleyin. Silme işlemi boş sunucuyu ve kalan disk verilerini kalıcı olarak kaldırır.",
     "buildCapacityTitle": "Sunucu kapasitesini kontrol edin",
     "buildCapacityHint": "Derlemeler bu alandaki boş kapasiteyi kullanır. Boştaki bir servisi durdurun veya kapasiteyi artırın, ardından yeniden deneyin.",
     "openWorkspace": "Sunucunı aç",
@@ -824,7 +827,8 @@
     "monthly": "aylık",
     "annual": "yıllık",
     "oneTime": "tek seferlik ödeme",
-    "cancelUnavailable": "Bu ödeme şu anda iptal edilemiyor. Yenileyin veya destekle iletişime geçin.",
+    "cancelUnavailable": "İptal durumu doğrulanamadı. Ödeme durumunu yenileyin.",
+    "cancelUnsupported": "Bu ödeme buradan iptal edilemez. Başka bir plan seçmeden önce ödemeyi tamamlayın veya süresinin dolmasını bekleyin.",
     "support": "Destekle iletişime geçin",
     "cancelHint": "Ödeme bağlantısı kapatılacak. Ardından başka bir plan seçebilirsiniz.",
     "confirmCancel": "İptali onayla",

@@ -1,6 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { DEPLOYMENT_HISTORY_STATUSES, type DeploymentHistoryFilter, type LogEntry, type PromptPayload } from "@repo/core";
+import { DEPLOYMENT_HISTORY_STATUSES, type DeploymentHistorySummary, type DeploymentHistoryFilter, type LogEntry, type PromptPayload } from "@repo/core";
 import { DeploymentSchema, type Deployment, type CreateDeploymentResult } from "./deployments";
 import type { DeploymentControlSchemas, DeploymentSslSchemas } from "./deployment-controls";
 import type { ResourceOperations, ScopedOperations } from "./resource-operations";
@@ -16,6 +16,7 @@ export const DeploymentHistoryFilters = {
 };
 export const ListDeploymentsSchema = Type.Object({
   ...DeploymentHistoryFilters,
+  days: Type.Optional(Type.Integer({ minimum: 1, maximum: 90 })),
   projectId: Type.Optional(ResourceIdSchema),
   environment: Type.Optional(Type.Union([Type.Literal("production"), Type.Literal("preview")])),
   page: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -29,6 +30,7 @@ export const SkipPortCheckSchema = Type.Object({ target: Type.Union([Type.String
 
 export type ListDeploymentsInput = Static<typeof ListDeploymentsSchema>;
 export interface DeploymentPage {
+  summary?: DeploymentHistorySummary;
   data: Deployment[];
   total: number;
   page: number;
@@ -100,7 +102,20 @@ export interface DeploymentResourceOperations extends ResourceOperations<typeof 
   events(id: string, options?: DeploymentEventOptions): AsyncIterable<DeploymentEvent>;
 }
 
+const OutcomeCountsSchema = {
+  total: Type.Integer({ minimum: 0 }), success: Type.Integer({ minimum: 0 }),
+  failed: Type.Integer({ minimum: 0 }), active: Type.Integer({ minimum: 0 }), canceled: Type.Integer({ minimum: 0 }),
+};
+export const DeploymentHistorySummarySchema = Type.Object({
+  ...OutcomeCountsSchema,
+  days: Type.Integer({ minimum: 1, maximum: 90 }),
+  avgBuildDurationMs: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]),
+  daily: Type.Array(Type.Object({ ...OutcomeCountsSchema, date: Type.String() })),
+  projects: Type.Array(Type.Object({ ...OutcomeCountsSchema, projectId: ResourceIdSchema })),
+});
+
 export const DeploymentPageSchema = Type.Object({
+  summary: Type.Optional(DeploymentHistorySummarySchema),
   data: Type.Array(DeploymentSchema), total: Type.Integer({ minimum: 0 }),
   page: Type.Integer({ minimum: 1 }), perPage: Type.Integer({ minimum: 1 }),
   projects: Type.Optional(Type.Array(Type.Object({ id: ResourceIdSchema, name: Type.String() }))),

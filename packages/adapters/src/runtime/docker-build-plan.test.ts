@@ -35,6 +35,19 @@ function phpConfig(over: Partial<BuildConfig> = {}): BuildConfig {
 }
 
 describe("generateDockerfile — PHP branch", () => {
+  it("checks both selected stages and the actual Composer platform", () => {
+    const selected = generateDockerfile(phpConfig({ runtimeVersion: "8.3", buildImage: "php:8.3-cli-bookworm", runtimeImage: "dunglas/frankenphp:1-php8.3-bookworm" }));
+    expect(selected.match(/RUN php -r/g)).toHaveLength(2);
+    expect(selected.match(/check-platform-reqs --no-dev/g)).toHaveLength(2);
+    expect(selected).toContain("env -u COMPOSER_IGNORE_PLATFORM_REQ -u COMPOSER_IGNORE_PLATFORM_REQS");
+    expect(selected).toContain("rm -f /tmp/openship-composer");
+    expect(generateDockerfile(phpConfig())).not.toContain("check-platform-reqs");
+  });
+  it("refuses a mismatched builder or a recipe that cannot honor the version", () => {
+    expect(() => generateDockerfile(phpConfig({ runtimeVersion: "8.3" }))).toThrow(/uses PHP 8.4/);
+    expect(() => generateDockerfile(phpConfig({ runtimeVersion: "8.4", dockerfilePath: "Dockerfile" }))).toThrow(/your own Dockerfile/);
+    expect(() => generateDockerfile(phpConfig({ runtimeVersion: "8.4", isStatic: true }))).toThrow(/generated PHP Docker/);
+  });
   const df = generateDockerfile(phpConfig());
 
   it("builds on php-cli with Composer pulled in", () => {
@@ -442,5 +455,58 @@ describe("generateDockerfile — a project env var named PATH cannot unset the b
     for (const segment of exports) {
       expect(segment).toBe("export PATH_PREFIX='/base' NEXT_PUBLIC_PATH='/p' NO_COLOR='1'");
     }
+  });
+});
+
+describe("stack-selected recipes and custom runtime bases", () => {
+  it("uses the PHP recipe for a renamed custom image and validates its actual capabilities", () => {
+    const df = generateDockerfile(
+      phpConfig({
+        runtimeVersion: "8.3",
+        buildImage: "php:8.3-cli-bookworm",
+        runtimeImage: "custom/runtime:83",
+        runtimeImageOverride: true,
+      }),
+    );
+    expect(df).toContain("FROM custom/runtime:83 AS runtime");
+    expect(df).toContain("command -v frankenphp");
+    expect(df).toContain("check-platform-reqs");
+    expect(df.match(/RUN php -r/g)).toHaveLength(2);
+  });
+  it("does not select a PHP recipe because a Node image contains that name", () => {
+    const df = generateDockerfile(
+      config({ runtimeImage: "custom/frankenphp-tools:node", runtimeImageOverride: true }),
+    );
+    expect(df).not.toContain("composer:2");
+    expect(df).toContain("process.versions.modules");
+    expect(df).toContain("runtime image is incompatible");
+  });
+  it("uses Ruby instructions for a custom image and checks the copied gems' runtime ABI", () => {
+    const df = generateDockerfile(
+      config({
+        stack: "rails",
+        packageManager: "bundler",
+        runtimeImage: "custom/rails:latest",
+        buildImage: "ruby:3.3-slim",
+        runtimeImageOverride: true,
+      }),
+    );
+    expect(df).toContain("BUNDLE_PATH=/usr/local/bundle");
+    expect(df).toContain("RUBY_VERSION");
+    expect(df).toContain("COPY --from=builder /usr/local/bundle");
+  });
+  it("checks an explicit same-image override without leaving metadata in the application", () => {
+    const df = generateDockerfile(config({ runtimeImageOverride: true }));
+    expect(df).toContain("AS builder");
+    expect(df).toContain("AS runtime");
+    expect(df).toContain("rm /tmp/openship-runtime.requirements");
+  });
+  it("refuses custom runtime settings for a Dockerfile or static extraction", () => {
+    expect(() =>
+      generateDockerfile(config({ runtimeImageOverride: true, dockerfilePath: "Dockerfile" })),
+    ).toThrow(/your own Dockerfile/);
+    expect(() =>
+      generateDockerfile(config({ runtimeImageOverride: true, isStatic: true })),
+    ).toThrow(/static sites/);
   });
 });

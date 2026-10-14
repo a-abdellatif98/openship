@@ -10,6 +10,8 @@ export interface BuildConfigSnapshotLike {
   branch: string;
   framework: string;
   buildImage: string;
+  runtimeVersion?: string;
+  runtimeImageOverride?: boolean;
   runtimeImage: string;
   packageManager: string;
   installCommand: string;
@@ -91,6 +93,8 @@ export function createBuildConfig(opts: BuildConfigFactoryOptions): BuildConfig 
     buildStrategy: snapshot.buildStrategy,
     stack: snapshot.framework,
     buildImage: snapshot.buildImage,
+    runtimeVersion: snapshot.runtimeVersion,
+    runtimeImageOverride: snapshot.runtimeImageOverride,
     runtimeImage: snapshot.runtimeImage,
     packageManager: snapshot.packageManager,
     installCommand: snapshot.hasBuild ? snapshot.installCommand : "",

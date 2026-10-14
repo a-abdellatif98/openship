@@ -77,12 +77,74 @@ It's **JSON, not JSONC** — no comments, no trailing commas.
       type: "string",
       description: 'Docker image used for the build (e.g. "node:22").',
     },
+    runtimeVersion: {
+      type: "string",
+      description: "Runtime version resolved by the selected stack. Omit to preserve detected defaults. See Runtime version selection below.",
+    },
+    runtimeImage: {
+      type: "string",
+      description: "Optional production base image for generated Docker builds. Omit to use the managed stack default. See Custom runtime images below.",
+    },
     productionPaths: {
       type: "string[]",
       description: "Paths shipped to the runtime as the production artifact.",
     },
   }}
 />
+
+## Runtime version selection
+
+`runtimeVersion` is one setting shared by runtime policies; it is not a global PHP enum.
+The selected or detected stack validates supported versions and chooses matching build/runtime images.
+Explicit selection currently supports PHP 8.3 and 8.4 for generated Docker builds. Other runtimes
+keep their existing repository detection and defaults; an explicit unsupported selection fails
+before a project write or build instead of being ignored.
+
+For the Laravel and Symfony stacks, select a version in the deploy wizard's
+build settings or declare it in `openship.json`:
+
+```json
+{
+  "framework": "laravel",
+  "runtimeVersion": "8.3",
+  "installCommand": "composer install --no-dev --optimize-autoloader"
+}
+```
+
+| Selection | Builder | Runtime |
+| --- | --- | --- |
+| Not declared (unchanged default) | `php:8.4-cli` | `dunglas/frankenphp:1-php8.4-bookworm` |
+| `8.3` | `php:8.3-cli-bookworm` | `dunglas/frankenphp:1-php8.3-bookworm` |
+| `8.4` | `php:8.4-cli-bookworm` | `dunglas/frankenphp:1-php8.4-bookworm` |
+
+A new selection keeps Composer installation enabled even when there is no JavaScript asset build.
+You can disable Build when your source already contains its prepared dependencies.
+
+These are the currently tested selections. Other major/minor or patch selections are rejected.
+Both selected stages verify their actual PHP major/minor version. The generated recipe checks
+production Composer requirements in the builder and runtime, including PHP and extensions.
+[Composer's platform check](https://getcomposer.org/doc/03-cli.md#check-platform-reqs) uses the real
+platform, even if `config.platform` or the install command's `--ignore-platform-reqs` pretends otherwise.
+An incompatible build fails before activation, leaving the current deployment available.
+
+A declared `buildImage` overrides the managed builder, while the selected FrankenPHP runtime stays
+fixed. The custom builder must provide the selected PHP version and support the generated
+Composer/extension setup; known incompatible official PHP tags are rejected immediately and
+custom images are checked during the build. Changing the version replaces a previously managed
+builder default, but does not overwrite a custom builder. When you select a different version with
+a custom builder, update both settings together.
+
+This project-level setting applies to generated Docker builds on self-hosted and managed Cloud
+Docker destinations. It cannot configure a user-owned Dockerfile, Compose/monorepo service image,
+bare runtime, static site, or prebuilt image. Explicit selection on these paths is refused; configure
+PHP in their own image instead. Existing projects and user Dockerfiles without `runtimeVersion` are unchanged.
+
+The API and SDK accept `runtimeVersion` in project creation, ensure/update and build options. Send
+`null` in project options to restore the default PHP version; custom builder overrides are preserved. Folder scans, the SDK source deployment flow,
+and `openship deploy --folder` preserve repository declarations. The CLI validates this field with
+`openship config validate`. Version and resolved image references are frozen in each deployment
+snapshot; rollback reuses that release's retained application image rather than the latest project
+setting. Openship Edge, TLS, routing and resource monitoring continue through the existing deployment path.
 
 ## Runtime
 
@@ -103,8 +165,125 @@ It's **JSON, not JSONC** — no comments, no trailing commas.
       description:
         "Paths kept across deploys. Omit to inherit the framework defaults; [] turns persistence off.",
     },
+    optimize: {
+      type: "boolean",
+      description:
+        "Laravel only. Opt-in cache warming for the web role. Default false. true prefixes the web command with `php artisan optimize && `. See Laravel cache warming below.",
+    },
   }}
 />
+
+## Laravel cache warming
+
+`php artisan optimize` warms Laravel's config, route, event, and view caches. A
+warmed web role answers each request faster. The default is off, so an existing
+project keeps its exact web command until it opts in.
+
+Warming helps the web role only. It does not fix cold start, because cold start
+is dominated by PHP opcode compilation, not cache state. Workers and schedulers
+gain little, so leave them unwarmed.
+
+<Callout title="Run optimize at startup, never at build" type="warn">
+`optimize` runs `config:cache`. `config:cache` freezes whatever environment is
+present when it runs. After that, every `env()` call outside `config/*.php`
+returns `null`.
+
+Warm the cache at startup, after Openship injects the runtime environment. Do
+not warm it in `buildCommand`, which freezes build-time values. Do not warm it
+in `releaseCommands`, which runs in a throwaway container whose
+`bootstrap/cache` is discarded. Read configuration through `config()` and keep
+`env()` inside `config/*.php`.
+</Callout>
+
+### Opt-in flag
+
+Set `optimize: true` to warm the web role. The flag prefixes the web command and
+keeps the rest of the command unchanged.
+
+```json
+{
+  "framework": "laravel",
+  "optimize": true
+}
+```
+
+Warming runs before the server through `&&`. A failing `php artisan optimize`
+short-circuits the chain, so the web role never boots. Opt in only when the
+command succeeds reliably in your runtime environment.
+
+`optimize: true` always prepends `php artisan optimize && `. Do not also put
+`php artisan optimize` in a custom `startCommand`, or it runs twice. The repeat
+is harmless but wasteful.
+
+### Override the web command directly
+
+You can warm the web role without the flag. Override `startCommand` and keep the
+`exec` form. `optimize` runs first. `exec` then hands PID 1 to FrankenPHP, so
+`SIGTERM` still drains in-flight requests.
+
+```json
+{
+  "framework": "laravel",
+  "startCommand": "php artisan optimize && SERVER_NAME=\":$PORT\" exec frankenphp run --config /etc/frankenphp/Caddyfile --adapter caddyfile"
+}
+```
+
+<Callout title="Monorepo caveat" type="warn">
+Neither the `optimize` prefix nor a manual `startCommand` override is applied to
+a Laravel sub-app selected inside a JavaScript-workspace monorepo — a repo root
+that declares a `pnpm`, `npm`, `yarn`, or Bun workspace. In that layout the
+sub-app's web command is re-derived from the bare preset. This is pre-existing
+behavior and not specific to `optimize`. Standalone Laravel repos, and Laravel
+repos without a JavaScript workspace at the root, are unaffected.
+</Callout>
+
+### Warm a worker or scheduler
+
+Warming a worker gives a small, one-time benefit, so prefer warming the web role
+only. To warm a worker anyway, re-declare the roles. A `roles` array replaces
+every preset, so list each role you want to keep. Prefix each command with
+`php artisan optimize && ` and keep the `exec` form.
+
+```json
+{
+  "roles": [
+    { "name": "queue", "kind": "worker", "command": "php artisan optimize && exec php artisan queue:work", "stopGracePeriod": "90s" },
+    { "name": "scheduler", "kind": "scheduler", "command": "php artisan optimize && exec php artisan schedule:work", "stopGracePeriod": "90s", "singleton": true }
+  ]
+}
+```
+
+## Custom runtime images
+
+Docker source builds offer a **Runtime image** field under Advanced build settings.
+It is a production **base** image, separate from the builder and the final application image.
+Omit it in `openship.json`, or send `runtimeImage: null` through project options, to restore the managed default.
+
+```json
+{
+  "framework": "laravel",
+  "runtimeVersion": "8.3",
+  "runtimeImage": "registry.example.com/team/php-runtime:8.3"
+}
+```
+
+The stack selects its Docker recipe, even when a custom image has a different name.
+A PHP runtime base must provide the selected PHP version, FrankenPHP, `install-php-extensions`,
+and the `www-data` user. The recipe checks these capabilities and Composer's actual platform.
+Known incompatible official PHP image/version combinations are rejected before settings are saved.
+Other custom interpreter images compare the actual builder/runtime fingerprint during the build
+(runtime ABI or version, architecture, and libc where applicable). Compiled-native applications
+continue through deployment readiness checks. A failed build does not replace the live application.
+
+Overrides must support the generated recipe's shell, directories and package setup.
+Use your own Dockerfile for a different server implementation or filesystem layout.
+Project-level overrides are refused for bare runtimes, prebuilt images, static extraction and
+service-owned Compose/monorepo builds. Those paths manage their images directly.
+
+Omitted options preserve a saved override; `null` clears it. A version change preserves custom
+image overrides and validates the new combination. Version, resolved images and the override
+flag are frozen in each deployment snapshot, so retained-image rollback restores its original
+application without changing the current project settings.
 
 ## Release commands
 
@@ -156,8 +335,12 @@ release command and app use the same database on both Docker and Bare.
 
 <Callout title="Runtime support" type="warn">
 Release commands currently require a **single-app Docker or Bare deployment**, including
-portless workers. The app may use attached or connected database services without changing
-its single-app deployment mode.
+portless workers. A database deployed as its own app and connected to this project keeps it
+single-app: the connection is injected as an environment variable, and the release command
+reaches the database over the network. Adding any enabled service to the **same project**,
+a database included, makes it a multi-service deployment instead, so a deploy with release
+commands fails before it builds. To run migrations against a database, deploy the database
+as its own app and connect it.
 
 Full Compose/monorepo deployments, static sites, and runtimes without one-off command
 support **fail before activation** when commands are configured. Per-service release
@@ -435,7 +618,7 @@ the required roots and start commands.
 
 | `openship.json`                                                                                                | Deploy wizard / API                               |
 | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `framework`, `packageManager`, `*Command`, `outputDirectory`, `buildImage`, `productionPaths`, `rootDirectory` | Build settings                                    |
+| `framework`, `packageManager`, `*Command`, `outputDirectory`, `buildImage`, `runtimeVersion`, `runtimeImage`, `productionPaths`, `rootDirectory` | Build settings                                    |
 | `port`, `productionMode`, `runtime`                                                                            | Runtime settings (`hasServer`, runtime isolation) |
 | `releaseCommands`                                                                                              | Build settings → Before activation                  |
 | `volumes`                                                                                                      | Configuration → Persistent storage                |

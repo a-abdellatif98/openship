@@ -34,6 +34,7 @@
     "local": "Local"
   },
   "card": {
+    "more": "Plus",
     "liveVersion": "Version en ligne v{version}",
     "sourceLocal": "Local",
     "services": "Services",
@@ -243,7 +244,10 @@
     "noTransfer": "Aucun transfert pour le moment"
   },
   "analytics": {
-    "loadFailed": "Impossible de charger les analyses de trafic"
+    "loadFailed": "Impossible de charger les analyses de trafic",
+    "loadFailedDescription": "Réessayez pour charger les dernières données.",
+    "sectionsUnavailable": "Indisponible : {sections}.",
+    "staleData": "Les dernières données disponibles sont affichées."
   },
   "monitoring": {
     "noDataTitle": "Aucune donnée de surveillance pour le moment",
@@ -308,7 +312,11 @@
       "disable": "Désactiver les chemins principaux"
     },
     "liveFeed": "Requêtes récentes",
-    "liveFeedHint": "Afficher la liste des requêtes récentes sur la carte (tout le détail est dans Journaux)"
+    "liveFeedHint": "Afficher la liste des requêtes récentes sur la carte (tout le détail est dans Journaux)",
+    "dataUnavailable": "Certaines données de surveillance sont indisponibles",
+    "connecting": "Connexion…",
+    "liveUnavailable": "Requêtes en direct indisponibles",
+    "liveUnavailableDescription": "Le trafic historique reste affiché. Reconnectez-vous pour voir les requêtes en direct."
   },
   "services": {
     "failedLoad": "Échec du chargement des services",
@@ -403,6 +411,8 @@
     "fixStep3": "Vérifiez le domaine et déployez."
   },
   "connections": {
+    "nativeClusterHint": "Choisissez un projet sur le cluster de cette base de données. Seuls les projets liés disposent d’un accès privé.",
+    "nativeNoTargets": "Aucun autre projet n’utilise encore ce cluster.",
     "useInProject": "Utiliser dans un projet",
     "title": "Utiliser dans un projet",
     "subtitle": "Partagez ce service avec un autre projet via une connexion.",

@@ -2,7 +2,7 @@ import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostic
 import { randomUUID } from "node:crypto";
 import { getPlatform } from "@repo/adapters";
 import { repos } from "@repo/db";
-import { safeErrorMessage } from "@repo/core";
+import { AppError, safeErrorMessage } from "@repo/core";
 import type { IssueRescan } from "@repo/contracts";
 import type { IssueDependencies } from "../../../issues";
 import type { ExecutionContext } from "../../../context";
@@ -16,6 +16,7 @@ import { runJobNow, systemJobAvailability } from "../jobs/job.service";
 import { getCurrentHealthScan, listWorkloadHealthSnapshots, runCurrentHealthScan } from "../monitoring/health-watch";
 import { continuousHealthAvailable, containerHealthEventsAvailable, HEALTH_WATCH_JOB, healthWatchActive } from "../monitoring/health-watch-policy";
 import { listOrganizationIssues } from "./issues.service";
+import { env } from "../../config/env";
 
 const RESCAN_JOBS = [HEALTH_WATCH_JOB, "infra:scan", "domains:verify-pending", "updates:scan"] as const;
 let activeRescan: IssueRescan | null = null;
@@ -24,9 +25,33 @@ async function hasFullProjectRead(ctx: ExecutionContext) {
   return authorization.checkPermissionOnResource({ ...ctx, scopeMode: "fixed" }, { resourceType: "project", resourceId: "*", action: "read", scope: "all" });
 }
 
+async function canClearHistory(ctx: ExecutionContext) {
+  return !env.CLOUD_MODE && !ctx.tokenScope && ["owner", "admin"].includes(ctx.role) &&
+    await authorization.checkPermissionOnResource({ ...ctx, scopeMode: "fixed" }, {
+      resourceType: "project",
+      resourceId: "*",
+      action: "admin",
+      scope: "all",
+    });
+}
+
 export const issuesDependencies: IssueDependencies = {
   collection: {
-    async list(ctx, input = {}) { const status = input.status ?? "open"; return { ...await listOrganizationIssues(ctx, { status }), status }; },
+    async list(ctx, input = {}) { const status = input.status ?? "open"; return { ...await listOrganizationIssues(ctx, { status }), status, canClearHistory: await canClearHistory(ctx) }; },
+    async clearHistory(ctx) {
+      assertSelfHosted();
+      if (!await canClearHistory(ctx)) throw new AppError(
+        "An organization administrator is required to clear monitoring history",
+        403,
+        "MONITORING_HISTORY_ADMIN_REQUIRED",
+      );
+      const deleted = await repos.serviceIncident.clearResolvedByOrg(ctx.organizationId, new Date());
+      audit.recordAsync(operationAuditContext(ctx), {
+        eventType: "issues.history.clear",
+        after: { operation: "issues.clearHistory", deleted },
+      });
+      return { deleted };
+    },
     async summary(ctx) { return (await listOrganizationIssues(ctx)).counts; },
     async health(ctx) {
       const available = continuousHealthAvailable();

@@ -1,5 +1,5 @@
 import { firstServicePort } from "@repo/core";
-import type { Service, ServiceInput } from "@/lib/api/services";
+import type { Service, ServiceContainer, ServiceInput } from "@/lib/api/services";
 import { resolvePublicEndpointHostname } from "./public-endpoint-payload";
 
 export type ServiceEndpoint = NonNullable<Service["publicEndpoints"]>[number];
@@ -82,4 +82,20 @@ export function servicePortTargets(service: Service, baseDomain: string): Servic
     if (hostname) targets.get(`${endpoint.port}/tcp`)?.endpoints.push({ ...endpoint, hostname });
   }
   return [...targets.values()];
+}
+
+/** A private container port is reachable over SSH without a published host port.
+ * Never reinterpret a container-only port as a listener on the server itself.
+ * A null port asks the user which TCP port their container listens on. */
+export function serviceLocalhostTarget(service: Service, container?: ServiceContainer) {
+  if (container?.serviceId !== service.id || container.status !== "running") return null;
+  const ports = servicePortTargets(service, "");
+  const port = ports.find((target) => target.protocol === "tcp" && target.port)?.port;
+  if (port && container.ip) return { remoteHost: container.ip, remotePort: port };
+  const hostPort = validPort(container.hostPort);
+  // Preserve the live host-port path, including services with no saved port list.
+  if (hostPort && (port || ports.length === 0))
+    return { remoteHost: "127.0.0.1", remotePort: hostPort };
+  if (container.ip) return { remoteHost: container.ip, remotePort: null };
+  return null;
 }

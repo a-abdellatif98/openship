@@ -5,6 +5,31 @@ import { param } from "../../lib/controller-helpers";
 import { operationContext, operationData } from "../../lib/operation-context";
 const operations = () => getPlatformKernel().servers;
 
+export async function managedOutbound(c: Context) {
+  c.header("Cache-Control", "private, no-store");
+  return c.json(
+    await operationData(c, operations().managedOutbound(operationContext(c), param(c, "id"))),
+  );
+}
+export async function managedOutboundOptions(c: Context) {
+  c.header("Cache-Control", "private, no-store");
+  return c.json(
+    await operationData(
+      c,
+      operations().managedOutboundOptions(operationContext(c), param(c, "id")),
+    ),
+  );
+}
+export async function setManagedOutbound(c: Context) {
+  c.header("Cache-Control", "private, no-store");
+  return c.json(
+    await operationData(
+      c,
+      operations().setManagedOutbound(operationContext(c), param(c, "id"), await c.req.json()),
+    ),
+  );
+}
+
 export async function managedInfo(c: Context) {
   c.header("Cache-Control", "private, no-store");
   return c.json(

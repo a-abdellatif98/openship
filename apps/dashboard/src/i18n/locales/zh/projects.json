@@ -34,6 +34,7 @@
     "local": "本地"
   },
   "card": {
+    "more": "更多",
     "liveVersion": "运行版本 v{version}",
     "sourceLocal": "本地",
     "services": "服务",
@@ -243,7 +244,10 @@
     "noTransfer": "暂无传输"
   },
   "analytics": {
-    "loadFailed": "无法加载流量分析数据"
+    "loadFailed": "无法加载流量分析数据",
+    "loadFailedDescription": "重试以加载最新数据。",
+    "sectionsUnavailable": "无法获取：{sections}。",
+    "staleData": "正在显示最后获取的数据。"
   },
   "monitoring": {
     "noDataTitle": "暂无监控数据",
@@ -308,7 +312,11 @@
       "disable": "关闭热门路径"
     },
     "liveFeed": "最近请求",
-    "liveFeedHint": "在地图上显示最近请求列表（完整详情见日志标签页）"
+    "liveFeedHint": "在地图上显示最近请求列表（完整详情见日志标签页）",
+    "dataUnavailable": "部分监控数据暂时无法获取",
+    "connecting": "正在连接…",
+    "liveUnavailable": "实时请求暂时不可用",
+    "liveUnavailableDescription": "仍在显示历史流量。重新连接以查看实时请求。"
   },
   "services": {
     "failedLoad": "加载服务失败",
@@ -403,6 +411,8 @@
     "fixStep3": "验证域名并部署。"
   },
   "connections": {
+    "nativeClusterHint": "选择与此数据库位于同一集群的项目。只有关联的项目才能获得私有访问权限。",
+    "nativeNoTargets": "目前没有其他项目使用此集群。",
     "useInProject": "在项目中使用",
     "title": "在项目中使用",
     "subtitle": "通过连接与其他项目共享此服务。",

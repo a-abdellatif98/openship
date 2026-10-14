@@ -64,10 +64,13 @@ export type RollbackCapacityUI = RollbackCapacity;
 /** Build + runtime options accepted by POST /:id/options (updateOptions). All
  *  optional — only the fields sent are written. Mirrors the backend allowlist. */
 export interface ProjectOptionsBody {
+  githubChecks?: import("@repo/core").GitHubDeploymentChecks | null;
   gitBranch?: string;
   framework?: string;
   packageManager?: string;
   buildImage?: string;
+  runtimeVersion?: string | null;
+  runtimeImage?: string | null;
   installCommand?: string;
   buildCommand?: string;
   startCommand?: string;
@@ -153,6 +156,8 @@ export interface ScanProjectResponse {
   startCommand: PrepareProjectResponse["startCommand"];
   releaseCommands?: PrepareProjectResponse["releaseCommands"];
   buildImage: PrepareProjectResponse["buildImage"];
+  runtimeVersion?: string | null;
+  runtimeImage?: string | null;
   outputDirectory: PrepareProjectResponse["outputDirectory"];
   rootDirectory: PrepareProjectResponse["rootDirectory"];
   productionPaths: PrepareProjectResponse["productionPaths"];
@@ -248,6 +253,7 @@ export const projectsApi = {
 
   /** Create or update a project (mandatory before build access) */
   ensure: (body: {
+    githubChecks?: import("@repo/core").GitHubDeploymentChecks | null;
     projectId?: string;
     serverId?: string;
     name: string;
@@ -273,6 +279,8 @@ export const projectsApi = {
     composePath?: string;
     startCommand?: string;
     buildImage?: string;
+    runtimeVersion?: string | null;
+    runtimeImage?: string | null;
     port?: number;
     publicEndpoints?: Array<{
       port?: number;

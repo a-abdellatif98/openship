@@ -5,6 +5,7 @@
  * No database writes, no deployment logic.
  */
 
+import { assertRuntimeVersionTarget, normalizeRuntimeImageOverride, runtimeProjectUpdate, resolveRuntimeImages, ValidationError } from "@repo/core";
 import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import * as githubService from "../github/github.service";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
@@ -89,6 +90,8 @@ export type Source =
       rootDirectory?: string;
       /** See {@link ResolveOptions.env}. */
       env?: Record<string, string>;
+      /** See {@link ResolveOptions.expectCompose}. */
+      expectCompose?: boolean;
     }
   | {
       source: "local";
@@ -97,6 +100,8 @@ export type Source =
       rootDirectory?: string;
       /** See {@link ResolveOptions.env}. */
       env?: Record<string, string>;
+      /** See {@link ResolveOptions.expectCompose}. */
+      expectCompose?: boolean;
     };
 
 export interface ResolveOptions {
@@ -126,6 +131,15 @@ export interface ResolveOptions {
    * file as unparseable even though the deploy would have succeeded (#383).
    */
   env?: Record<string, string>;
+  /**
+   * The project already deploys Compose services (a services project, or one
+   * with imported Compose rows). The Compose file found at the root is parsed
+   * even when stack detection picks another stack, so a root that also holds a
+   * Vite config and a Dockerfile cannot drop those services (#1020). Native
+   * openship.json services retain priority over inferred Compose. Root selection
+   * is unchanged, and an app scan still leaves local-dev Compose alone (#959).
+   */
+  expectCompose?: boolean;
 }
 
 /** Thrown when a declared `composePath` has no compose file behind it. */
@@ -216,6 +230,8 @@ export interface ProjectInfo {
   installCommand: string;
   startCommand: string;
   buildImage: string;
+  runtimeVersion?: string;
+  runtimeImage?: string;
   outputDirectory: string;
   rootDirectory: string;
   /**
@@ -404,6 +420,8 @@ function extractOpenshipConfig(fileContents: Record<string, string>): ExtractedO
   }
 
   const { config, errors, warnings } = parseOpenshipConfig(raw);
+  const runtimeErrors = errors.filter((error) => error.startsWith("runtimeVersion:") || error.startsWith("runtimeImage:"));
+  if (runtimeErrors.length) throw new ValidationError(runtimeErrors.join(" · "));
   // Only a non-object root nulls the config — every field-level failure still
   // yields a partial config that overlays. So `!config` is the whole-file case,
   // and the flag says so without the message having to.
@@ -557,6 +575,17 @@ function applyOpenshipOverlay(info: ProjectInfo, config: OpenshipConfig | undefi
   if (config.packageManager) info.packageManager = config.packageManager;
   if (config.rootDirectory) info.rootDirectory = config.rootDirectory;
   if (config.buildImage) info.buildImage = config.buildImage;
+  if (config.runtimeImage !== undefined) {
+    assertRuntimeVersionTarget({ runtimeImage: config.runtimeImage, framework: info.stack, projectType: info.projectType, runtimeMode: config.runtime, composePath: info.composePath, workloadType: config.workload });
+    info.runtimeImage = normalizeRuntimeImageOverride(config.runtimeImage) ?? undefined;
+    runtimeProjectUpdate({ framework: info.stack, buildImage: info.buildImage }, { runtimeImage: config.runtimeImage, runtimeVersion: config.runtimeVersion });
+  }
+  if (config.runtimeVersion !== undefined) {
+    assertRuntimeVersionTarget({ runtimeVersion: config.runtimeVersion, framework: info.stack, projectType: info.projectType, runtimeMode: config.runtime, composePath: info.composePath, workloadType: config.workload });
+    const runtime = resolveRuntimeImages(info.stack, config.runtimeVersion, config.buildImage, config.runtimeImage);
+    info.runtimeVersion = runtime.runtimeVersion;
+    info.buildImage = runtime.buildImage;
+  }
   if (config.productionPaths) info.productionPaths = config.productionPaths;
   // Declared `[]` is meaningful (persistence off), so test for presence, not truth.
   if (config.volumes) info.volumes = config.volumes;
@@ -658,6 +687,8 @@ export function projectInfoToScanResponse(result: ProjectInfo, options: SourceSc
     buildCommand: publicInfo.buildCommand,
     startCommand: publicInfo.startCommand,
     buildImage: publicInfo.buildImage,
+    ...(publicInfo.runtimeVersion && { runtimeVersion: publicInfo.runtimeVersion }),
+    ...(publicInfo.runtimeImage && { runtimeImage: publicInfo.runtimeImage }),
     outputDirectory: publicInfo.outputDirectory,
     rootDirectory: publicInfo.rootDirectory,
     ...(publicInfo.composePath && { composePath: publicInfo.composePath }),
@@ -868,6 +899,7 @@ export async function resolveProjectInfo(input: Source): Promise<ProjectInfo> {
       composePath: input.composePath,
       rootDirectory: input.rootDirectory,
       env: input.env,
+      expectCompose: input.expectCompose,
     });
   }
 
@@ -881,6 +913,7 @@ export async function resolveProjectInfo(input: Source): Promise<ProjectInfo> {
     composePath: input.composePath,
     rootDirectory: input.rootDirectory,
     env: input.env,
+    expectCompose: input.expectCompose,
   });
 }
 
@@ -1001,10 +1034,17 @@ export async function resolveFromReader(
         }
       : await resolveDetectedRoot(reader, rootSnapshot);
 
+  // Native service definitions replace detection. Decide before parsing so an
+  // unused development Compose file cannot block them or add its required env
+  // into the native scan. An explicitly selected Compose path still validates.
+  const useNativeServices = !root.declaredComposePath && !!openship.config?.services?.length;
+
   // `.env` sits next to the compose file, which is what compose itself resolves
   // against — for a declared root that is the pinned directory, not the repo root.
   const [composeContent, composeEnvContent] = await Promise.all([
-    readComposeText(reader, root.selected.rootDirectory, root.composeFiles),
+    useNativeServices
+      ? undefined
+      : readComposeText(reader, root.selected.rootDirectory, root.composeFiles),
     readProjectText(reader, root.selected.rootDirectory, ".env"),
   ]);
   if (root.declaredComposePath && !composeContent) {
@@ -1022,7 +1062,9 @@ export async function resolveFromReader(
     root.monorepo,
     routing,
     {
-      declaredCompose: !!root.declaredComposePath,
+      declaredCompose:
+        !!root.declaredComposePath ||
+        (opts.expectCompose === true && !useNativeServices && root.composeFiles.length > 0),
       // `openship.json.env` is the repository's explicit shared environment
       // layer. Let it resolve Compose fields during the same source read; an
       // environment supplied by the deploy request remains the higher-priority

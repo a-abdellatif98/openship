@@ -86,7 +86,8 @@
     },
     "apps": "Apps",
     "jobs": "Jobs",
-    "workspaces": "Arbeitsbereiche"
+    "workspaces": "Arbeitsbereiche",
+    "actions": "Aktionen"
   },
   "sidebar": {
     "expand": "Seitenleiste ausklappen",
@@ -131,7 +132,15 @@
         "automation": "Automatisierung",
         "mail": "Mail",
         "other": "Tools"
-      }
+      },
+      "addCustom": "Eigene hinzufügen",
+      "howToAddApp": "Wie man eine App hinzufügt",
+      "removeCustomApp": "Benutzerdefinierte App entfernen",
+      "needsUpdateDesc": "Aktualisieren Sie Ihre Openship-Instanz, um diese App zu installieren.",
+      "needsUpdateBadge": "Aktualisierung erforderlich",
+      "needsVersionBadge": "Erfordert v{version}",
+      "removedToast": "„{name}“ entfernt.",
+      "removeFailedToast": "Die App konnte nicht entfernt werden."
     },
     "projects": {
       "title": "Projekte",

@@ -75,6 +75,9 @@
       "onFailureWarn": "保持部署上线，并标记为待复查",
       "onFailureFail": "让部署失败，并继续由上一个版本提供服务"
     },
+    "runtimeVersionLabel": "运行时版本",
+    "runtimeVersionDefault": "默认",
+    "runtimeVersionDesc": "使用与所选版本匹配的构建和运行镜像。需要由 Openship 生成的 Docker 构建。",
     "buildImageLabel": "构建镜像",
     "buildImageDesc": "用于云端或服务器构建的构建容器镜像。当检测到的基础镜像有误时可覆盖此项。",
     "productionPathsLabel": "生产路径",
@@ -110,7 +113,10 @@
     "releaseDescription": "构建后执行的可选命令。失败会停止部署。仅适用于 Docker 和 Bare 应用。",
     "releaseCommand": "命令 {number}",
     "addReleaseCommand": "添加命令",
-    "removeReleaseCommand": "删除命令 {number}"
+    "removeReleaseCommand": "删除命令 {number}",
+    "runtimeImageLabel": "运行镜像",
+    "runtimeImageDesc": "可选的 Docker 生产基础镜像。必须与运行时和生成的构建方案兼容；留空以使用默认值。",
+    "staticPathHint": "从边缘节点作为静态文件提供服务 — 不作为进程运行。"
   },
   "projectSettings": {
     "framework": "框架",
@@ -180,7 +186,9 @@
       "domainLabel": "域名",
       "free": "免费",
       "custom": "自定义",
-      "routingTrafficPrefix": "将流量路由到端口"
+      "routingTrafficPrefix": "将流量路由到端口",
+      "duplicateTitle": "重复域名",
+      "duplicateDescription": "两条路由指向同一个域名 — 请修改其中一条，使每条路由都有专属域名："
     },
     "shared": {
       "title": "共享环境",
@@ -349,7 +357,38 @@
     "detailFramework": "框架",
     "detailBranch": "分支",
     "detailDomains": "域名",
-    "detailDomain": "域名"
+    "detailDomain": "域名",
+    "portAdvisory": {
+      "loopbackTitle": "应用无法接收路由流量",
+      "loopbackNote": "部署仍在运行，但有一个路由端口需要处理。",
+      "loopbackBody": "端口 {port} 仅接受容器内部的连接。",
+      "loopbackBodyService": "服务“{service}”的端口 {port} 仅接受容器内部的连接。",
+      "loopbackHelp": "对于需要接收路由流量的应用，请监听 0.0.0.0 后重新部署，或将流量路由到其预期的代理。",
+      "openSettings": "打开设置",
+      "skipError": "无法忽略此警告，请重试。",
+      "title": "端口不匹配提示",
+      "bannerTitle": "检测到容器端口不匹配",
+      "review": "检查端口",
+      "note": "边缘路由器指向端口 {port}，但您的应用程序未在此响应。",
+      "body": "端口 {port} 上没有响应。如果您的应用程序监听其他端口，请在下方更新。",
+      "bodyService": "服务 \"{service}\"：端口 {port} 上没有响应。如果它监听其他端口，请在此处设置正确的端口。",
+      "newPortLabel": "正确端口",
+      "changePort": "更改端口",
+      "skip": "跳过",
+      "applied": "路由已更新至端口 {port}。",
+      "changeError": "无法更新端口。请重试。"
+    }
+  },
+  "deploymentHealth": {
+    "recheck": "重新检查健康状态",
+    "checking": "正在检查…",
+    "healthy": "服务运行正常",
+    "atDeployment": "部署时的警告",
+    "currentHealth": "当前服务状态",
+    "startupHint": "如果应用仍在启动，请稍等后重新检查。如果不断重启或报告错误，请打开日志查找原因。",
+    "viewLogs": "查看日志",
+    "unavailable": "无法验证健康状态。服务器恢复连接后请重试。",
+    "historical": "此部署已不再活动。请打开项目检查当前服务。"
   },
   "composeDeployment": {
     "title": {

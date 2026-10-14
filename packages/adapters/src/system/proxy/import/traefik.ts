@@ -298,18 +298,17 @@ export function parseTraefikLabels(containers: TraefikContainer[]): ProxyScanRes
   const imported = new Map<string, ImportedSite>();
   for (const [hostname, routes] of grouped) {
     const root = routes.find((route) => route.path === "/" && !route.exact);
-    if (!root) {
-      warnings.push(`traefik: ${hostname} has only Path/PathPrefix routes without a root — recreate it manually; no catch-all route was imported`);
-      continue;
-    }
+    // The primary target identifies the site; only the explicit route table
+    // defines its paths. Takeover uses a 404 root when no catch-all was found.
+    const primary = root ?? routes[0]!;
     const site: ImportedSite = {
       serverNames: [hostname],
       ssl: routes.some((route) => route.ssl),
-      target: { kind: "proxy", url: root.url },
-      ...(routes.length > 1 ? { routes: routes.map((route) => ({
+      target: { kind: "proxy", url: primary.url },
+      ...(!root || routes.length > 1 ? { routes: routes.map((route) => ({
         path: route.path, url: route.url, ...(route.exact ? { exact: true } : {}),
       })) } : {}),
-      source: `traefik container ${root.container}`,
+      source: `traefik container ${primary.container}`,
     };
     const key = JSON.stringify([site.target, site.ssl, site.routes, site.source]);
     const alias = imported.get(key);

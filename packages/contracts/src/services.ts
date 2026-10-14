@@ -96,6 +96,9 @@ export const LiveServiceContainerSchema = Type.Object({
   serviceName: Type.String(),
   containerId: nullableString,
   status: Type.String(),
+  health: Type.Optional(Type.Union([
+    Type.Literal("healthy"), Type.Literal("starting"), Type.Literal("unhealthy"), Type.Null(),
+  ])),
   ip: nullableString,
   hostPort: nullableNumber,
   imageRef: nullableString,

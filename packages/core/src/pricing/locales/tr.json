@@ -34,7 +34,6 @@
     "sharedBuilds": "Derlemeler sunucunuzu paylaşır; aylık süre sınırı yoktur",
     "power": "Uygulama başına en fazla {powerCpu} vCPU ve {powerRamGb} GB RAM",
     "projects": "{maxProjects} proje",
-    "projectsUnlimited": "Sınırsız proje",
     "freeSubdomains": "{freeSubdomains} ücretsiz {freeDomainSuffix} alt alan adı",
     "freeSubdomainsUnlimited": "Sınırsız ücretsiz {freeDomainSuffix} alt alan adı",
     "gitDeploys": "GitHub, GitLab veya herhangi bir Git uzak deposundan dağıtın",

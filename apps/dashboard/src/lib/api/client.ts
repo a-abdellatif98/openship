@@ -1,6 +1,7 @@
 import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { getRestApiBaseUrl } from "./urls";
 import { reportClientError } from "../error-reporting";
+import { localizeDiagnosisMessage } from "../i18n/localize-issues";
 
 /**
  * Standard API client for the Openship dashboard.
@@ -32,13 +33,29 @@ export function getApiBaseUrl(): string {
 /* ------------------------------------------------------------------ */
 
 /**
- * Optional callback invoked whenever a request fails at the network level
- * (server unreachable, connection refused, or request timeout).
+ * Optional callback for fetch transport failures before any HTTP response.
+ * Timeouts, caller cancellation, and request/response processing failures stay
+ * local to the request. Older outcomes cannot replace newer reachability evidence.
  * The root connection notice subscribes once; page-specific errors remain with
  * the request's caller. This hook never retries a failed operation.
  */
 let _networkErrorHandler: ((message: string) => void) | null = null;
 let _networkRecoveryHandler: (() => void) | null = null;
+let requestSequence = 0;
+let reachabilitySequence = 0;
+const callerAborts = new WeakSet<object>();
+
+function reportReachability(sequence: number, reachable: boolean): void {
+  if (sequence < reachabilitySequence) return;
+  reachabilitySequence = sequence;
+  try {
+    if (reachable) _networkRecoveryHandler?.();
+    else _networkErrorHandler?.("Cannot reach Openship. Check the connection and server availability.");
+  } catch (error) {
+    // A notice subscriber must not change the original request's outcome.
+    observeCaughtError(error, "dashboard/lib/api/client");
+  }
+}
 
 export function setNetworkErrorHandler(fn: ((message: string) => void) | null) {
   _networkErrorHandler = fn;
@@ -70,8 +87,8 @@ export class ApiError extends Error {
  *
  * `controller.abort()` is called with no reason, so the browser's own message is
  * `signal is aborted without reason` — which reached users as the entire error
- * text on the add-server "Test connection" button. One constant so the banner
- * and the per-call message can't drift.
+ * text on the add-server "Test connection" button. This is a per-request error;
+ * a slow endpoint is not evidence that the API is globally unavailable.
  */
 export const REQUEST_TIMEOUT_MESSAGE =
   "Request timed out. The server took too long to respond.";
@@ -101,15 +118,19 @@ export function isNetworkError(err: unknown): boolean {
 export function getApiErrorMessage(
   err: unknown,
   fallback = "Request failed",
+  msgs?: Record<string, string>,
 ): string {
   reportClientError(err);
   // Before the generic Error arm: an abort's own message is the browser's
   // internal wording, never something to show.
-  if (isAbortError(err)) return REQUEST_TIMEOUT_MESSAGE;
+  if (isAbortError(err)) {
+    const abortMsg = callerAborts.has(err as Error) ? "Request cancelled." : REQUEST_TIMEOUT_MESSAGE;
+    return msgs ? localizeDiagnosisMessage(abortMsg, msgs) : abortMsg;
+  }
   if (err instanceof ApiError) {
     const body = err.body as Record<string, unknown> | undefined;
-    if (body && typeof body.message === "string") return body.message;
-    if (body && typeof body.error === "string") return body.error;
+    if (body && typeof body.message === "string") return msgs ? localizeDiagnosisMessage(body.message, msgs) : body.message;
+    if (body && typeof body.error === "string") return msgs ? localizeDiagnosisMessage(body.error, msgs) : body.error;
     // TypeBox schema-validation 400s carry `{ success:false, errors:[{path,message}] }`
     // with no top-level message/error, so they used to collapse to the opaque
     // "API 400: Bad Request" (#427). Surface the first field error instead.
@@ -119,10 +140,13 @@ export function getApiErrorMessage(
       const path = typeof first.path === "string" ? first.path : "";
       if (message) return path ? `${path} ${message}` : message;
     }
-    return err.message || fallback;
+    const raw = err.message || fallback;
+    return msgs ? localizeDiagnosisMessage(raw, msgs) : raw;
   }
-  if (err instanceof Error) return err.message;
-  return fallback;
+  let msg: string;
+  if (err instanceof Error) msg = err.message;
+  else msg = fallback;
+  return msgs ? localizeDiagnosisMessage(msg, msgs) : msg;
 }
 
 /**
@@ -148,7 +172,8 @@ export type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   /** Per-request timeout in ms (default 15 000). */
   timeout?: number;
-  /** Set false after a mutation to avoid reusing a read started before it. */
+  /** Set false after a mutation to avoid reusing a read started before it.
+   * Requests with an external signal always bypass deduplication. */
   dedupe?: boolean;
   /** URL search params appended to the path. */
   params?: Record<string, string | number | boolean | undefined>;
@@ -184,6 +209,8 @@ export function setApiResourceScope(scope: string): void {
   if (resourceScope === scope) return;
   resourceScope = scope;
   inflightRequests.clear();
+  // Old-account requests must not update the new connection's notice.
+  reachabilitySequence = ++requestSequence;
 }
 
 function buildInflightKey(method: string, url: URL, headers?: HeadersInit): string {
@@ -219,7 +246,7 @@ async function request<T = unknown>(
   // Only deduping GETs avoids surprising consumers that issue back-to-
   // back mutations.
   const method = (init.method ?? "GET").toUpperCase();
-  if (method === "GET") {
+  if (method === "GET" && !init.signal) {
     const key = buildInflightKey(method, url, init.headers);
     const existing = inflightRequests.get(key);
     if (dedupe && existing) return existing as Promise<T>;
@@ -267,10 +294,16 @@ export function setActiveOrganizationId(orgId: string | null) {
   _currentOrgId = orgId;
   if (changed) organizationListeners.forEach(listener => listener());
   if (typeof window !== "undefined") {
-    if (orgId) {
-      window.localStorage.setItem("openship.activeOrgId", orgId);
-    } else {
-      window.localStorage.removeItem("openship.activeOrgId");
+    try {
+      if (window.localStorage) {
+        if (orgId) {
+          window.localStorage.setItem("openship.activeOrgId", orgId);
+        } else {
+          window.localStorage.removeItem("openship.activeOrgId");
+        }
+      }
+    } catch {
+      // diagnostics-ignore: localStorage write may fail in restricted/private browsing mode.
     }
   }
 }
@@ -282,7 +315,7 @@ export function getActiveOrganizationId(): string | null {
 
 // Restore from localStorage on module load so a page refresh keeps the
 // previously-active org in context until the auth hook sets a fresh one.
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && window.localStorage) {
   const stored = window.localStorage.getItem("openship.activeOrgId");
   if (stored) _currentOrgId = stored;
 }
@@ -293,39 +326,57 @@ async function doFetch<T>(
   timeout: number,
   init: Omit<RequestOptions, "body" | "timeout" | "params">,
 ): Promise<T> {
-  /* --- Timeout ---------------------------------------------------- */
+  const sequence = ++requestSequence;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-
-  /* --- Headers ---------------------------------------------------- */
-  const headers = new Headers(init.headers);
-  const rawBody =
-    body instanceof FormData ||
-    (typeof Blob !== "undefined" && body instanceof Blob) ||
-    body instanceof ArrayBuffer ||
-    ArrayBuffer.isView(body);
-
-  if (body && typeof body === "object" && !rawBody) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  // Always send X-Organization-Id when we know what org the user is
-  // viewing. The API uses this for list/create scope; detail endpoints
-  // ignore it (they derive org from the resource).
-  if (_currentOrgId && !headers.has("X-Organization-Id")) {
-    headers.set("X-Organization-Id", _currentOrgId);
-  }
-
-  /* --- Fetch ------------------------------------------------------ */
+  const externalSignal = init.signal;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  let callerCancelled = false;
+  let transportFailure = false;
+  const forwardAbort = () => {
+    if (controller.signal.aborted) return;
+    callerCancelled = true;
+    controller.abort(externalSignal?.reason);
+  };
   try {
-    const res = await fetch(url, {
+    externalSignal?.addEventListener("abort", forwardAbort, { once: true });
+    if (externalSignal?.aborted) forwardAbort();
+    controller.signal.throwIfAborted();
+
+    // Preparation errors (e.g. circular JSON or invalid headers) are not
+    // transport failures. Serialize before entering the fetch-only catch.
+    const headers = new Headers(init.headers);
+    const rawBody =
+      body instanceof FormData ||
+      (typeof Blob !== "undefined" && body instanceof Blob) ||
+      body instanceof ArrayBuffer ||
+      ArrayBuffer.isView(body);
+    if (body && typeof body === "object" && !rawBody) headers.set("Content-Type", "application/json");
+    if (_currentOrgId && !headers.has("X-Organization-Id")) headers.set("X-Organization-Id", _currentOrgId);
+    const fetchInit: RequestInit = {
       ...init,
       headers,
       credentials: "include",
       signal: controller.signal,
       body: rawBody ? (body as BodyInit) : body !== undefined ? JSON.stringify(body) : undefined,
-    });
-    _networkRecoveryHandler?.();
+    };
+    timer = setTimeout(() => {
+      if (controller.signal.aborted) return;
+      timedOut = true;
+      controller.abort();
+    }, timeout);
+
+    let res: Response;
+    try {
+      res = await fetch(url, fetchInit);
+    } catch (error) {
+      transportFailure = !controller.signal.aborted && isNetworkError(error);
+      if (transportFailure) reportReachability(sequence, false);
+      throw error;
+    }
+    // Any HTTP status proves reachability. Body decoding can fail afterward
+    // without turning that evidence into a global offline report.
+    reportReachability(sequence, true);
 
     if (!res.ok) {
       const text = await res.text().catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/lib/api/client"); return ""; });
@@ -348,19 +399,13 @@ async function doFetch<T>(
 
     return (await res.text()) as T;
   } catch (err) {
-    reportClientError(err, { operation: "api.request", method: init.method ?? "GET", route: url.pathname,
-      ...(isAbortError(err) ? { category: "timeout" as const } : isNetworkError(err) ? { category: "network" as const } : {}) });
-    // Network-level failures: server unreachable (TypeError) or request timeout (AbortError).
-    // Through the exported predicates, so the banner and `getApiErrorMessage`
-    // classify the same throw the same way.
-    if (isNetworkError(err)) {
-      _networkErrorHandler?.("Cannot reach Openship. Check the connection and server availability.");
-    } else if (isAbortError(err)) {
-      _networkErrorHandler?.(REQUEST_TIMEOUT_MESSAGE);
-    }
+    if (callerCancelled && err !== null && typeof err === "object") callerAborts.add(err);
+    if (!callerCancelled) reportClientError(err, { operation: "api.request", method: init.method ?? "GET", route: url.pathname,
+      ...(timedOut ? { category: "timeout" as const } : transportFailure ? { category: "network" as const } : {}) });
     throw err;
   } finally {
-    clearTimeout(timer);
+    if (timer !== undefined) clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", forwardAbort);
   }
 }
 

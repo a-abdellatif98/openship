@@ -94,7 +94,12 @@
     "grantRejectedTitle": "لا يمكن لحسابك منح ذلك",
     "grantRejected": "تمت إزالة {resource} لأن وصولك الخاص لا يشمله. راجع الملخص ثم فوّض مرة أخرى.",
     "deny": "رفض",
-    "authorize": "تفويض"
+    "authorize": "تفويض",
+    "dgReadSource": "قراءة محتويات الملف من المسارات التي حددتها",
+    "dgNotReadSource": "قراءة أي محتويات ملف من مستودعاتك",
+    "levelViewHint": "للقراءة فقط: الإعدادات والسجلات والبيانات الوصفية. بدون تغييرات.",
+    "levelManageHint": "النشر وإعادة التشغيل وتغيير الإعدادات. لا يمكن الحذف.",
+    "levelFullHint": "كل شيء، بما في ذلك حذف المورد نفسه."
   },
   "acceptInvite": {
     "invalidInvitation": "دعوة غير صالحة",
@@ -154,10 +159,25 @@
     "title": "تفويض الجهاز",
     "instancePre": "إن مثيل Openship على ",
     "instancePost": " يريد الاتصال بحساب Openship Cloud الخاص بك.",
+    "organization": "المؤسسة",
+    "switch": "تبديل",
+    "switchAccount": "تبديل الحساب",
+    "switchOrganization": "تبديل المؤسسة",
+    "choose": "اختيار",
+    "chooseOrganization": "اختر مؤسسة",
+    "chooseOrganizationHint": "اختر مؤسسة قبل الاتصال.",
+    "loadingOrganizations": "جارٍ تحميل المؤسسات…",
+    "organizationsError": "تعذر تحميل مؤسساتك. حاول مرة أخرى.",
+    "noOrganizations": "لا توجد مؤسسات متاحة لهذا الحساب.",
+    "switchOrganizationError": "تعذر تبديل المؤسسة. لم يتم التصريح بالاتصال.",
+    "switchAccountError": "تعذر تسجيل الخروج. حاول مرة أخرى لتبديل الحساب.",
+    "retry": "حاول مرة أخرى",
     "signedInAs": "مسجّل الدخول باسم",
     "authorizing": "جارٍ التفويض…",
     "authorize": "تفويض",
-    "cancel": "إلغاء"
+    "cancel": "إلغاء",
+    "deviceDoneTitle": "متصل بـ Openship Cloud",
+    "deviceDoneBody": "يمكنك إغلاق علامة التبويب هذه والعودة إلى جهازك الطرفي — سيستمر الإعداد تلقائياً."
   },
   "cloudConnect": {
     "noCode": "لم يتم تقديم رمز المصادقة. يرجى المحاولة مرة أخرى.",
@@ -224,7 +244,18 @@
     "restoreComplete": "اكتملت الاستعادة.",
     "restoreStatus": "الاستعادة {status}",
     "failed": "فشلت",
-    "close": "إغلاق"
+    "close": "إغلاق",
+    "cancelFailed": "فشل إلغاء الاستعادة",
+    "cancelPending": "تم طلب الإلغاء. تتوقف الاستعادة عند النقطة الآمنة التالية — ستظهر هذه النافذة النتيجة.",
+    "destructiveNotYet": "لم يتم كتابة أي شيء بعد، لذا فإن الإلغاء الآن آمن.",
+    "destructiveNow": "يتم كتابة البيانات. الإلغاء الآن يترك بيانات جزئية خلفه.",
+    "abortRestore": "إحباط الاستعادة",
+    "abortTitle": "إحباط هذه الاستعادة؟",
+    "abortBodyClean": "لم تكتب عملية الاستعادة أي شيء بعد. الإلغاء الآن يترك بياناتك كما هي تماماً؛ تتم إعادة تشغيل الخدمة إذا أوقفناها.",
+    "abortBodyDestructive": "بدأت الاستعادة بالفعل في الكتابة. يؤدي الإحباط الآن إلى ترك الهدف يحتوي على بيانات جزئية، وتُترك الخدمة متوقفة عمداً — أعد تشغيل هذه الاستعادة (أو أحدث منها) حتى تكتمل قبل بدء تشغيلها.",
+    "abortKeepGoing": "متابعة الاستعادة",
+    "abortConfirm": "نعم، إحباط",
+    "partialDataNotice": "يحتوي هدف الاستعادة على بيانات جزئية وتُركت الخدمة متوقفة عمداً. أعد تشغيل هذه الاستعادة (أو أحدث منها) حتى تكتمل قبل بدء تشغيلها."
   },
   "terminalTabs": {
     "shell": "جلسة {n}",
@@ -368,6 +399,19 @@
     "historyPage": "صفحة {page}",
     "incremental": "تزايدي",
     "moreContents": "+{count} أخرى",
-    "destinationDetails": "تفاصيل الوجهة"
+    "destinationDetails": "تفاصيل الوجهة",
+    "providerLabel": "المزود",
+    "providerAws": "AWS S3",
+    "providerR2": "Cloudflare R2",
+    "providerB2": "Backblaze B2",
+    "providerWasabi": "Wasabi",
+    "providerDo": "DigitalOcean Spaces",
+    "providerMinio": "MinIO / مخصص",
+    "fieldAccountId": "معرف الحساب",
+    "hintAccountId": "معرف حساب Cloudflare الخاص بك — يُستخدم لإنشاء نقطة نهاية R2.",
+    "hintEndpointMinio": "عنوان URL الكامل لنقطة نهاية S3، مثل https://minio.example.com:9000",
+    "testConnection": "اختبار الاتصال",
+    "testing": "جارٍ اختبار الاتصال…",
+    "testOk": "متصل — المجموعة قابلة للوصول وقابلة للكتابة."
   }
 }

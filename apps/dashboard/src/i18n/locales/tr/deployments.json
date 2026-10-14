@@ -201,5 +201,42 @@
     "next": "Sonraki sayfa",
     "pageOf": "Sayfa {page} / {total}",
     "range": "{total} dağıtımdan {from}–{to}"
+  },
+  "cloudBuildQueue": {
+    "label": "Bulut derleme kuyruğu",
+    "title": "Derleme kuyrukta",
+    "position": "Derleme kuyrukta · Sıra {position}",
+    "concurrency": "Eşzamanlı derleme için boş yer bekleniyor.",
+    "resources": "Sunucuda kullanılabilir CPU veya bellek bekleniyor.",
+    "server": "Sunucunun bu derlemeyi kabul etmesi bekleniyor.",
+    "automaticStart": "Otomatik olarak başlayacak.",
+    "allowance": "Planınızın izin verdiği eşzamanlı derleme sayısı: {count}.",
+    "unlimited": "Planınızda eşzamanlı derleme sınırı yok.",
+    "active": "Etkin derleme sayısı: {count}.",
+    "comparePlans": "Planları karşılaştır",
+    "optionalUpgrade": "Yükseltme isteğe bağlıdır. Beklemeye devam edebilirsiniz.",
+    "compareConcurrency": "Daha fazla eşzamanlı derleme için planları karşılaştırın. Derlemeniz kuyrukta kalabilir.",
+    "compareResources": "Daha fazla CPU veya bellek için planları karşılaştırın. Sunucu kaynakları kullanılabilir olana kadar beklemeye devam edebilirsiniz."
+  },
+  "monitoring": {
+    "title": "Dağıtım özeti",
+    "scope": "Seçilen proje ve arama · UTC takvim günleri · saklanan geçmiş",
+    "period": "Zaman aralığı",
+    "days": "{count} gün",
+    "refresh": "Yenile",
+    "attempts": "Dağıtım denemeleri",
+    "window": "Seçilen zaman aralığında",
+    "successRate": "Başarı oranı",
+    "rateHint": "Başarılı / (başarılı + başarısız); iptaller hariç",
+    "failedHint": "Kısmi ve engellenen sürümler dahil",
+    "activeHint": "Bu aralıkta çalışan veya sıradaki denemeler",
+    "unavailable": "Özet kullanılamıyor. Yenilemeyi deneyin.",
+    "trend": "Günlük sonuçlar",
+    "avgBuild": "Ortalama başarılı derleme",
+    "empty": "Bu aralıkta dağıtım yok.",
+    "projects": "Proje dökümü",
+    "projectHint": "Hatalara, sonra etkin denemelere göre ilk 6",
+    "failedShort": "başarısız",
+    "history": "Dağıtım geçmişi"
   }
 }

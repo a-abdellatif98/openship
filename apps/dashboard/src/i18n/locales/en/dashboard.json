@@ -86,7 +86,8 @@
       "system": "System",
       "account": "Account"
     },
-    "workspaces": "Workspaces"
+    "workspaces": "Workspaces",
+    "actions": "Actions"
   },
   "sidebar": {
     "expand": "Expand sidebar",
@@ -131,7 +132,15 @@
       "cancel": "Cancel",
       "nameLabel": "Name",
       "configTitle": "Configure {app}",
-      "comingSoon": "Coming soon"
+      "comingSoon": "Coming soon",
+      "addCustom": "Add custom",
+      "howToAddApp": "How to add an app",
+      "removeCustomApp": "Remove custom app",
+      "needsUpdateDesc": "Update your Openship instance to install this app.",
+      "needsUpdateBadge": "Needs update",
+      "needsVersionBadge": "Needs v{version}",
+      "removedToast": "Removed \"{name}\".",
+      "removeFailedToast": "Couldn't remove the app."
     },
     "projects": {
       "title": "Projects",

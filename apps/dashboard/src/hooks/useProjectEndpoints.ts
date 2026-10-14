@@ -176,6 +176,8 @@ interface AsyncState<T> {
   data: T | null;
   isLoading: boolean;
   error: string | null;
+  /** A read is in flight, including refreshes that retain visible data. */
+  isRefreshing: boolean;
 }
 
 // ─── Per-endpoint dedup caches ─────────────────────────────────────────────
@@ -306,12 +308,12 @@ function useEndpoint<T>(
   );
 
   const [state, setState] = useState<AsyncState<T>>(() => {
-    if (!id) return { data: null, isLoading: false, error: null };
+    if (!id) return { data: null, isLoading: false, error: null, isRefreshing: false };
     const cached = cache.get(key!);
     if (cached?.kind === "ready") {
-      return { data: cached.data, isLoading: false, error: null };
+      return { data: cached.data, isLoading: false, error: null, isRefreshing: false };
     }
-    return { data: null, isLoading: true, error: null };
+    return { data: null, isLoading: true, error: null, isRefreshing: true };
   });
 
   /**
@@ -328,7 +330,7 @@ function useEndpoint<T>(
     setOwner(key);
     if (!id) {
       loadedIdRef.current = null;
-      setState({ data: null, isLoading: false, error: null });
+      setState({ data: null, isLoading: false, error: null, isRefreshing: false });
       return;
     }
 
@@ -336,7 +338,7 @@ function useEndpoint<T>(
     const cached = cache.get(key!);
     if (cached?.kind === "ready" && (!pollMs || Date.now() - cached.updatedAt < pollMs)) {
       loadedIdRef.current = key;
-      setState({ data: cached.data, isLoading: false, error: null });
+      setState({ data: cached.data, isLoading: false, error: null, isRefreshing: false });
       return;
     }
 
@@ -345,7 +347,13 @@ function useEndpoint<T>(
     // Load-bearing rather than a nicety — see `beginFetchState`, which owns the reasoning and
     // the infinite-loop regression it exists to prevent.
     const loadedId = loadedIdRef.current;
-    setState((prev) => beginFetchState(prev, loadedId, key!));
+    setState((prev) => ({
+      ...beginFetchState(prev, loadedId, key!),
+      data: loadedId === key ? prev.data : null,
+      // Keep a failed read visible while Retry is pending; navigation clears it.
+      error: owner === key ? prev.error : null,
+      isRefreshing: true,
+    }));
 
     requestEndpoint(id, cache, fetcher, key!)
       .then((data) => {
@@ -354,7 +362,7 @@ function useEndpoint<T>(
         // synchronous (cancelled) and racy (idRef mismatch) cases.
         if (cancelled || idRef.current !== key || (revKey && getRevision(revKey) !== revision)) return;
         loadedIdRef.current = key;
-        setState({ data, isLoading: false, error: null });
+        setState({ data, isLoading: false, error: null, isRefreshing: false });
       })
       .catch((err: unknown) => {
         observeCaughtError(err, "dashboard/hooks/useProjectEndpoints");
@@ -363,10 +371,13 @@ function useEndpoint<T>(
         // permanently bricks the page until full reload.
         if (cancelled || idRef.current !== key || (revKey && getRevision(revKey) !== revision)) return;
         const message = err instanceof Error ? err.message : "Request failed";
-        // The data goes with the error, so the next revision must report loading again rather
-        // than revalidating something that is no longer on screen.
-        loadedIdRef.current = null;
-        setState({ data: null, isLoading: false, error: message });
+        // Failed refreshes retain this scope's last observation, never another project's.
+        setState((prev) => ({
+          data: loadedIdRef.current === key ? prev.data : null,
+          isLoading: false,
+          error: message,
+          isRefreshing: false,
+        }));
       });
 
     return () => {
@@ -389,18 +400,19 @@ function useEndpoint<T>(
       if (current?.kind === "ready" && Date.now() - current.updatedAt < pollMs) {
         // Another subscriber may have just refreshed the shared result.
         loadedIdRef.current = key;
-        setState((prev) => prev.data === current.data && !prev.error
+        setState((prev) => prev.data === current.data && !prev.error && !prev.isRefreshing
           ? prev
-          : { data: current.data, isLoading: false, error: null });
+          : { data: current.data, isLoading: false, error: null, isRefreshing: false });
         return;
       }
       const startedRevision = revKey ? getRevision(revKey) : 0;
+      setState((prev) => ({ ...prev, isRefreshing: true }));
       requestEndpoint(id, cache, fetcher, key!)
         .then((data) => {
           if (cancelled || idRef.current !== key ||
             (revKey && getRevision(revKey) !== startedRevision)) return;
           loadedIdRef.current = key;
-          setState({ data, isLoading: false, error: null });
+          setState({ data, isLoading: false, error: null, isRefreshing: false });
         })
         .catch((error: unknown) => {
           observeCaughtError(error, "dashboard/hooks/useProjectEndpoints");
@@ -410,6 +422,7 @@ function useEndpoint<T>(
             ...prev,
             isLoading: false,
             error: error instanceof Error ? error.message : "Request failed",
+            isRefreshing: false,
           }));
         });
     };
@@ -422,7 +435,7 @@ function useEndpoint<T>(
     };
   }, [id, key, cache, fetcher, pollMs, revKey]);
 
-  return owner === key ? state : { data: null, isLoading: !!id, error: null };
+  return owner === key ? state : { data: null, isLoading: !!id, error: null, isRefreshing: !!id };
 }
 
 // ─── Fetcher functions ─────────────────────────────────────────────────────
@@ -597,6 +610,7 @@ export function useAnalyticsData(id: string | null | undefined, domain?: string 
     isLoadingSummary: overview.isLoading,
     isLoadingPeriods: overview.isLoading,
     error: overview.error,
+    isRefreshing: overview.isRefreshing,
   };
 }
 
@@ -702,4 +716,9 @@ export function invalidateProjectCachesFor(ids: Iterable<string>) {
   for (const id of new Set(ids)) {
     if (id) invalidateProjectCaches(id);
   }
+}
+
+/** Retry failed reads while sharing pending reads and keeping healthy cached results. */
+export function retryProjectRequests(id: string): void {
+  bumpRevision(id);
 }

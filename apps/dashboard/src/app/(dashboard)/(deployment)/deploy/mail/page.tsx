@@ -37,11 +37,20 @@ import {
 } from "@/lib/api";
 import { getApiErrorCode, getApiErrorMessage } from "@/lib/api/client";
 import { mailHostname } from "@repo/core";
+import { usePlatform } from "@/context/PlatformContext";
+import { canManageMailServers } from "@/lib/mail-availability";
+import { CloudMailClient } from "@/app/(dashboard)/emails/_components/cloud-mail-client";
 
 /** The API's code for "this webmail predates the catalog app". */
 const LEGACY_WEBMAIL_CODE = "LEGACY_WEBMAIL";
 
 export default function DeployMailPage() {
+  const platform = usePlatform();
+  if (!canManageMailServers(platform)) return <CloudMailClient />;
+  return <DeployMailInner />;
+}
+
+function DeployMailInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const toast = useToast();
@@ -62,6 +71,7 @@ export default function DeployMailPage() {
   // Armed from the mail status (the normal path), or by a 409 LEGACY_WEBMAIL on a
   // stale page - either way the operator sees the notice before the button acts.
   const [replacing, setReplacing] = useState(false);
+  const [reconnectProjectId, setReconnectProjectId] = useState("");
 
   useEffect(() => {
     setBootReady(false);
@@ -71,6 +81,7 @@ export default function DeployMailPage() {
     setDestinationReady(false);
     setDomain("");
     setReplacing(false);
+    setReconnectProjectId("");
     if (!mailServerId) {
       setBootReady(true);
       return;
@@ -109,10 +120,13 @@ export default function DeployMailPage() {
     };
   }, [mailServerId, loadAttempt, t.chrome.apiDown.title]);
 
+  const recoveryCandidates = status?.webmailRecoveryCandidates ?? [];
+  const recovering = !!reconnectProjectId;
   const canSubmit = useMemo(() => (
     bootReady && destinationReady && !!destination?.serverId &&
+    (!recoveryCandidates.length || !!reconnectProjectId) &&
     /^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)
-  ), [bootReady, destinationReady, destination, domain]);
+  ), [bootReady, destinationReady, destination, domain, recoveryCandidates.length, reconnectProjectId]);
 
   const mailHostnameFromStatus = status?.domain ? mailHostname(status.domain) : "";
   // When cloud is chosen AND the chosen domain is the mail server's own
@@ -148,6 +162,7 @@ export default function DeployMailPage() {
         target,
         // Only ever true once the notice below has been on screen.
         replaceLegacy: replacing,
+        ...(reconnectProjectId ? { reconnectProjectId } : {}),
       });
       router.push(`/build/${deploymentId}`);
     } catch (err) {
@@ -160,6 +175,9 @@ export default function DeployMailPage() {
         toast.showToast(tm.legacyBody, "error", tm.legacyTitle);
         setSubmitting(false);
         return;
+      }
+      if (["WEBMAIL_RECONNECT_REQUIRED", "WEBMAIL_LINK_CHANGED"].includes(getApiErrorCode(err) ?? "")) {
+        setLoadAttempt((attempt) => attempt + 1);
       }
       toast.showToast(
         getApiErrorMessage(err, tm.deployFailed),
@@ -225,6 +243,36 @@ export default function DeployMailPage() {
             </div>
           )}
 
+          {bootReady && recoveryCandidates.length > 0 && (
+            <fieldset className="rounded-2xl bg-card p-5 space-y-3" disabled={submitting}>
+              <legend className="sr-only">{tm.reconnectTitle}</legend>
+              <div className="flex gap-3">
+                <UiIcon name="warning" className="size-4 text-warning shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{tm.reconnectTitle}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{tm.reconnectBody}</p>
+                </div>
+              </div>
+              {recoveryCandidates.map(candidate => (
+                <label key={candidate.projectId} className="flex items-center gap-3 rounded-xl bg-background p-3 cursor-pointer">
+                  <input type="radio" name="webmail-recovery" value={candidate.projectId}
+                    checked={reconnectProjectId === candidate.projectId}
+                    onChange={() => {
+                      setReconnectProjectId(candidate.projectId);
+                      setDomain(candidate.hostname);
+                      setDestination({ deployTarget: "server", serverId: candidate.serverId });
+                    }}
+                    className="accent-primary size-4 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-foreground truncate">{candidate.name}</span>
+                    <span className="block text-xs text-muted-foreground truncate">{candidate.hostname}</span>
+                  </span>
+                </label>
+              ))}
+              <p className="text-xs text-muted-foreground">{recovering ? tm.reconnectPlacement : tm.reconnectChoose}</p>
+            </fieldset>
+          )}
+
           <Section
             title={tm.deployToTitle}
             hint={tm.deployToHint}
@@ -245,7 +293,7 @@ export default function DeployMailPage() {
                 value={destination}
                 onChange={setDestination}
                 onReadyChange={setDestinationReady}
-                disabled={submitting}
+                disabled={submitting || recovering}
               />
             )}
           </Section>
@@ -270,7 +318,7 @@ export default function DeployMailPage() {
               placeholder={domainPlaceholder}
               spellCheck={false}
               autoComplete="off"
-              disabled={!bootReady || submitting}
+              disabled={!bootReady || submitting || recovering}
             />
           </Section>
         </div>
@@ -294,6 +342,11 @@ export default function DeployMailPage() {
             {submitting ? (
               <>
                 <UiIcon name="spinner" className="size-4 animate-spin" /> {tm.starting}
+              </>
+            ) : recovering ? (
+              <>
+                <UiIcon name="refresh" className="size-4" />
+                {tm.reconnectButton}
               </>
             ) : replacing ? (
               <>

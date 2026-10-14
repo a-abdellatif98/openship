@@ -2,6 +2,7 @@
 
 import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
+import { getPortCheckIssue } from "@repo/core";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -9,6 +10,7 @@ import { useProjectSettings } from "@/context/ProjectSettingsContext";
 import { RoutingConfigCard } from "./RoutingConfigCard";
 import { RouteRules } from "./RouteRules";
 import { RoutingUnsyncedCallout } from "./RoutingUnsyncedCallout";
+import { localizeDiagnosisMessage } from "@/lib/i18n/localize-issues";
 import { invalidateProjectCaches } from "@/hooks/useProjectEndpoints";
 import { getApiErrorMessage, projectsApi, deployApi, domainsApi, servicesApi, type Service, type ServiceInput } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
@@ -56,6 +58,7 @@ interface DnsRecord {
 }
 
 type DomainTone = "success" | "warning" | "danger" | "neutral";
+type PortHint = Pick<PortCheckUI, "port" | "serviceName" | "loopbackOnly">;
 
 /**
  * Which static-404 a routed path is hitting. Three distinct diagnoses with three
@@ -1246,19 +1249,21 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
     };
   }, [id]);
 
-  // Match a live "not listening" check to a card — by service id (compose) or
+  // Match a live port issue to a card — by service id (compose) or
   // routed port (single-app). Only a definitive checked result yields a hint.
-  const portHintFor = (
-    mappedPort?: number,
-    serviceId?: string,
-  ): { port: number; serviceName?: string } | null => {
+  const portHintFor = (mappedPort?: number, serviceId?: string): PortHint | null => {
     const match = portChecks.find(
       (c) =>
-        c.checked &&
-        !c.listening &&
+        getPortCheckIssue(c) !== null &&
         (serviceId ? c.serviceId === serviceId && c.port === mappedPort : c.serviceId == null && c.port === mappedPort),
     );
-    return match ? { port: match.port, serviceName: match.serviceName } : null;
+    return match
+      ? {
+          port: match.port,
+          serviceName: match.serviceName,
+          loopbackOnly: getPortCheckIssue(match) === "loopback-only",
+        }
+      : null;
   };
 
   // Static-output reachability, fetched once per static project (server apps
@@ -1326,6 +1331,8 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
 
       if (result.success) {
         showToast(interpolate(t.projectSettings.domains.toast.sslRenewed, { hostname }), "success");
+      } else if (result.pending) {
+        showToast(result.message, "info");
       } else {
         showToast(
           result.message || result.error || interpolate(t.projectSettings.domains.toast.sslRenewFailed, { hostname }),
@@ -2701,6 +2708,7 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
           domain/route cards so the primary domain list leads the page. */}
       {!serviceScope && <RoutingConfigCard
         id={id}
+        isCloudProject={isCloudProject}
         initial={projectData.routingConfig}
         onSaved={(cfg) => setProjectData((prev) => ({ ...prev, routingConfig: cfg }))}
       />}
@@ -2863,12 +2871,12 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
                 <UiIcon name="trash" className="size-4" />
               </span>
               <div className="min-w-0">
-                <h3 className="text-[14px] font-semibold text-foreground">Remove route</h3>
+                <h3 className="text-[14px] font-semibold text-foreground">{t.projectSettings.domains.removeRoute.title}</h3>
                 <p className="mt-0.5 break-all text-[12px] text-muted-foreground">{removeTarget.hostname}</p>
               </div>
             </div>
             <p className="px-5 pt-3 text-[12px] leading-relaxed text-muted-foreground">
-              The app keeps running — only this route and its edge registration are removed. You can add it back at any time.
+              {t.projectSettings.domains.removeRoute.description}
             </p>
             <div className="mt-5 flex justify-end gap-2 border-t border-border/40 px-5 py-4">
               <button
@@ -2886,7 +2894,7 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
                 className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-danger-solid px-4 text-[12px] font-medium text-white transition-colors hover:bg-danger-solid/90 disabled:opacity-50"
               >
                 {removing && <UiIcon name="spinner" className="size-4 animate-spin" />}
-                {removing ? "Removing…" : "Remove route"}
+                {removing ? t.projectSettings.domains.removeRoute.removing : t.projectSettings.domains.removeRoute.confirm}
               </button>
             </div>
           </div>
@@ -3113,8 +3121,8 @@ function DomainOverviewCard({
   onCopy?: (text: string) => void | Promise<void>;
   /** Open the records section immediately (used right after a failed verify). */
   autoOpenRecords?: boolean;
-  /** Live port-reachability advisory ("nothing responded on port X"). */
-  portHint?: { port: number; serviceName?: string } | null;
+  /** Live port-reachability advisory, including container-only listeners. */
+  portHint?: PortHint | null;
   /** Live static-output advisory — which of the three static-404 shapes this is. */
   outputHint?: OutputHint | null;
 }) {
@@ -3262,7 +3270,7 @@ function DomainOverviewCard({
           >
             <p className="text-[12px] font-semibold text-foreground">{d.diagnosis.title}</p>
             <p className="mt-1.5 whitespace-pre-wrap break-words text-[12px] leading-relaxed text-muted-foreground">
-              {domain.diagnosis.message?.trim() || d.diagnosis.reasons[domain.diagnosis.reason]}
+              {localizeDiagnosisMessage(domain.diagnosis.message?.trim(), t.issues?.messages) || d.diagnosis.reasons[domain.diagnosis.reason]}
             </p>
             {domain.diagnosis.message && domain.diagnosis.reason !== "verification" ? (
               <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
@@ -3328,8 +3336,20 @@ function DomainOverviewCard({
             <UiIcon name="warning" className="mt-0.5 size-3.5 shrink-0" />
             <span>
               {portHint.serviceName
-                ? interpolate(d.portHint.bodyService, { service: portHint.serviceName, port: String(portHint.port) })
-                : interpolate(d.portHint.body, { port: String(portHint.port) })}
+                ? interpolate(
+                    portHint.loopbackOnly
+                      ? t.importProject.deploymentProcessing.portAdvisory.loopbackBodyService
+                      : d.portHint.bodyService,
+                    { service: portHint.serviceName, port: String(portHint.port) },
+                  )
+                : interpolate(
+                    portHint.loopbackOnly
+                      ? t.importProject.deploymentProcessing.portAdvisory.loopbackBody
+                      : d.portHint.body,
+                    { port: String(portHint.port) },
+                  )}
+              {portHint.loopbackOnly &&
+                ` ${t.importProject.deploymentProcessing.portAdvisory.loopbackHelp}`}
             </span>
           </div>
         ) : null}

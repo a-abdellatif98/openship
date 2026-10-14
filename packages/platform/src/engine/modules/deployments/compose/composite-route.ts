@@ -170,11 +170,11 @@ export function buildCompositeRegistration(input: {
 /**
  * Migration path-fan-out equivalent of {@link buildCompositeRegistration}: given
  * the project's persisted `compositeRoutes` + a live-upstream resolver, produce
- * one `RouteRegister` per domain (root service at `/`, each extra path prefix
+ * one `RouteRegister` per domain (optional root service at `/`, each path prefix
  * proxied to its service). PURE — callers supply the resolver (deploy loop from
  * `results[].ip`, routing API from `service_deployment.ip`). A route with any
  * unresolved upstream is skipped: replacing it with a partial table would send
- * that path to the root service. Unlike `buildCompositeRegistration` this
+ * that path to the root service or a 404. Unlike `buildCompositeRegistration` this
  * expresses ARBITRARY multi-service fan-out, not the 1-static + 1-server shape.
  */
 type DomainOwners = ReadonlyMap<string, Pick<Domain, "serviceId">>;
@@ -186,6 +186,15 @@ export function resolveDomainFanoutRoutes(input: {
   domainByHostname?: DomainOwners;
 }): ProjectCompositeRoute[] {
   return (input.routes ?? []).flatMap((route) => {
+    if (!route.rootServiceId) {
+      // Path-only domains belong to the project, with no implicit service at `/`.
+      // Keep the complete table: a missing path target must block replacement.
+      if (input.domainByHostname) {
+        const owner = input.domainByHostname.get(route.hostname.toLowerCase());
+        if (!owner || owner.serviceId) return [];
+      }
+      return route.locations.length ? [route] : [];
+    }
     const service = input.services.find((row) => row.id === route.rootServiceId);
     if (!service?.enabled) return [];
     // A project-level route can target an internal service. Only service-owned
@@ -208,8 +217,10 @@ export function buildDomainFanoutRegistrations(input: {
   const out: RouteRegister[] = [];
   const routes = input.services ? resolveDomainFanoutRoutes({ ...input, services: input.services }) : input.routes ?? [];
   for (const route of routes) {
-    const rootUrl = input.resolveTargetUrl(route.rootServiceId, route.rootPort);
-    if (!rootUrl) {
+    const rootUrl = route.rootServiceId
+      ? input.resolveTargetUrl(route.rootServiceId, route.rootPort)
+      : null;
+    if (route.rootServiceId && !rootUrl) {
       input.onWarning?.(`${route.hostname}: the root service has no live upstream; its route was not replaced.`);
       continue;
     }
@@ -231,10 +242,11 @@ export function buildDomainFanoutRegistrations(input: {
       }
     }
     if (!complete) continue;
+    if (!rootUrl && proxyLocations.length === 0) continue;
     out.push({
       hostname: route.hostname,
       isCustomDomain: route.isCustomDomain,
-      targetUrl: rootUrl,
+      ...(rootUrl ? { targetUrl: rootUrl } : { notFound: true as const }),
       ...(proxyLocations.length ? { proxyLocations } : {}),
     });
   }

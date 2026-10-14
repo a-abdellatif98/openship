@@ -98,6 +98,8 @@ export interface ComposePipelineOpts {
   cloneOnServer?: boolean;
   /** Outer deployment cancellation signal. */
   signal?: AbortSignal;
+  /** All image-build tasks have settled; deployment/health checks do not occupy a build slot. */
+  onBuildFinished?: () => Promise<void>;
 }
 
 async function cleanupBuiltArtifacts(
@@ -297,6 +299,13 @@ export async function executeComposePipeline(opts: ComposePipelineOpts): Promise
     refreshServiceIds,
     signal: opts.signal,
   });
+
+  try {
+    await opts.onBuildFinished?.();
+  } catch (error) {
+    await cleanupBuiltArtifacts(runtime, composeBuild.builtImageRefs, logger);
+    throw error;
+  }
 
   // Cancelled during the image phase: stop here. setDeploymentStatus below has no
   // terminal-state guard, so without this the cancelled row would be flipped back

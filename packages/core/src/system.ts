@@ -113,6 +113,8 @@ export const SYSTEM = {
     VERIFICATION_PREFIX: "_openship-challenge",
     /** SSL renewal scheduler interval (ms) */
     SSL_RENEW_INTERVAL_MS: 6 * 60 * 60 * 1000, // 6 hours
+    /** Minimum age before observing a managed Cloud hostname's HTTPS again. */
+    SSL_HEALTH_CHECK_INTERVAL_MS: 5 * 60 * 1000,
     /** How many days before expiry to trigger renewal */
     SSL_RENEW_BEFORE_DAYS: 14,
     /** Maximum domains to renew per scheduler run */

@@ -12,7 +12,6 @@ vi.mock("@/lib/api", () => ({
 }));
 vi.mock("./DeploymentMenu", () => ({ DeploymentMenu: () => null }));
 vi.mock("./CommitDetailsModal", () => ({ CommitDetailsModal: () => null }));
-vi.mock("@/components/import-project/Frameworks", () => ({ getFrameworkConfig: () => ({}) }));
 
 // Next integrates history.replaceState with useSearchParams. Reproduce that
 // notification at the router boundary while rendering the real history UI.
@@ -65,8 +64,8 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-async function mount(projectId?: string) {
-  await act(async () => root.render(<I18nProvider><DeploymentsContent projectId={projectId} hideHeader hideSidebar /></I18nProvider>));
+async function mount(projectId?: string, monitoring = false) {
+  await act(async () => root.render(<I18nProvider><DeploymentsContent monitoring={monitoring} projectId={projectId} hideHeader hideSidebar /></I18nProvider>));
 }
 function button(label: string) {
   const button = [...container.querySelectorAll("button")].find(node => node.textContent?.trim().toLowerCase() === label.toLowerCase() || node.getAttribute("aria-label") === label);
@@ -158,4 +157,24 @@ describe("deployment history filters survive navigation", () => {
     expect(h.project.mock.lastCall?.[1]).toMatchObject({ page: 1, status: "failed" });
     expect(window.history.replaceState).not.toHaveBeenCalled();
   });
+});
+
+it("renders unpaginated outcomes and drills down without losing the Monitoring tab", async () => {
+  navigate("?tab=deployments&days=7");
+  h.all.mockImplementation(async params => ({ ...result(params.page), summary: {
+    days: params.days, total: 140, success: 100, failed: 25, active: 5, canceled: 10,
+    avgBuildDurationMs: 12000, daily: [], projects: [{ projectId: "p2", total: 40, success: 15, failed: 25, active: 0, canceled: 0 }],
+  } }));
+  await mount(undefined, true);
+  expect(h.all.mock.lastCall?.[0]).toMatchObject({ days: 7 });
+  const overview = container.querySelector('section[aria-label="Deployment overview"]')!;
+  expect(overview.textContent).toContain("140");
+  expect(overview.textContent).toContain("80%");
+  const active = [...overview.querySelectorAll("button")].find(b => b.textContent?.includes("In Progress"))!;
+  await act(async () => active.click());
+  expect(h.all.mock.lastCall?.[0]).toMatchObject({ status: "active", days: 7 });
+  expect(params().get("tab")).toBe("deployments");
+  await click("90 days");
+  expect(h.all.mock.lastCall?.[0]).toMatchObject({ days: 90, page: 1 });
+  expect(params().get("days")).toBe("90");
 });

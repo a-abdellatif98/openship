@@ -12,6 +12,7 @@ const {
   getLatestCommit,
   requireClusterDeploymentTarget,
   kickoffBuild,
+  queueActionDeployment,
   repos,
   resolveProjectInfo,
   resolveProjectSourceEnv,
@@ -30,7 +31,9 @@ const {
   getLatestCommit: vi.fn(),
   requireClusterDeploymentTarget: vi.fn(),
   kickoffBuild: vi.fn(),
+  queueActionDeployment: vi.fn(),
   repos: {
+    actions: { deploymentForActionRequest: vi.fn() },
     projectConnection: { listByTarget: vi.fn(async () => []) },
     project: {
       findById: vi.fn(),
@@ -87,6 +90,8 @@ vi.mock("@repo/db", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   repos,
 }));
+
+vi.mock("@repo/platform/engine/modules/actions/deployment-gate", () => ({ queueActionDeployment }));
 
 vi.mock("@repo/platform/engine/modules/deployments/preflight", () => ({
   runPreflightChecks,
@@ -614,6 +619,8 @@ describe("buildConfigSnapshot — release commands", () => {
 describe("triggerDeployment", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    queueActionDeployment.mockReset().mockResolvedValue(undefined);
+    repos.actions.deploymentForActionRequest.mockReset().mockResolvedValue(undefined);
     repos.deployment.listInFlightByProject.mockResolvedValue([]);
 
     repos.project.findById.mockResolvedValue(baseProject());
@@ -654,6 +661,33 @@ describe("triggerDeployment", () => {
     });
     runPreflightChecks.mockResolvedValue({ ok: true, checks: [] });
     kickoffBuild.mockResolvedValue("session-1");
+  });
+
+  it("returns a required-check receipt without starting a deployment or reconciling configuration", async () => {
+    queueActionDeployment.mockResolvedValue({ id: "receipt-1", status: "waiting" });
+    const result = await triggerDeployment(ctx, { projectId: "project-1", trigger: "webhook", branch: "main", commitSha: "a".repeat(40) });
+    expect(result).toMatchObject({ awaitingActions: { id: "receipt-1" }, skipped: true });
+    expect(repos.deployment.create).not.toHaveBeenCalled();
+    expect(resolveProjectInfo).not.toHaveBeenCalled();
+    expect(kickoffBuild).not.toHaveBeenCalled();
+  });
+
+  it("uses the checked commit for Compose and lifecycle reads before the normal deployment pipeline", async () => {
+    const sha = "a".repeat(40);
+    repos.project.findById.mockResolvedValue(baseProject({ gitOwner: "acme", gitRepo: "app", gitUrl: "https://github.com/acme/app", gitProvider: "github", localPath: null }));
+    await triggerDeployment(ctx, { projectId: "project-1", trigger: "actions", branch: "main", commitSha: sha, actionRequestId: "receipt-1", actionLeaseOwner: "controller-1" });
+    expect(resolveProjectInfo).toHaveBeenCalledWith(expect.objectContaining({ branch: sha }));
+    expect(repos.deployment.create).toHaveBeenCalledWith(expect.objectContaining({ branch: "main", commitSha: sha, actionRequestId: "receipt-1" }), undefined, "controller-1");
+    expect(kickoffBuild).toHaveBeenCalledOnce();
+  });
+
+  it("recovers queue submission for an accepted Actions deployment without creating another one", async () => {
+    const existing = { id: "dep-accepted", projectId: "project-1", status: "queued" };
+    repos.actions.deploymentForActionRequest.mockResolvedValue(existing);
+    const result = await triggerDeployment(ctx, { projectId: "project-1", trigger: "actions", actionRequestId: "receipt-1", actionLeaseOwner: "controller-2" });
+    expect(result.deployment).toEqual(existing);
+    expect(repos.deployment.create).not.toHaveBeenCalled();
+    expect(kickoffBuild).toHaveBeenCalledWith(expect.objectContaining({ id: "project-1" }), existing);
   });
 
   it.each(["trigger", "refresh", "build-access"])(
@@ -882,6 +916,74 @@ describe("triggerDeployment", () => {
     },
   );
 
+  it.each([null, "  "])(
+    "reconciles an imported Compose project behind app markers with an unset path %j (#1020)",
+    async (composePath) => {
+      const localPath = mkdtempSync(join(tmpdir(), "openship-compose-app-markers-"));
+      try {
+        writeFileSync(
+          join(localPath, "package.json"),
+          JSON.stringify({ devDependencies: { vite: "^6.0.0" } }),
+        );
+        writeFileSync(join(localPath, "vite.config.ts"), "export default {};\n");
+        writeFileSync(join(localPath, "Dockerfile"), "FROM node:22-alpine\n");
+        writeFileSync(
+          join(localPath, "compose.yaml"),
+          [
+            "services:",
+            "  web:",
+            "    build: .",
+            "    environment:",
+            "      SOURCE_VALUE: refreshed",
+          ].join("\n"),
+        );
+        const baseline = { ...composeServices[0], buildArgs: {}, environment: {} };
+        const state = installStatefulComposeRepo({
+          ...baseline,
+          projectId: "project-1",
+          environment: { OPERATOR_VALUE: "keep-me" },
+          importedSpec: toComposeSpec(baseline),
+        });
+        repos.project.findById.mockResolvedValue(
+          baseProject({
+            framework: "docker",
+            composePath,
+            localPath,
+          }),
+        );
+        const actualPrepare = await vi.importActual<
+          typeof import("@repo/platform/engine/modules/deployments/prepare.service")
+        >("@repo/platform/engine/modules/deployments/prepare.service");
+        resolveProjectInfo.mockImplementationOnce(actualPrepare.resolveProjectInfo);
+        const actualPipeline = await vi.importActual<
+          typeof import("@repo/platform/engine/modules/deployments/build-pipeline")
+        >("@repo/platform/engine/modules/deployments/build-pipeline");
+        resolveServicePipelineMode.mockImplementationOnce(
+          actualPipeline.resolveServicePipelineMode,
+        );
+
+        await triggerDeployment(ctx, { projectId: "project-1" });
+
+        expect(state.stored().environment).toEqual({
+          SOURCE_VALUE: "refreshed",
+          OPERATOR_VALUE: "keep-me",
+        });
+        expect(repos.service.reconcileFromCompose).toHaveBeenCalledOnce();
+        expect(repos.deployment.create).toHaveBeenCalledOnce();
+        expect(repos.deployment.create.mock.calls[0]![0].meta.composeServices).toEqual([
+          expect.objectContaining({
+            name: "web",
+            build: ".",
+            environment: { SOURCE_VALUE: "refreshed", OPERATOR_VALUE: "keep-me" },
+          }),
+        ]);
+        expect(kickoffBuild).toHaveBeenCalledOnce();
+      } finally {
+        rmSync(localPath, { recursive: true, force: true });
+      }
+    },
+  );
+
   it.each([
     { framework: "node", importedSpec: toComposeSpec(composeServices[0]) },
     { framework: "unknown", importedSpec: null },
@@ -905,6 +1007,11 @@ describe("triggerDeployment", () => {
       try {
         mkdirSync(join(localPath, "go-api"));
         writeFileSync(join(localPath, "go-api", "Dockerfile"), "FROM node:22-alpine\n");
+        // This belongs to local development, not the native production services.
+        writeFileSync(
+          join(localPath, "go-api", "compose.yaml"),
+          "services:\n  dev-db:\n    image: postgres:16\n    network_mode: host\n",
+        );
         const config = {
           rootDirectory: manifestLocation === "repository" ? "go-api" : "./",
           env: { API_URL: "https://source.example.com" },
@@ -1953,7 +2060,7 @@ describe("redeployBuildSession environment snapshot", () => {
     );
   });
 
-  it("refreshes missing Cloud app defaults before freezing a failed installation's retry", async () => {
+  it("keeps missing service limits unset when freezing a Cloud app retry", async () => {
     const project = baseProject({
       appTemplateId: "supabase",
       isApp: true,
@@ -1999,7 +2106,10 @@ describe("redeployBuildSession environment snapshot", () => {
       services: queued.meta.composeServices.map((service: { advanced: { resources: ResourceValues } }) => ({
         resources: service.advanced.resources,
       })),
-    })).toEqual({ cpuCores: 4, memoryMb: 8192, diskMb: 40960 });
+    })).toEqual({ cpuCores: 0.25, memoryMb: 1024, diskMb: 8192 });
+    expect(repos.service.seedDraftAppResourceDefaults).not.toHaveBeenCalled();
+    expect(queued.meta.composeServices.every((service: { advanced: { resources?: ResourceValues } }) =>
+      service.advanced.resources === undefined)).toBe(true);
     expect(queued.envVars).toEqual({ MANUAL_ENV: "keep-me" });
     expect(queued.meta.composeServices.every((service: { advanced: { stopGracePeriod: string } }) =>
       service.advanced.stopGracePeriod === "30s")).toBe(true);

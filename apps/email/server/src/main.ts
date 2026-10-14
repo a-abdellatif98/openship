@@ -35,6 +35,7 @@ import { getSession } from './lib/session';
 import { getBranding, assetsDir } from './lib/branding';
 import { renderIndexHtml } from './lib/index-html';
 import { brandingAdminRoute } from './routes/branding-admin';
+import type { Server } from 'bun';
 
 const app = new Hono();
 
@@ -182,5 +183,13 @@ console.log(`[zero] listening on http://localhost:${port}`);
 
 export default {
   port,
-  fetch: app.fetch,
+  async fetch(request: Request, server: Server<unknown>) {
+    const response = await app.fetch(request);
+    // Quiet SSE responses outlive Bun's default ten-second idle timeout.
+    // Keep ordinary request timeouts intact.
+    if (response.headers.get('Content-Type')?.startsWith('text/event-stream')) {
+      server.timeout(request, 0);
+    }
+    return response;
+  },
 };

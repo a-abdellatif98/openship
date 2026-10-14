@@ -221,7 +221,8 @@
     "off": "desactivado",
     "previewTitle": "Vista previa del despliegue",
     "previewHint": "Continúa para configurar tu app. El despliegue se inicia desde la siguiente página.",
-    "back": "Volver"
+    "back": "Volver",
+    "gpuBadge": "GPU"
   },
   "summary": {
     "buildAndDeploy": "Compilar y desplegar:",
@@ -305,7 +306,12 @@
     "legacyBody": "Lo desplegó una versión anterior de Openship que entregaba el webmail como paquete en lugar de imagen, así que no se puede volver a desplegar. Desplegar ahora lo elimina —el proyecto, el contenedor y su base de datos de sesiones— e instala la app de webmail en su lugar. Todas las personas con la sesión iniciada se desconectan y se pierden los ajustes de webmail de cada usuario.",
     "legacyKept": "Los buzones, los datos de correo y todos los mensajes permanecen intactos en el servidor de correo.",
     "deployFailedTitle": "El despliegue falló",
-    "deployFailed": "No se pudo iniciar el despliegue"
+    "deployFailed": "No se pudo iniciar el despliegue",
+    "reconnectTitle": "Volver a vincular el webmail existente",
+    "reconnectBody": "Falta su vínculo con el servidor de correo. Elige la aplicación existente para conservar su proyecto, credenciales y configuración.",
+    "reconnectChoose": "Elige la aplicación de webmail que quieres vincular antes de continuar.",
+    "reconnectPlacement": "Se conservan el servidor y el nombre de host actuales. Puedes cambiar el destino después.",
+    "reconnectButton": "Vincular y desplegar"
   },
   "serveMode": {
     "heading": "How it's served",

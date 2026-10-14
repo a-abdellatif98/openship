@@ -244,7 +244,7 @@ r.get(
 );
 r.post(
   "/webmail/deploy-project",
-  { tag: "mail_server:write", mcp: { description: "Deploy webmail for an existing mail server to a permitted target. Both self and cloud targets need target.serverId; use the local ID of a connected managed server for Cloud. Returns projectId and deploymentId for normal deployment monitoring. replaceLegacy=true explicitly replaces an older unmanaged webmail installation." }, body: MailRequestSchemas.deployWebmail },
+  { tag: "mail_server:write", mcp: { description: "Deploy webmail for an existing mail server to a permitted target. Both self and cloud targets need target.serverId; use the local ID of a connected managed server for Cloud. Returns projectId and deploymentId for normal deployment monitoring. reconnectProjectId explicitly reuses an unlinked webmail on its existing mail server and hostname. replaceLegacy=true explicitly replaces an older unmanaged webmail installation." }, body: MailRequestSchemas.deployWebmail },
   webmail.startDeployAsProjectHandler,
 );
 // External-backend webmail (BYO IMAP/SMTP — SES / custom). No mail server.

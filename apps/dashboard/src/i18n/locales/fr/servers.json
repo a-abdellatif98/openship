@@ -43,8 +43,6 @@
     "emptyDescription": "Connectez un serveur via SSH et Openship s'occupe du reste : Docker, OpenResty, SSL et déploiements sont tous configurés automatiquement.",
     "addFirstServer": "Ajouter votre premier serveur",
     "whatGetsConfigured": "Ce qui est configuré",
-    "dockerDesc": "Environnement d'exécution des conteneurs",
-    "openRestyDesc": "Proxy inverse et SSL",
     "monitoring": "Supervision",
     "monitoringDesc": "Vérifications de l'état",
     "gitDesc": "Déploiements depuis les sources",
@@ -109,7 +107,12 @@
       "skippedMany": "{n} à traiter depuis leur propre page",
       "nothingToDo": "Rien à appliquer",
       "applyFailed": "Impossible de lancer les mises à jour"
-    }
+    },
+    "featContainer": "Environnement d'exécution de conteneurs",
+    "featContainerDesc": "Exécute chaque application de manière isolée",
+    "featProxy": "Proxy inverse",
+    "featProxyDesc": "Routage et SSL",
+    "seeDocs": "Voir la documentation"
   },
   "containers": {
     "subtitle": "Conteneurs edge et messagerie sur ce serveur",
@@ -191,7 +194,18 @@
     "toastKeyPathTestRequired": "Le chemin de la clé est requis pour tester la connexion",
     "toastConnectionSuccess": "Connexion réussie",
     "toastConnectionFailed": "Échec de la connexion",
-    "toastConnectionTestFailed": "Échec du test de connexion"
+    "toastConnectionTestFailed": "Échec du test de connexion",
+    "keyModePaste": "Coller / Téléverser",
+    "keyModePath": "Chemin sur l'hôte",
+    "keyPathBrowse": "Parcourir…",
+    "keyPathHelp": "Chemin absolu vers la clé privée sur la machine exécutant Openship.",
+    "keyPaste": "Clé privée",
+    "keyPastePlaceholder": "-----BEGIN OPENSSH PRIVATE KEY-----\n…",
+    "keyPasteHelp": "Les clés collées sont chiffrées au repos et ne quittent jamais le serveur.",
+    "keyStoredKeep": "Une clé est enregistrée — collez-en une nouvelle pour la remplacer ou laissez vide pour la conserver.",
+    "keyUploadFile": "Téléverser le fichier de clé",
+    "keyPasteInvalid": "Ce fichier ne semble pas être une clé privée valide.",
+    "toastKeyRequired": "Une clé privée est requise"
   },
   "detail": {
     "tabs": {
@@ -280,7 +294,11 @@
       "toastRemovedKeptOther": "Serveur supprimé. {count} charges de travail ont été retirées d'Openship et continuent de tourner.",
       "toastRemovedDestroyedOne": "Serveur supprimé. 1 charge de travail a été supprimée de la machine.",
       "toastRemovedDestroyedOther": "Serveur supprimé. {count} charges de travail ont été supprimées de la machine."
-    }
+    },
+    "sshPort": "Port SSH : {port}",
+    "port": "Port",
+    "reinstallDockerTitle": "Réinstaller Docker sur ce serveur ?",
+    "reinstallDockerMessage": "Cela exécute le programme d'installation officiel de Docker, qui télécharge le moteur actuel — sur un serveur à jour, il s'agit d'une mise à niveau majeure. L'installation ou la mise à niveau de Docker redémarre le démon, ce qui redémarre tous les conteneurs sur ce serveur, y compris tout ce qu'Openship exécute ici. Rien d'autre n'installe Docker pour vous : les autres étapes l'ignorent tant qu'il fonctionne."
   },
   "banner": {
     "unreachableTitle": "Impossible de joindre {host}",
@@ -298,7 +316,18 @@
     "retry": "Réessayer",
     "editCredentials": "Modifier les identifiants",
     "editServer": "Modifier le serveur",
-    "showRawError": "Afficher l'erreur brute"
+    "showRawError": "Afficher l'erreur brute",
+    "hostChannelTitle": "Openship ne peut pas joindre l'hôte de cette machine",
+    "hostChannelBody": "Openship s'exécute dans un conteneur ici et communique avec l'hôte via SSH sur {target}. Aucune réponse n'a été reçue, il est donc impossible d'exécuter des opérations au niveau de l'hôte sur cette machine.",
+    "hostChannelImpact": "Les déploiements ordinaires sur cette machine fonctionnent toujours — ils passent par le socket Docker. Sont bloqués jusqu'à ce que le canal fonctionne : le terminal hôte, les informations système de l'hôte et les analyses de ports de l'hôte ; la reprise de :80/:443 depuis un proxy non démarré par Openship ; l'installation ou la mise à jour du moteur de messagerie ; le déploiement d'une application du catalogue nécessitant un fichier de configuration généré sur l'hôte (par exemple kong.yml de Supabase). Cette machine apparaît également comme « Hors ligne » dans la liste des serveurs du tableau de bord tant que le canal est inactif.",
+    "hostChannelFix": "Exécutez ceci sur l'hôte, puis réessayez :",
+    "hostChannelMissingTitle": "Openship n'a aucun canal vers l'hôte de cette machine",
+    "hostChannelMissingBody": "Openship s'exécute dans un conteneur ici, et le canal SSH utilisé pour joindre l'hôte n'a jamais été configuré. Il n'y avait aucune adresse à contacter, donc rien n'est en panne ici — les opérations au niveau de l'hôte sur cette machine n'ont simplement nulle part où s'exécuter.",
+    "hostChannelWouldUse": "Une fois configuré, le canal joindra l'hôte sur {target}. Rien n'a encore contacté cette adresse.",
+    "hostChannelProvisionFix": "Exécutez ceci sur l'hôte pour configurer le canal, puis réessayez :",
+    "hostChannelAuthTitle": "L'hôte a refusé la clé d'Openship",
+    "hostChannelAuthBody": "Openship s'exécute dans un conteneur ici et joint l'hôte via SSH sur {target}. L'hôte a répondu puis a rejeté la clé, les opérations au niveau de l'hôte ne peuvent donc pas s'exécuter. Soit la clé n'plus autorisée pour ce compte, soit sshd n'autorise pas du tout ce compte à se connecter. Les identifiants SSH stockés sur ce serveur ne sont pas utilisés pour cette connexion — le canal possède sa propre clé.",
+    "hostChannelReauthorizeFix": "Exécutez ceci sur l'hôte pour réautoriser la clé du canal, puis réessayez :"
   },
   "overview": {
     "cpu": "Processeur",
@@ -347,7 +376,12 @@
     "statusInstalled": "Installé",
     "statusRemoved": "Supprimé",
     "statusFailed": "Échec",
-    "statusWaiting": "En attente"
+    "statusWaiting": "En attente",
+    "roleDocker": "Environnement d'exécution de conteneurs",
+    "roleGit": "Gestion de versions",
+    "roleOpenresty": "Proxy inverse",
+    "roleCertbot": "Certificats SSL",
+    "roleRsync": "Transfert de fichiers"
   },
   "ports": {
     "title": "Redirection de ports",
@@ -1108,7 +1142,86 @@
       "rulesUnavailable": "Les règles sortantes sont indisponibles. Actualisez avant de les modifier.",
       "invalidRules": "Saisissez 1 à 50 destinations. Utilisez * seul ou des noms d’hôte/IP sans URL, port ni chemin.",
       "confirm": "Appliquer ces règles sortantes à tous les projets du serveur ? Désactiver Internet efface la liste des destinations autorisées. Sa réactivation utilise les destinations affichées ci-dessus.",
-      "routingHint": "Les domaines publics, TLS et les réseaux privés utilisent les outils de projets et de réseaux d’Openship. Ce formulaire ne modifie ni leurs routes, ni les règles entrantes, ni les identifiants de proxy."
+      "routingHint": "Les domaines publics, TLS et les réseaux privés utilisent les outils de projets et de réseaux d’Openship. Ce formulaire ne modifie ni leurs routes, ni les règles entrantes, ni les identifiants de proxy.",
+      "policyTitle": "Accès Internet",
+      "policyHint": "Contrôlez les destinations accessibles aux applications et aux builds.",
+      "addresses": "Adresse privée et trafic entrant"
+    },
+    "outbound": {
+      "title": "Connexion sortante",
+      "description": "Choisissez comment ce serveur accède à Internet.",
+      "currentIp": "IP sortante actuelle",
+      "managed": "Géré par Openship",
+      "custom": "Proxy personnalisé",
+      "unavailable": "Les réglages actuels n’ont pas pu être vérifiés. Actualisez avant toute modification.",
+      "connection": "Type de connexion",
+      "address": "Adresse IP gérée",
+      "search": "Rechercher une IP ou un pays",
+      "optionsFailed": "Impossible de charger les adresses disponibles.",
+      "managedHint": "Choisissez une IP gérée. Automatique conserve l’adresse gérée actuelle ou en attribue une lors du remplacement d’un proxy personnalisé.",
+      "host": "Adresse IPv4 du proxy",
+      "port": "Port",
+      "protocol": "Protocole",
+      "proxyHint": "Utilisez un proxy HTTP/HTTPS avec une IPv4 publique. Le fournisseur le vérifie avant de l’appliquer.",
+      "authentication": "Authentification du proxy",
+      "username": "Nom d’utilisateur",
+      "password": "Mot de passe",
+      "savedCredentials": "Les identifiants sont enregistrés. Saisissez les deux champs à nouveau pour remplacer ce proxy.",
+      "credentialsHint": "Renseignez les deux champs, avec 256 caractères visibles maximum chacun, sans espaces ni : @ / ?.",
+      "impact": "Les modifications concernent les connexions sortantes de tous les projets de ce serveur.",
+      "applying": "Application…",
+      "apply": "Appliquer la connexion",
+      "current": "Actuelle",
+      "automatic": "Automatique",
+      "invalid": "Vérifiez l’adresse IPv4 et le port (1–65535). Si l’authentification est activée, saisissez les deux identifiants."
+    },
+    "navigation": {
+      "connection": "Sortie et accès",
+      "listeners": "Ports en écoute",
+      "general": "Général",
+      "ssh": "SSH"
+    },
+    "cloudConnection": {
+      "titles": {
+        "not_connected": "Connectez-vous à Openship Cloud",
+        "account_mismatch": "Connectez le compte Cloud du serveur",
+        "unavailable": "État Cloud indisponible"
+      },
+      "descriptions": {
+        "not_connected": "Ceci est un lien enregistré vers un serveur Cloud. Connectez-vous au compte et à l’organisation propriétaires pour consulter son état actuel et le gérer.",
+        "account_mismatch": "Ce serveur appartient à un autre compte ou à une autre organisation Cloud. Connectez le compte propriétaire pour continuer.",
+        "unavailable": "Le serveur n’a pas pu être vérifié via Cloud. Actualisez son état avant d’utiliser ses commandes."
+      },
+      "labels": {
+        "not_connected": "Connexion Cloud requise",
+        "account_mismatch": "Autre compte Cloud",
+        "unavailable": "Cloud indisponible"
+      },
+      "signIn": "Se connecter à Cloud",
+      "connecting": "Connexion…"
+    },
+    "controlUnavailable": {
+      "title": "Commande indisponible",
+      "description": "Cette commande n’est pas encore disponible dans la version de l’API Cloud connectée. Openship Cloud doit être mis à jour avant son utilisation."
     }
+  },
+  "gpu": {
+    "title": "GPU",
+    "subtitle": "Indique si les conteneurs de ce serveur peuvent utiliser une carte graphique.",
+    "notDetected": "Aucun GPU détecté",
+    "notProbed": "Impossible de vérifier ce serveur pour le moment",
+    "countOne": "1 carte GPU",
+    "countMany": "{count} GPU",
+    "runtimeOnly": "Runtime NVIDIA trouvé, nombre de cartes inconnu",
+    "modeLabel": "Marquer ce serveur",
+    "modeAuto": "Détecter automatiquement",
+    "modeYes": "Possède un GPU",
+    "modeNo": "Pas de GPU (tenir les services GPU à l’écart)",
+    "modeHint": "La détection lit le démon Docker. Si elle est fausse pour ce serveur, marquez-le à la main ; votre marque l’emporte sur la détection.",
+    "mismatchYes": "Marqué « Possède un GPU », mais aucun n’a été détecté. Les services GPU seront tout de même envoyés ici.",
+    "mismatchNo": "Marqué « Pas de GPU », mais un GPU a été détecté. Un avertissement sera affiché pour les services GPU sur ce serveur.",
+    "saved": "Paramètre GPU enregistré",
+    "saveFailed": "Impossible d’enregistrer le paramètre GPU",
+    "badge": "GPU"
   }
 }

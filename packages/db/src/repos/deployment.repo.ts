@@ -1,11 +1,14 @@
 import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { ilike, type SQL, eq, and, asc, desc, gte, lte, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
-import { generateId, AppError, DEPLOYMENT_HISTORY_STATUSES, type DeploymentHistoryQuery, type ResourceValues } from "@repo/core";
+import { generateId, AppError, summarizeDeploymentHistory, DEPLOYMENT_HISTORY_STATUSES, type DeploymentHistoryQuery, type ResourceValues } from "@repo/core";
 import { isDeepStrictEqual } from "node:util";
 import type { Database } from "../connection";
 import { createConfigurationSecrets, type ConfigurationEncryption } from "../configuration-secrets";
-import { deployment, buildSession, project, service } from "../schema";
+import { deployment, buildSession, project, service, cloudBuildActivity, cloudWorkspace } from "../schema";
+import { actionDeployment, actionProject, actionRun, actionWorkflow } from "../schema/actions";
 import { detailOf } from "./storable-detail";
+import { reserveCloudBuildActivity, type CloudBuildResources } from "./cloud-build-activity.repo";
+import { queueDeploymentChecks } from "./deployment-check.repo";
 import { assertProjectConfigurationWritable, withProjectConfigurationWrite, withProjectWorkAdmission } from "./project-work-admission";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -39,6 +42,21 @@ export function liveBuildExecutionCondition() {
 
 export function createDeploymentRepo(db: Database, encryption: ConfigurationEncryption) {
   const codec = createConfigurationSecrets(encryption);
+
+  const cloudBuildRequestedAt = () => sql`case
+    when jsonb_typeof(${deployment.meta}->'cloudBuildRequestedAt') = 'number'
+      then (${deployment.meta}->>'cloudBuildRequestedAt')::numeric
+    else extract(epoch from ${deployment.createdAt}) end`;
+  const cloudBuildQueueCondition = (workspaceId?: string) => and(
+    eq(deployment.status, "queued"), isNull(project.deletedAt), eq(project.deletionInProgress, false),
+    isNotNull(project.workspaceId), sql`${deployment.meta}->>'cloudBuildRequested' = 'true'`,
+    // Missing/finished sessions cannot be claimed and must not block FIFO.
+    sql`exists (select 1 from ${buildSession}
+      where ${buildSession.deploymentId} = ${deployment.id}
+        and ${buildSession.projectId} = ${deployment.projectId}
+        and ${buildSession.startedAt} is null and ${buildSession.finishedAt} is null)`,
+    workspaceId ? eq(project.workspaceId, workspaceId) : undefined,
+  );
 
   // Pin the outcome and its clock in the same transaction. The cancel handler
   // and the worker can both finish the session later, but neither may replace
@@ -75,7 +93,13 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
     const perPage = opts.perPage ?? 20;
     const conditions = [scope];
     if (opts.environment) conditions.push(eq(deployment.environment, opts.environment));
-    if (opts.status) conditions.push(inArray(deployment.status, [...DEPLOYMENT_HISTORY_STATUSES[opts.status]]));
+    const now = new Date();
+    if (opts.days) {
+      const since = new Date(now);
+      since.setUTCHours(0, 0, 0, 0);
+      since.setUTCDate(since.getUTCDate() - opts.days + 1);
+      conditions.push(gte(deployment.createdAt, since), lte(deployment.createdAt, now));
+    }
     const query = opts.search?.trim();
     if (query) {
       // A literal search: '%' and '_' in a commit message are not wildcards.
@@ -87,6 +111,21 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
         sql`exists (select 1 from "project" where "project"."id" = ${deployment.projectId} and "project"."name" ilike ${pattern})`,
       )!);
     }
+    // Outcome facets cover the entire selected window/search, independent of
+    // pagination and the status drill-down. No deployment payloads are loaded.
+    let summary;
+    if (opts.days) {
+      const date = sql<string>`to_char(${deployment.createdAt}, 'YYYY-MM-DD')`;
+      const measuredBuild = sql`${deployment.status} = 'ready' and ${deployment.buildDurationMs} > 0`;
+      const buckets = await db.select({
+        date, projectId: deployment.projectId, status: deployment.status,
+        count: sql<number>`count(*)`,
+        buildMs: sql<number>`coalesce(sum(${deployment.buildDurationMs}) filter (where ${measuredBuild}), 0)`,
+        builds: sql<number>`count(*) filter (where ${measuredBuild})`,
+      }).from(deployment).where(and(...conditions)).groupBy(date, deployment.projectId, deployment.status);
+      summary = summarizeDeploymentHistory(buckets, opts.days, now);
+    }
+    if (opts.status) conditions.push(inArray(deployment.status, [...DEPLOYMENT_HISTORY_STATUSES[opts.status]]));
     const where = and(...conditions);
     const rows = (await db.query.deployment.findMany({
       where,
@@ -95,7 +134,7 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
       offset: (page - 1) * perPage,
     })).map(codec.openDeployment);
     const [{ value: total }] = await db.select({ value: sql<number>`count(*)` }).from(deployment).where(where);
-    return { rows, total: Number(total), page, perPage };
+    return { rows, total: Number(total), page, perPage, ...(summary ? { summary } : {}) };
   }
 
   return {
@@ -113,6 +152,128 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
           sql`${deployment.meta} -> 'capacityAdjustment' ->> 'key' = ${key}`),
         orderBy: [desc(deployment.createdAt)],
       }));
+    },
+
+    /** Persist the first submission clock, not the draft creation clock. */
+    async requestCloudBuild(deploymentId: string, organizationId: string): Promise<void> {
+      await db.update(deployment).set({
+        meta: sql`coalesce(${deployment.meta}, '{}'::jsonb) || jsonb_build_object(
+          'cloudBuildRequested', true,
+          'cloudBuildRequestedAt', case
+            when ${deployment.meta}->>'cloudBuildRequested' = 'true'
+              then coalesce(${deployment.meta}->'cloudBuildRequestedAt',
+                to_jsonb(extract(epoch from ${deployment.createdAt})))
+            else to_jsonb(extract(epoch from clock_timestamp())) end)`,
+      }).where(and(eq(deployment.id, deploymentId), eq(deployment.organizationId, organizationId), eq(deployment.status, "queued")));
+    },
+
+    /** Legacy leases only. Activity-backed capacity is counted by listReservations.
+     * Released activity slots must never reappear as legacy execution leases. */
+    async countActiveCloudBuilds(workspaceId: string, organizationId: string): Promise<number> {
+      const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(buildSession)
+        .innerJoin(project, eq(project.id, buildSession.projectId))
+        .where(and(eq(project.workspaceId, workspaceId), eq(project.organizationId, organizationId),
+          isNotNull(buildSession.startedAt), isNull(buildSession.finishedAt),
+          sql`not exists (select 1 from ${cloudBuildActivity}
+            where ${cloudBuildActivity.deploymentId} = ${buildSession.deploymentId})`));
+      return row?.count ?? 0;
+    },
+
+    /** Recovery candidates, not proof of abandonment. The recovery caller must
+     * acquire execution ownership and confirm command cleanup before closing a
+     * lease. Includes terminal outcomes and deleting projects deliberately. */
+    async listUnfinishedCloudBuildExecutions(limit = 100) {
+      return db.select({
+        deploymentId: deployment.id, buildSessionId: buildSession.id,
+        projectId: project.id, organizationId: project.organizationId,
+        workspaceId: sql<string>`${project.workspaceId}`,
+      }).from(buildSession)
+        .innerJoin(project, eq(project.id, buildSession.projectId))
+        .innerJoin(deployment, and(eq(deployment.id, buildSession.deploymentId),
+          eq(deployment.projectId, project.id), eq(deployment.organizationId, project.organizationId)))
+        .where(and(isNotNull(project.workspaceId), isNotNull(buildSession.startedAt), isNull(buildSession.finishedAt)))
+        .orderBy(asc(buildSession.startedAt), asc(buildSession.id)).limit(Math.min(100, Math.max(0, limit)));
+    },
+
+    /** FIFO within a workspace; global scans interleave workspace queues before
+     * applying the strict limit so one full workspace cannot hide all others.
+     * Offset pages are deterministic for an unchanged queue. Collect pages before
+     * dispatching: claims/removals shift offsets. A new sweep starts at zero. */
+    async listRequestedCloudBuilds(workspaceId?: string, limit = 200, offset = 0) {
+      const requestedAt = cloudBuildRequestedAt();
+      const rows = await db.select({ deployment }).from(deployment)
+        .innerJoin(project, and(eq(project.id, deployment.projectId), eq(project.organizationId, deployment.organizationId)))
+        .where(cloudBuildQueueCondition(workspaceId))
+        .orderBy(...(workspaceId ? [] : [sql`row_number() over (
+          partition by ${project.organizationId}, ${project.workspaceId}
+          order by ${requestedAt}, ${deployment.id})`]), asc(requestedAt), asc(deployment.id)).limit(limit).offset(offset);
+      return rows.map(row => codec.openDeployment(row.deployment));
+    },
+
+    /** Persist the latest wait explanation without replacing other metadata.
+     * A worker claim/cancellation winning first makes this a harmless no-op. */
+    async setCloudBuildQueueWait(deploymentId: string, organizationId: string, info: {
+      reason: "concurrency" | "resources" | "server";
+      limit: number | null;
+      message: string;
+    }): Promise<boolean> {
+      const [row] = await db.update(deployment).set({
+        meta: sql`coalesce(${deployment.meta}, '{}'::jsonb) ||
+          jsonb_build_object('cloudBuildQueueReason', ${info.reason}::text,
+            'cloudBuildQueue', ${JSON.stringify(info)}::jsonb)`,
+      }).where(and(eq(deployment.id, deploymentId), eq(deployment.organizationId, organizationId),
+        eq(deployment.status, "queued"))).returning();
+      return !!row;
+    },
+
+    /** One-based FIFO position within this deployment's workspace, or null if
+     * it is no longer eligible. Shares listing's clock, ties and eligibility;
+     * never returns another customer's deployment or project information. */
+    async getCloudBuildQueuePosition(deploymentId: string, organizationId: string): Promise<number | null> {
+      const queue = db.select({
+        id: deployment.id,
+        position: sql<number>`row_number() over (
+          partition by ${project.workspaceId}
+          order by ${cloudBuildRequestedAt()}, ${deployment.id})`.mapWith(Number).as("position"),
+      }).from(deployment)
+        .innerJoin(project, and(eq(project.id, deployment.projectId), eq(project.organizationId, deployment.organizationId)))
+        .where(and(cloudBuildQueueCondition(), eq(deployment.organizationId, organizationId)))
+        .as("cloud_build_queue");
+      const [row] = await db.select({ position: queue.position }).from(queue).where(eq(queue.id, deploymentId));
+      return row?.position ?? null;
+    },
+
+    /** Fail a permanently rejected queue head, never a claimed worker. The
+     * session lock follows claimBuildExecution's lock order; both records change
+     * atomically, and a stale caller cannot overwrite cancellation or success. */
+    async failUnclaimedCloudBuild(input: {
+      deploymentId: string;
+      buildSessionId: string;
+      projectId: string;
+      organizationId: string;
+      errorMessage: string;
+      errorCode?: string;
+    }): Promise<boolean> {
+      return db.transaction(async (tx) => {
+        const [session] = await tx.select({ id: buildSession.id }).from(buildSession)
+          .where(and(eq(buildSession.id, input.buildSessionId), eq(buildSession.deploymentId, input.deploymentId),
+            eq(buildSession.projectId, input.projectId), isNull(buildSession.startedAt), isNull(buildSession.finishedAt)))
+          .for("update");
+        if (!session) return false;
+        const now = new Date();
+        const [row] = await tx.update(deployment).set({
+          status: "failed", errorMessage: input.errorMessage,
+          errorCode: input.errorCode ?? "CLOUD_BUILD_QUEUE_REJECTED", updatedAt: now,
+        }).where(and(eq(deployment.id, input.deploymentId), eq(deployment.projectId, input.projectId),
+          eq(deployment.organizationId, input.organizationId), eq(deployment.status, "queued"),
+          sql`${deployment.meta}->>'cloudBuildRequested' = 'true'`,
+          sql`not (${liveBuildExecutionCondition()})`,
+        )).returning();
+        if (!row) return false;
+        await tx.update(buildSession).set({ status: "failed", finishedAt: now, durationMs: 0 })
+          .where(eq(buildSession.id, session.id));
+        return true;
+      });
     },
 
     /** All deployments in a given status (e.g. "reconciling") — drives the
@@ -230,6 +391,7 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
     async create(
       data: Omit<NewDeployment, "id"> & { id?: string },
       resourceChanges?: DeploymentResourceChanges,
+      actionLeaseOwner?: string,
     ): Promise<Deployment | undefined> {
       // `id` is normally generated; re-import (live re-attach) passes the ORIGINAL
       // deployment id so the still-running containers (labelled `openship.deployment=<id>`)
@@ -237,6 +399,38 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
       const { id: providedId, ...rest } = data;
       const id = providedId ?? generateId("dep");
       return withProjectWorkAdmission(db, rest.projectId, rest.organizationId, async (tx) => {
+        if (rest.trigger === "webhook" && !rest.actionRequestId) {
+          const [target] = await tx.select().from(project).where(eq(project.id, rest.projectId));
+          const [required] = await tx.select({ id: actionProject.workflowId }).from(actionProject)
+            .where(and(eq(actionProject.projectId, rest.projectId), eq(actionProject.required, true))).limit(1);
+          if (target?.autoDeploy && required)
+            throw new AppError("Deployment automation changed. Refresh the project's Actions tab.", 409, "ACTIONS_DEPLOYMENT_CHANGED");
+        }
+        if (rest.actionRequestId) {
+          const [receipt] = await tx.select().from(actionDeployment).where(and(
+            eq(actionDeployment.id, rest.actionRequestId), eq(actionDeployment.projectId, rest.projectId),
+            eq(actionDeployment.organizationId, rest.organizationId),
+          )).for("update");
+          const [target] = await tx.select().from(project).where(eq(project.id, rest.projectId));
+          if (!receipt || !actionLeaseOwner || receipt.leaseOwner !== actionLeaseOwner ||
+            !receipt.leaseUntil || receipt.leaseUntil <= new Date() || receipt.status !== "deploying" ||
+            receipt.revision !== rest.commitSha || receipt.ref !== `refs/heads/${rest.branch}` ||
+            !target?.autoDeploy || target.disabledAt || (target.gitBranch && target.gitBranch !== rest.branch))
+            throw new AppError("The required-check deployment request changed. Refresh the project's Actions tab.", 409, "ACTIONS_DEPLOYMENT_CHANGED");
+          const requirements = await tx.select({ id: actionWorkflow.id, version: actionWorkflow.updatedAt, enabled: actionWorkflow.enabled, owner: actionWorkflow.owner, repo: actionWorkflow.repo })
+            .from(actionProject).innerJoin(actionWorkflow, eq(actionWorkflow.id, actionProject.workflowId))
+            .where(and(eq(actionProject.projectId, rest.projectId), eq(actionProject.organizationId, rest.organizationId), eq(actionProject.required, true))).for("share");
+          if (!requirements.length || requirements.length !== Object.keys(receipt.requirements).length || requirements.some(row =>
+            !row.enabled || row.version.toISOString() !== receipt.requirements[row.id] ||
+            row.owner !== target.gitOwner?.toLowerCase() || row.repo !== target.gitRepo?.toLowerCase()))
+            throw new AppError("Required workflow configuration changed before deployment", 409, "ACTIONS_DEPLOYMENT_CHANGED");
+          const runs = await tx.selectDistinctOn([actionRun.workflowId]).from(actionRun).where(and(
+            eq(actionRun.organizationId, rest.organizationId), inArray(actionRun.workflowId, requirements.map(row => row.id)),
+            eq(actionRun.revision, receipt.revision), eq(actionRun.ref, receipt.ref), eq(actionRun.untrusted, false), eq(actionRun.eventName, "push"),
+          )).orderBy(asc(actionRun.workflowId), desc(actionRun.createdAt), desc(actionRun.attempt), desc(actionRun.id));
+          if (runs.length !== requirements.length || runs.some(run => run.status !== "success" || run.configuration.workflowVersion !== receipt.requirements[run.workflowId]))
+            throw new AppError("Required checks have not passed for this commit", 409, "ACTIONS_CHECKS_PENDING");
+        }
         // A terminal-looking deployment can still have a worker unwinding after
         // cancellation. The partial unique status index no longer covers that
         // row, so refuse its replacement until the worker's outermost finally
@@ -260,6 +454,18 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
           .values(codec.sealDeployment({ id, ...rest }))
           .onConflictDoNothing()
           .returning();
+        if (inserted) await queueDeploymentChecks(tx, codec.openDeployment(inserted));
+        if (inserted?.actionRequestId) await tx.update(actionDeployment).set({
+          // Keep the admission retryable until kickoff is acknowledged. A crash
+          // between this commit and queue submission must resume this same row.
+          status: "deploying", deploymentId: inserted.id, error: null, updatedAt: new Date(),
+        }).where(and(eq(actionDeployment.id, inserted.actionRequestId), eq(actionDeployment.organizationId, inserted.organizationId)));
+        // A deliberate deployment also supersedes pending automatic approvals.
+        // It must not be replaced later by a previously queued green commit.
+        if (inserted && !inserted.actionRequestId) await tx.update(actionDeployment).set({
+          status: "superseded", error: "A newer deployment was started for this project.", updatedAt: new Date(),
+        }).where(and(eq(actionDeployment.projectId, inserted.projectId), eq(actionDeployment.organizationId, inserted.organizationId),
+          isNull(actionDeployment.deploymentId), inArray(actionDeployment.status, ["waiting", "blocked", "deploying"])));
         if (inserted && resourceChanges) {
           const [owner] = await tx.select().from(project).where(eq(project.id, rest.projectId));
           if (owner?.activeDeploymentId !== resourceChanges.expectedActiveDeploymentId ||
@@ -315,52 +521,127 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
       buildSessionId: string;
       projectId: string;
       organizationId: string;
+      cloudBuildReservation?: { workspaceId: string; resources: CloudBuildResources | null; exclusivePreparation?: boolean };
     }): Promise<"claimed" | "project_unavailable" | "state_changed"> {
-      const claimed = await withProjectWorkAdmission(
-        db,
-        input.projectId,
-        input.organizationId,
-        async (tx) => {
-          // Lock the session before inspecting it so two idempotent kickoff
-          // callers cannot both observe an unclaimed row.
-          const [available] = await tx
-            .select({ id: buildSession.id })
-            .from(buildSession)
-            .where(
-              and(
-                eq(buildSession.id, input.buildSessionId),
-                eq(buildSession.deploymentId, input.deploymentId),
-                eq(buildSession.projectId, input.projectId),
-                isNull(buildSession.startedAt),
-                isNull(buildSession.finishedAt),
-              ),
-            )
-            .for("update");
-          if (!available) return false;
+      const claimed = await db.transaction(async (tx) => {
+        // Keep shared admission's workspace -> project -> session lock order.
+        // reserveCloudBuildActivity reuses this workspace lock after viability
+        // is known; failures roll back both the reservation and worker claim.
+        if (input.cloudBuildReservation) {
+          const [workspace] = await tx.select({ id: cloudWorkspace.id }).from(cloudWorkspace)
+            .where(and(eq(cloudWorkspace.id, input.cloudBuildReservation.workspaceId),
+              eq(cloudWorkspace.organizationId, input.organizationId))).for("update");
+          // An absent row cannot be locked; do not acquire the project and then
+          // discover a newly-created workspace in the reservation helper.
+          if (!workspace) throw new AppError("Cloud build reservation requires an available local workspace",
+            409, "CLOUD_BUILD_ACTIVITY_LOCAL_ONLY");
+        }
+        // Same project deletion barrier as withProjectWorkAdmission, after the
+        // optional workspace lock rather than acquiring it in reverse order.
+        const [owner] = await tx.select({ id: project.id }).from(project)
+          .where(and(eq(project.id, input.projectId), eq(project.organizationId, input.organizationId),
+            eq(project.deletionInProgress, false), isNull(project.deletedAt))).for("update");
+        if (!owner) return undefined;
+        // Lock the session before inspecting it so two idempotent kickoff
+        // callers cannot both observe an unclaimed row.
+        const [available] = await tx
+          .select({ id: buildSession.id })
+          .from(buildSession)
+          .where(
+            and(
+              eq(buildSession.id, input.buildSessionId),
+              eq(buildSession.deploymentId, input.deploymentId),
+              eq(buildSession.projectId, input.projectId),
+              isNull(buildSession.startedAt),
+              isNull(buildSession.finishedAt),
+            ),
+          )
+          .for("update");
+        if (!available) return false;
 
-          const [work] = await tx
-            .update(deployment)
-            .set({ status: "building", updatedAt: new Date() })
-            .where(
-              and(
-                eq(deployment.id, input.deploymentId),
-                eq(deployment.projectId, input.projectId),
-                eq(deployment.organizationId, input.organizationId),
-                inArray(deployment.status, ["queued", "building"]),
-              ),
-            )
-            .returning();
-          if (!work) return false;
+        const [work] = await tx
+          .update(deployment)
+          .set({ status: "building", updatedAt: new Date() })
+          .where(
+            and(
+              eq(deployment.id, input.deploymentId),
+              eq(deployment.projectId, input.projectId),
+              eq(deployment.organizationId, input.organizationId),
+              inArray(deployment.status, ["queued", "building"]),
+            ),
+          )
+          .returning();
+        if (!work) return false;
 
-          await tx
-            .update(buildSession)
-            .set({ status: "building", startedAt: new Date() })
-            .where(eq(buildSession.id, input.buildSessionId));
-          return true;
-        },
-      );
+        if (input.cloudBuildReservation) {
+          await reserveCloudBuildActivity(tx, {
+            deploymentId: input.deploymentId, projectId: input.projectId,
+            organizationId: input.organizationId, workspaceId: input.cloudBuildReservation.workspaceId,
+          }, input.cloudBuildReservation.resources, input.buildSessionId, input.cloudBuildReservation.exclusivePreparation);
+        }
+
+        await tx
+          .update(buildSession)
+          .set({ status: "building", startedAt: new Date() })
+          .where(eq(buildSession.id, input.buildSessionId));
+        return true;
+      });
       if (claimed === undefined) return "project_unavailable";
       return claimed ? "claimed" : "state_changed";
+    },
+
+    /** Caller MUST hold this deployment's execution ownership until its old
+     * worker is unregistered. On true, skip execution-completion acknowledgement:
+     * this is waiting work again, not a finished worker. No host work may have
+     * started. Preserve submission/FIFO and logs; only delete an untouched
+     * reservation, never an activated activity or a completion tombstone. */
+    async deferUnactivatedCloudBuild(input: {
+      deploymentId: string;
+      buildSessionId: string;
+      projectId: string;
+      workspaceId: string;
+      organizationId: string;
+    }): Promise<boolean> {
+      return db.transaction(async (tx) => {
+        // Same ordering as claim: workspace -> project -> session -> deployment
+        // -> activity. In particular activation cannot race the reset/delete.
+        const [workspace] = await tx.select({ id: cloudWorkspace.id }).from(cloudWorkspace)
+          .where(and(eq(cloudWorkspace.id, input.workspaceId), eq(cloudWorkspace.organizationId, input.organizationId),
+            isNull(cloudWorkspace.remote))).for("update");
+        if (!workspace) return false;
+        const [owner] = await tx.select({ id: project.id }).from(project)
+          .where(and(eq(project.id, input.projectId), eq(project.organizationId, input.organizationId),
+            eq(project.workspaceId, input.workspaceId), isNull(project.deletedAt), eq(project.deletionInProgress, false)))
+          .for("update");
+        if (!owner) return false;
+        const [session] = await tx.select({ id: buildSession.id }).from(buildSession)
+          .where(and(eq(buildSession.id, input.buildSessionId), eq(buildSession.deploymentId, input.deploymentId),
+            eq(buildSession.projectId, input.projectId), eq(buildSession.status, "building"),
+            isNotNull(buildSession.startedAt), isNull(buildSession.finishedAt))).for("update");
+        if (!session) return false;
+        const [work] = await tx.select({ id: deployment.id }).from(deployment)
+          .where(and(eq(deployment.id, input.deploymentId), eq(deployment.projectId, input.projectId),
+            eq(deployment.organizationId, input.organizationId), eq(deployment.status, "building"),
+            sql`${deployment.meta}->>'cloudBuildRequested' = 'true'`)).for("update");
+        if (!work) return false;
+        const untouched = and(eq(cloudBuildActivity.deploymentId, input.deploymentId),
+          eq(cloudBuildActivity.buildSessionId, input.buildSessionId), eq(cloudBuildActivity.projectId, input.projectId),
+          eq(cloudBuildActivity.workspaceId, input.workspaceId), eq(cloudBuildActivity.organizationId, input.organizationId),
+          isNull(cloudBuildActivity.ownerToken), isNull(cloudBuildActivity.startedAt), isNull(cloudBuildActivity.finishedAt),
+          isNull(cloudBuildActivity.slotReleasedAt), isNull(cloudBuildActivity.providerWorkspaceId),
+          sql`${cloudBuildActivity.commands} = '[]'::jsonb`);
+        const [activity] = await tx.select({ id: cloudBuildActivity.deploymentId }).from(cloudBuildActivity)
+          .where(untouched).for("update");
+        if (!activity) return false;
+        await tx.delete(cloudBuildActivity).where(untouched);
+        await tx.update(buildSession).set({ status: "queued", startedAt: null }).where(eq(buildSession.id, session.id));
+        await tx.update(deployment).set({
+          status: "queued", updatedAt: new Date(),
+          meta: sql`coalesce(${deployment.meta}, '{}'::jsonb) ||
+            '{"cloudBuildQueueReason":"server","cloudBuildQueue":{"reason":"server","limit":null,"message":"Waiting for the managed server to become available."}}'::jsonb`,
+        }).where(eq(deployment.id, work.id));
+        return true;
+      });
     },
 
     /** Cancel a queued deployment only while no worker has acquired its lease. */
@@ -522,6 +803,20 @@ export function createDeploymentRepo(db: Database, encryption: ConfigurationEncr
         .where(and(eq(deployment.id, id), ne(deployment.status, "cancelled")))
         .returning();
       return rows.length > 0;
+    },
+
+    /** Append a dismissal without replacing concurrent metadata or deployment status. */
+    async skipPortCheck(id: string, target: number | string): Promise<void> {
+      const skipped = sql`case when jsonb_typeof(${deployment.meta}->'portCheckSkipped') = 'array'
+        then ${deployment.meta}->'portCheckSkipped' else '[]'::jsonb end`;
+      const addition = sql`${JSON.stringify([target])}::jsonb`;
+      await db
+        .update(deployment)
+        .set({
+          meta: sql`jsonb_set(coalesce(${deployment.meta}, '{}'::jsonb), '{portCheckSkipped}', ${skipped} || ${addition})`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(deployment.id, id), sql`not (${skipped} @> ${addition})`));
     },
 
     /**

@@ -186,11 +186,11 @@ describe("customer service quota accounting", () => {
     expect(await repo.countRunningForOrg("org-a")).toBe(1);
     expect(await repo.countRunningForOrg("org-a", ["disabled-live"])).toBe(0);
   });
-  it("frees disabled services after stopping, but an enabled service keeps its reservation", async () => {
+  it("frees confirmed stopped services even while their definitions remain enabled", async () => {
     await service("off", { enabled: false, status: "stopped" });
     await service("absent", { enabled: false, status: "skipped", containerId: null });
     await service("reserved", { status: "stopped" });
-    expect(await repo.countRunningForOrg("org-a")).toBe(1);
+    expect(await repo.countRunningForOrg("org-a")).toBe(0);
   });
   it("ignores archived containers and deleted projects", async () => {
     await db.insert(schema.deployment).values({ id: "old-a", projectId: "project-a", organizationId: "org-a", branch: "main", status: "ready" });

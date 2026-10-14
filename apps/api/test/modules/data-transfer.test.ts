@@ -17,7 +17,7 @@ vi.mock("@repo/platform/engine/config/env", async () => ({
   env: { BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? (await import("@repo/db/encryption")).DEFAULT_ENCRYPTION_SECRET, CLOUD_MODE: false },
 }));
 
-import { decrypt, encrypt, encryptBytesWithKey, encryptWithKey } from "@repo/platform/engine/lib/encryption";
+import { closeEncryption, decrypt, encrypt, encryptBytesWithKey, encryptWithKey } from "@repo/platform/engine/lib/encryption";
 import { encryptSecretField, decryptSecretField } from "@repo/platform/engine/lib/credential-encryption";
 import {
   sealSecretBundle,
@@ -31,6 +31,7 @@ import {
 } from "../../src/modules/system/data-transfer/secret-codec";
 import {
   SECRET_COLUMNS,
+  stripTransferSecrets,
   type SecretColumn,
 } from "../../src/modules/system/data-transfer/secret-registry";
 import {
@@ -633,6 +634,70 @@ describe("two-factor account transfer", () => {
 });
 
 describe("secret-codec round-trips (extract → seal → decrypt)", () => {
+  it("preserves the OIDC RSA identity while re-encrypting its private key for another instance", async () => {
+    const originalKey = env.BETTER_AUTH_SECRET;
+    const registered = SECRET_COLUMNS.find(
+      (entry) => entry.sqlName === "action_oidc_key" && entry.column === "privateKeyEnc",
+    )!;
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const pem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+    const stored = encrypt(pem);
+    const entry = await extractPlaintext(registered, "https://ci.test/api/actions/oidc", stored);
+    const tables = {
+      action_oidc_key: [
+        {
+          id: "https://ci.test/api/actions/oidc",
+          kid: "original-key",
+          privateKeyEnc: stored,
+          publicKey: publicKey.export({ format: "jwk" }),
+        },
+      ],
+    };
+    stripTransferSecrets(tables);
+    expect(tables.action_oidc_key[0]!.privateKeyEnc).toBe("");
+    expect(JSON.stringify(tables)).not.toContain(pem);
+    expect(entry?.value).toBe(pem);
+    let restored: string;
+    try {
+      env.BETTER_AUTH_SECRET = "destination-oidc-signing-key-123456789";
+      closeEncryption();
+      restored = (await sealForInstance(registered, entry!)) as string;
+      expect(decrypt(restored)).toBe(pem);
+      expect(createPublicKey(decrypt(restored)).export({ format: "jwk" })).toEqual(
+        tables.action_oidc_key[0]!.publicKey,
+      );
+      expect(tables.action_oidc_key[0]!.kid).toBe("original-key");
+    } finally {
+      env.BETTER_AUTH_SECRET = originalKey;
+      closeEncryption();
+    }
+    expect(() => decrypt(restored)).toThrow();
+  });
+  it("redacts runner registration tokens and re-encrypts them for another instance", async () => {
+    const originalKey = env.BETTER_AUTH_SECRET;
+    const registered = SECRET_COLUMNS.find(
+      (entry) => entry.sqlName === "action_runner_session" && entry.column === "registration",
+    )!;
+    const token = "temporary-github-runner-registration";
+    const stored = encrypt(token);
+    const entry = await extractPlaintext(registered, "session", stored);
+    const tables = { action_runner_session: [{ id: "session", registration: stored }] };
+    stripTransferSecrets(tables);
+    expect(tables.action_runner_session[0]!.registration).toBeNull();
+    expect(entry?.value).toBe(token);
+    let restored: string;
+    try {
+      env.BETTER_AUTH_SECRET = "destination-runner-registration-key-123456789";
+      closeEncryption();
+      restored = await sealForInstance(registered, entry!) as string;
+      expect(decrypt(restored)).toBe(token);
+    } finally {
+      env.BETTER_AUTH_SECRET = originalKey;
+      closeEncryption();
+    }
+    expect(() => decrypt(restored)).toThrow();
+  });
+
   it("protects repository grants during transfer with the same cipher as their writer", async () => {
     const registered = SECRET_COLUMNS.find((entry) => entry.sqlName === "user_settings" && entry.column === "githubAuthorizationEncrypted")!;
     const grant = JSON.stringify({ accessToken: "repository-access", refreshToken: "repository-refresh", accessExpiresAt: null, refreshExpiresAt: null });

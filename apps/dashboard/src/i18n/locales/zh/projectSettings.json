@@ -20,7 +20,119 @@
     "useGeneratedDomains": "使用免费域名",
     "editDomains": "编辑域名",
     "routePortCloudDesc": "仅限此 Cloud 工作区内部访问。添加域名即可获得公共 URL。",
-    "exposeTitle": "域名与路由"
+    "exposeTitle": "域名与路由",
+    "install": "安装",
+    "installing": "正在安装…",
+    "advanced": "高级部署选项",
+    "nameLabel": "名称",
+    "nameHint": "此应用在 Openship 中的显示名称。",
+    "domainTitle": "部署位置",
+    "domainFree": "免费子域名",
+    "domainFreeHint": "{domain} 上的免费子域名",
+    "domainCustom": "您自己的域名",
+    "domainCustomPlaceholder": "app.example.com",
+    "domainNone": "无公开 URL",
+    "domainNoneHint": "仅限内部访问 — 无公开地址。",
+    "customRequired": "请输入您的域名，或选择其他选项。",
+    "progressPreparing": "正在准备…",
+    "progressDeploying": "正在部署…",
+    "progressLive": "您的应用已上线",
+    "openApp": "打开应用",
+    "goToApp": "前往应用",
+    "installFailed": "安装失败",
+    "installFailedBody": "在所有组件运行前已停止。技术详情中包含完整的构建日志。",
+    "installCancelledSelf": "您已停止此安装。",
+    "installCancelledBody": "已创建的容器和镜像已移除，数据卷已保留 — 重新安装时将复用它们。已上线的组件保持不变。",
+    "settledAtPhase": "在 {phase} 阶段停止",
+    "viewDetails": "查看技术详情",
+    "showLogs": "显示日志",
+    "hideLogs": "隐藏日志",
+    "deployLogs": "部署日志",
+    "logsWaiting": "等待输出中…",
+    "logsEmpty": "未捕获到任何输出。",
+    "back": "返回",
+    "phaseImages": "准备镜像中",
+    "phaseServices": "启动服务中",
+    "phaseAppSetup": "完成设置中",
+    "phaseReady": "运行中",
+    "phaseQueued": "排队中…",
+    "stepperTitle": "安装步骤",
+    "firstLoginTitle": "首次登录",
+    "firstLoginUser": "用户名",
+    "firstLoginPassword": "密码",
+    "destinationTitle": "安装目标",
+    "destinationHint": "选择此应用运行的服务器或云端。",
+    "descMore": "展开",
+    "descLess": "收起",
+    "needsTitle": "所需资源",
+    "needsMemory": "{value} 内存",
+    "needsCpu": "{value}",
+    "hostFitTitle": "此服务器配置低于 {app} 的要求",
+    "hostFitMemory": "需要 {needed} 内存 — 当前仅有 {available}",
+    "hostFitCpu": "需要 {needed} — 当前仅有 {available}",
+    "routePortLabel": "仅端口（无域名）",
+    "routePortDesc": "通过主机地址和端口访问 — 无需域名或 Cloud。",
+    "routeFreeLabel": "免费子域名",
+    "routeFreeDesc": "{domain} 上的免费子域名，由 Openship Cloud 路由。",
+    "routeFreeNeedsCloud": "连接 Openship Cloud 以使用免费子域名。",
+    "routeCustomLabel": "您自己的域名",
+    "routeCustomDesc": "将您拥有的域名指向此应用。",
+    "routeDomainLabel": "域名",
+    "routeDomainDesc": "通过域名访问 — 免费子域名或您自己的域名。",
+    "httpBadge": "Web",
+    "tcpBadge": "数据库",
+    "tcpPublishLabel": "发布端口",
+    "tcpPublishDesc": "在主机上发布该端口，以便外部工具连接。",
+    "tcpInternalLabel": "仅内部访问",
+    "tcpInternalDesc": "仅此应用内的其他服务可访问。",
+    "tcpFirewallNote": "在服务器防火墙上开放端口 {port} 以从外部连接。",
+    "desktopReachNote": "在桌面端可通过 localhost 访问 — 或在“服务器 → 端口”中转发远程服务器的端口。",
+    "statusInstalling": "安装中",
+    "statusLive": "运行中",
+    "statusCancelled": "已取消",
+    "statusFailed": "失败",
+    "stopInstall": "停止安装",
+    "stopping": "正在停止…",
+    "installCancelled": "安装已取消",
+    "startOver": "重新开始",
+    "breadcrumbApps": "应用",
+    "appEyebrow": "应用",
+    "stopFailed": "无法停止安装",
+    "progressStep": "步骤 {current} / {total}",
+    "progressServicesReady": "{total} 个服务中有 {done} 个已就绪",
+    "summaryTitle": "配置",
+    "summaryDestination": "目标位置",
+    "summaryServices": "服务",
+    "mail": {
+      "title": "配置邮件",
+      "subtitle": "在您自己的域名上部署 Web 邮件，或连接现有邮箱。",
+      "chooseSelf": "自建邮件服务器",
+      "chooseSelfDesc": "在您的服务器上部署完整的 SMTP/IMAP + Web 邮件 (iRedMail) — 我们为您完成所有配置。",
+      "chooseConnect": "连接现有邮箱",
+      "chooseConnectDesc": "仅部署 Web 邮件界面，指向任意外部 SMTP/IMAP 服务商 — Amazon SES、Oracle Cloud、Gmail、Fastmail 等。",
+      "provider": "服务商",
+      "presets": {
+        "custom": "自定义",
+        "ses": "Amazon SES",
+        "gmail": "Gmail",
+        "fastmail": "Fastmail"
+      },
+      "sendOnlyNote": "{provider} 仅用于发送邮件 — 它不存储邮箱。IMAP 必须指向您实际存储邮件的位置。",
+      "sendOnlyNoInbox": "还没有收件箱？在此处配置邮件服务器，然后通过 {provider} 中继发送 →",
+      "imapOnOurServer": "邮箱从 {host}（此实例自身的邮件服务器）读取。仅发件经过 {provider}。",
+      "relayNote": "此实例已运行邮件服务器。如果邮箱位于其上，请改为在其“投递 → 发送”标签页中配置发送中继：IMAP 保持本地，仅发送按域名或按地址转至 {provider}，其自带的 Web 邮件仍正常工作。",
+      "relayCta": "改为配置中继 →",
+      "hostname": "Web 邮件地址",
+      "hostnameHint": "用户打开以阅读邮件的公开 URL，例如 mail.example.com。",
+      "imapHost": "IMAP 主机",
+      "imapPort": "IMAP 端口",
+      "smtpHost": "SMTP 主机",
+      "smtpPort": "SMTP 端口",
+      "deploy": "部署 Web 邮件",
+      "deploying": "正在部署…",
+      "hostnameRequired": "请输入 Web 邮件地址。",
+      "hostsRequired": "请输入 IMAP 和 SMTP 主机。"
+    }
   },
   "settingSection": {
     "edit": "编辑",
@@ -263,6 +375,10 @@
         "failed": "无法更新内部主机名",
         "invalid": "请至少输入一个字母或数字"
       }
+    },
+    "export": {
+      "title": "导出项目",
+      "description": "以纯 JSON 格式下载所有项目设置、环境变量和凭据。"
     }
   },
   "backup": {
@@ -451,7 +567,11 @@
       "saveFailed": "保存环境变量失败",
       "saveFailedTitle": "保存失败",
       "noChanges": "没有需要保存的更改——已保留已保存的值。",
-      "noChangesTitle": "无需保存"
+      "noChangesTitle": "无需保存",
+      "applying": "正在使用新环境变量重启服务 — 无需重新构建。",
+      "applyingTitle": "正在应用",
+      "applyFailed": "无法将环境变量应用到运行中的服务",
+      "applyFailedTitle": "应用失败"
     },
     "linkedBadge": "已链接",
     "linkedManaged": "通过 {app}",
@@ -459,7 +579,9 @@
     "linkedBody": "此值来自 {app} 连接。请在该应用中管理 — 这里的更改不会保留。",
     "unlink": "移除连接",
     "close": "关闭",
-    "applyText": "已保存。重启以应用运行时更改。镜像构建时使用的值需要重新构建并部署后才能生效。"
+    "applyText": "已保存。重启以应用运行时更改。镜像构建时使用的值需要重新构建并部署后才能生效。",
+    "applyTitle": "无需重新构建即可应用",
+    "applyButton": "应用（仅重启，不重新构建）"
   },
   "gitInfo": {
     "autoDeploy": "自动部署"
@@ -725,7 +847,12 @@
     "linkedTitleOne": "{count} 个项目连接到此应用",
     "linkedTitleOther": "{count} 个项目连接到此应用",
     "linkedNote": "它们会继续运行，数据不受影响 — 只会失去此连接。重新部署即可生效。",
-    "linkedNoteRecordOnly": "它们会继续运行，但关联会随记录一起删除 — 之后重新导入此应用也不会恢复。"
+    "linkedNoteRecordOnly": "它们会继续运行，但关联会随记录一起删除 — 之后重新导入此应用也不会恢复。",
+    "recordOnlyLabel": "仅从 Openship 中移除",
+    "recordOnlyDesc": "在服务器上保持应用及其数据运行 — 仅删除 Openship 中的记录。稍后您可以重新导入。",
+    "recordOnlyReversible": "可逆 — 应用保留在您的服务器上。",
+    "recordOnlyNote": "服务器上的内容均未受到影响 — 应用继续携带数据运行。仅移除了 Openship 的记录，稍后可重新导入。",
+    "confirmRecordOnly": "移除记录"
   },
   "routing": {
     "title": "路由",
@@ -756,7 +883,9 @@
       "expired": "已过期",
       "error": "错误",
       "inactive": "未活跃",
-      "unknown": "未知"
+      "unknown": "未知",
+      "external": "外部 TLS",
+      "manual": "手动证书"
     },
     "typeCustom": "自定义域名",
     "typeFree": "免费子域名",
@@ -805,7 +934,13 @@
       "includeWwwDesc": "同时为 www.{domain} 生成记录",
       "includeWwwFallback": "yourdomain.com",
       "adding": "添加中...",
-      "submit": "添加域名"
+      "submit": "添加域名",
+      "servesPath": "服务路径",
+      "servesPathHint": "发送到此域名的请求将从构建产物中的该路径提供服务。",
+      "servesPathRedeploy": "新路径将在下次部署时生效。",
+      "externalIngress": "外部 ingress 与 TLS",
+      "externalIngressDesc": "TLS 在您的反向代理（Cloudflare Tunnel、Nginx Proxy Manager 或负载均衡器）处终止。域名无需指向此服务器，Openship 也不会颁发证书。",
+      "noWww": "该域名已存在于此项目中。"
     },
     "dns": {
       "title": "DNS 记录",
@@ -857,7 +992,8 @@
       "title": "编辑路由",
       "internalOnly": "仅内部",
       "close": "关闭",
-      "disabledWarning": "服务已禁用——在重新启用该服务之前，路由处于非活跃状态。"
+      "disabledWarning": "服务已禁用——在重新启用该服务之前，路由处于非活跃状态。",
+      "save": "保存更改"
     },
     "menu": {
       "editRoute": "编辑路由",
@@ -868,7 +1004,8 @@
       "renewing": "续期中...",
       "renewSsl": "续期 SSL",
       "rechecking": "重新检查中...",
-      "recheckSsl": "重新检查 SSL"
+      "recheckSsl": "重新检查 SSL",
+      "uploadCert": "上传证书"
     },
     "toast": {
       "enterPort": "请输入此域名应路由到的端口（1–65535）。",
@@ -899,7 +1036,11 @@
       "enterPortShort": "请输入此域名应路由到的端口。",
       "noServicePort": "没有服务发布端口 {port}。请先将该端口添加到某个服务。",
       "enterCustom": "请输入自定义域名。",
-      "enterSubdomain": "请输入子域名。"
+      "enterSubdomain": "请输入子域名。",
+      "certUploaded": "已为 {hostname} 安装证书。",
+      "certUploadFailed": "为 {hostname} 安装证书失败。",
+      "publishing": "正在发布 — 部署以安装边缘并应用您的域名…",
+      "publishFailed": "域名已保存，但部署未启动 — 请重新部署以进行发布。"
     },
     "edge": {
       "setUp": "设置边缘",
@@ -935,7 +1076,11 @@
     },
     "records": {
       "failed": "无法加载此域名的 DNS 记录。",
-      "retry": "重试"
+      "retry": "重试",
+      "toggle": "DNS 记录",
+      "hint": "在您的 DNS 服务商处添加这些记录，然后点击“验证”。",
+      "loading": "正在加载记录…",
+      "none": "此域名无需添加记录。"
     },
     "outputHint": {
       "body": "在 {path} 未找到构建输出 — 请检查输出目录并重新部署。",
@@ -978,6 +1123,32 @@
         "cancelled": "验证已取消",
         "expired": "TXT 验证已过期"
       }
+    },
+    "verifyMissing": {
+      "both": "CNAME 记录和 TXT 记录均未解析 — 请添加下方记录，等待 DNS 生效后点击“验证”。",
+      "cname": "CNAME 记录尚未解析 — 请在下方添加，等待 DNS 生效后点击“验证”。",
+      "txt": "TXT 验证记录尚未解析 — 请在下方添加，等待 DNS 生效后点击“验证”。"
+    },
+    "portHint": {
+      "body": "端口 {port} 未响应 — 在应用监听该端口之前，请求可能会返回 502。",
+      "bodyService": "服务 \"{service}\"：端口 {port} 未响应 — 在其监听该端口之前，请求可能会返回 502。"
+    },
+    "certUpload": {
+      "title": "上传证书",
+      "desc": "使用您自己的证书（自带证书或 Cloudflare Origin CA）提供 TLS 服务，而非 Let's Encrypt。当上游代理位于此域名前端且源站仍需要真实证书时（如 Cloudflare Full-strict）使用。上传证书后，Certbot 将在此域名上停用 — 通过上传新证书进行续订。",
+      "certLabel": "证书 (fullchain PEM)",
+      "certPlaceholder": "-----BEGIN CERTIFICATE-----",
+      "keyLabel": "私钥 (PEM)",
+      "keyPlaceholder": "-----BEGIN PRIVATE KEY-----",
+      "submit": "安装证书",
+      "submitting": "正在安装…",
+      "close": "取消"
+    },
+    "removeRoute": {
+      "title": "删除路由",
+      "description": "应用将继续运行 — 仅删除此路由及其边缘注册。您可以随时重新添加它。",
+      "confirm": "删除路由",
+      "removing": "正在删除…"
     }
   },
   "serviceEnvironment": {
@@ -996,5 +1167,69 @@
     "server": "托管服务器",
     "serverDescription": "通过托管服务器上的 nginx 容器提供文件。",
     "nextDeploy": "保存的托管更改将在下次部署时生效。"
+  },
+  "deploymentChecks": {
+    "title": "GitHub 部署检查",
+    "description": "在已部署的提交上显示部署和服务的结果。",
+    "customize": "自定义检查",
+    "deployment": "部署结果",
+    "services": "所有服务，包括新服务",
+    "selectedServices": "选择服务",
+    "includeErrors": "包含失败详情",
+    "errorsHint": "隐去敏感信息后的错误摘要将与有权读取此仓库的人共享。",
+    "emptySelection": "请至少选择一项检查，或关闭结果报告。",
+    "connectionHint": "需要具有 Checks 写入权限的 GitHub App。",
+    "connection": "GitHub 连接",
+    "deliveryFailed": "无法发送检查结果",
+    "saveFailed": "无法保存 GitHub 检查设置。"
+  },
+  "appSource": {
+    "title": "来源",
+    "description": "此应用从版本发布进行部署 — 无需推送代码仓库；更新将以新版本形式发布。",
+    "sourceType": "来源",
+    "kindRelease": "版本发布",
+    "kindImage": "容器镜像",
+    "current": "当前版本",
+    "latest": "最新版本",
+    "repository": "仓库",
+    "notChecked": "尚未检查",
+    "upToDate": "已是最新",
+    "updateAvailable": "有可用更新",
+    "checkForUpdates": "检查更新",
+    "checkFailed": "无法检查更新",
+    "update": "更新",
+    "updateTo": "更新至 {version}",
+    "updating": "正在更新…",
+    "updateFailed": "更新失败",
+    "toastTitle": "来源",
+    "cliManaged": "这是 Openship 控制平面 — 它会自动更新。在主机上运行 \"openship update\" 即可升级；此处无需任何更改。"
+  },
+  "routeRules": {
+    "title": "路由规则",
+    "description": "在边缘实施的速率限制、封禁及允许/拒绝规则 — 立即生效，无需重新部署。",
+    "loading": "正在加载规则…",
+    "empty": "暂无路由规则。请在下方添加一条。",
+    "allHosts": "所有主机名",
+    "allPaths": "所有路径",
+    "addTitle": "添加规则",
+    "pathLabel": "路径前缀（可选）",
+    "rps": "请求数 / 秒",
+    "burst": "突发 (Burst)",
+    "methods": "仅允许的请求方法",
+    "banIps": "封禁 IP / CIDR",
+    "banCountries": "封禁国家/地区 (ISO)",
+    "allowCountries": "仅允许国家/地区 (ISO)",
+    "denyCidrs": "拒绝 CIDR",
+    "allowReferers": "防盗链：允许的 Referer",
+    "banUserAgents": "封禁 User-Agent（子字符串）",
+    "blockEmptyUa": "阻止空 User-Agent",
+    "blockStatus": "阻止响应状态码",
+    "add": "添加规则",
+    "remove": "移除",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "saved": "规则已保存",
+    "saveFailed": "保存规则失败",
+    "loadFailed": "加载规则失败"
   }
 }

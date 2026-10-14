@@ -201,5 +201,42 @@
     "next": "次のページ",
     "pageOf": "{page} / {total} ページ",
     "range": "全 {total} 件中 {from}–{to} 件"
+  },
+  "cloudBuildQueue": {
+    "label": "クラウドビルドキュー",
+    "title": "ビルド待機中",
+    "position": "ビルド待機中 · 順番 {position}",
+    "concurrency": "同時ビルド枠が空くのを待っています。",
+    "resources": "サーバーのCPUまたはメモリが空くのを待っています。",
+    "server": "サーバーがこのビルドを受け付けるのを待っています。",
+    "automaticStart": "自動的に開始されます。",
+    "allowance": "プランで許可されている同時ビルド数：{count}。",
+    "unlimited": "このプランには同時ビルド数の制限はありません。",
+    "active": "実行中のビルド数：{count}。",
+    "comparePlans": "プランを比較",
+    "optionalUpgrade": "アップグレードは任意です。そのまま待つこともできます。",
+    "compareConcurrency": "同時ビルド数を増やせるプランを比較できます。ビルドはキューで待機したままにできます。",
+    "compareResources": "CPUやメモリを増やせるプランを比較できます。サーバーのリソースが空くまで待つこともできます。"
+  },
+  "monitoring": {
+    "title": "デプロイ概要",
+    "scope": "選択したプロジェクトと検索 · UTC暦日 · 保持された履歴",
+    "period": "期間",
+    "days": "{count}日",
+    "refresh": "更新",
+    "attempts": "デプロイ試行",
+    "window": "選択した期間内",
+    "successRate": "成功率",
+    "rateHint": "成功 / (成功 + 失敗)。キャンセルを除外",
+    "failedHint": "一部失敗・ブロックされたリリースを含む",
+    "activeHint": "期間内の実行中または待機中の試行",
+    "unavailable": "概要を取得できません。再読み込みしてください。",
+    "trend": "日別の結果",
+    "avgBuild": "成功ビルドの平均",
+    "empty": "この期間のデプロイはありません。",
+    "projects": "プロジェクト別",
+    "projectHint": "失敗数、実行中の試行数の順で上位6件",
+    "failedShort": "失敗",
+    "history": "デプロイ履歴"
   }
 }

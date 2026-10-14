@@ -86,7 +86,8 @@
     "updateTo": "{version} sürümüne güncelle",
     "updating": "Güncelleniyor…",
     "updateFailed": "Güncelleme başarısız oldu",
-    "toastTitle": "Kaynak"
+    "toastTitle": "Kaynak",
+    "cliManaged": "Bu Openship kontrol panelidir — kendi kendini günceller. Yükseltmek için ana makinede \"openship update\" komutunu çalıştırın; burada değiştirilecek bir şey yoktur."
   },
   "appSettings": {
     "modeApp": "Uygulama ayarları",
@@ -194,7 +195,7 @@
       "provider": "Sağlayıcı",
       "presets": {
         "custom": "Özel",
-        "ses": "Amazon SES",
+        "ses": "Amazon SES",
         "gmail": "Gmail",
         "fastmail": "Fastmail"
       },
@@ -213,7 +214,35 @@
       "deploying": "Dağıtılıyor…",
       "hostnameRequired": "Webmail adresini girin.",
       "hostsRequired": "Hem IMAP hem de SMTP sunucu adresini girin."
-    }
+    },
+    "nameLabel": "Ad",
+    "nameHint": "Bu uygulamanın Openship'te nasıl görüneceği.",
+    "showLogs": "Günlükleri göster",
+    "hideLogs": "Günlükleri gizle",
+    "deployLogs": "dağıtım günlükleri",
+    "needsTitle": "Gereksinimler",
+    "needsMemory": "{value} Bellek",
+    "needsCpu": "{value}",
+    "hostFitTitle": "Bu sunucu {app} için gerekenden daha küçük",
+    "hostFitMemory": "{needed} RAM gerekiyor — bu sunucuda {available} mevcut",
+    "hostFitCpu": "{needed} gerekiyor — bu sunucuda {available} mevcut",
+    "routePortLabel": "Yalnızca bağlantı noktası (etki alanı yok)",
+    "routePortDesc": "Ana makine adresi ve bağlantı noktasından erişilebilir — etki alanı veya Cloud gerekmez.",
+    "routeFreeLabel": "Ücretsiz alt etki alanı",
+    "routeFreeDesc": "Openship Cloud tarafından yönlendirilen, {domain} üzerinde ücretsiz bir alt etki alanı.",
+    "routeFreeNeedsCloud": "Ücretsiz bir alt etki alanı kullanmak için Openship Cloud'a bağlanın.",
+    "routeCustomLabel": "Kendi etki alanınız",
+    "routeCustomDesc": "Sahip olduğunuz bir etki alanını bu uygulamaya yönlendirin.",
+    "routeDomainLabel": "Etki alanı",
+    "routeDomainDesc": "Bir etki alanından erişin — ücretsiz bir alt etki alanı veya kendinize ait.",
+    "httpBadge": "Web",
+    "tcpBadge": "Veritabanı",
+    "tcpPublishLabel": "Bağlantı noktasını yayınla",
+    "tcpPublishDesc": "Harici araçların bağlanabilmesi için ana makinede yayınlayın.",
+    "tcpInternalLabel": "Yalnızca dahili",
+    "tcpInternalDesc": "Yalnızca bu uygulamadaki diğer hizmetler erişebilir.",
+    "tcpFirewallNote": "Dışarıdan bağlanmak için sunucu güvenlik duvarınızda {port} numaralı bağlantı noktasını açın.",
+    "desktopReachNote": "Masaüstünde localhost üzerinden açabilir — veya uzak bir sunucu için Sunucular → Bağlantı Noktaları bölümünden bağlantı noktasını iletebilirsiniz."
   },
   "advanced": {
     "projectInfo": {
@@ -367,6 +396,10 @@
         "failed": "Dahili ana bilgisayar adı güncellenemedi",
         "invalid": "En az bir harf veya rakam girin"
       }
+    },
+    "export": {
+      "title": "Projeyi dışa aktar",
+      "description": "Tüm proje ayarlarını, ortam değişkenlerini ve kimlik bilgilerini düz JSON olarak indirin."
     }
   },
   "routeRules": {
@@ -863,7 +896,12 @@
     "linkedTitleOne": "{count} proje bu uygulamaya bağlı",
     "linkedTitleOther": "{count} proje bu uygulamaya bağlı",
     "linkedNote": "Verileri dokunulmadan çalışmaya devam eder — yalnızca bu bağlantıyı kaybederler. Uygulamak için yeniden dağıtın.",
-    "linkedNoteRecordOnly": "Çalışmaya devam ederler, ama bağlantı kayıtla birlikte gider — uygulamayı sonra yeniden içe aktarmak onu geri getirmez."
+    "linkedNoteRecordOnly": "Çalışmaya devam ederler, ama bağlantı kayıtla birlikte gider — uygulamayı sonra yeniden içe aktarmak onu geri getirmez.",
+    "recordOnlyLabel": "Yalnızca Openship'ten kaldır",
+    "recordOnlyDesc": "Uygulamayı ve verilerini sunucunuzda çalışır durumda tutar — yalnızca Openship kaydı kaldırılır. Daha sonra tekrar içe aktarabilirsiniz.",
+    "recordOnlyReversible": "Geri alınabilir — uygulama sunucunuzda kalır.",
+    "recordOnlyNote": "Sunucudaki hiçbir şeye dokunulmaz — uygulama verileriyle çalışmaya devam eder. Yalnızca Openship'in kaydı kaldırılır ve daha sonra tekrar içe aktarılabilir.",
+    "confirmRecordOnly": "Kaydı kaldır"
   },
   "routing": {
     "title": "Yönlendirme",
@@ -902,7 +940,7 @@
     "typeFree": "Ücretsiz alt alan adı",
     "primaryDomainTitle": "Birincil alan adı",
     "domainNTitle": "Alan adı {n}",
-    "portLabel": "Port {port}",
+    "portLabel": "Port: {port}",
     "noPortSelected": "Port seçilmedi",
     "meta": {
       "accessTitle": "Erişim URL'si",
@@ -1154,6 +1192,12 @@
         "cancelled": "Doğrulama iptal edildi",
         "expired": "TXT doğrulamasının süresi doldu"
       }
+    },
+    "removeRoute": {
+      "title": "Rotayı kaldır",
+      "description": "Uygulama çalışmaya devam eder — yalnızca bu rota ve edge kaydı kaldırılır. İstediğiniz zaman tekrar ekleyebilirsiniz.",
+      "confirm": "Rotayı kaldır",
+      "removing": "Kaldırılıyor…"
     }
   },
   "serviceEnvironment": {
@@ -1172,5 +1216,20 @@
     "server": "Yönetilen sunucu",
     "serverDescription": "Dosyaları yönetilen sunucunuzdaki bir nginx konteynerinden sunun.",
     "nextDeploy": "Kaydedilen barındırma değişiklikleri bir sonraki dağıtımda uygulanır."
+  },
+  "deploymentChecks": {
+    "title": "GitHub dağıtım kontrolleri",
+    "description": "Dağıtım ve hizmet sonuçlarını dağıtılan commit üzerinde gösterin.",
+    "customize": "Kontrolleri özelleştir",
+    "deployment": "Dağıtım sonucu",
+    "services": "Yeniler dahil tüm hizmetler",
+    "selectedServices": "Hizmetleri seç",
+    "includeErrors": "Hata ayrıntılarını dahil et",
+    "errorsHint": "Hassas veriler gizlenmiş hata özetleri, bu depoyu okuyabilen kişilerle paylaşılır.",
+    "emptySelection": "En az bir kontrol seçin veya raporlamayı kapatın.",
+    "connectionHint": "Checks yazma iznine sahip bir GitHub App gerektirir.",
+    "connection": "GitHub bağlantısı",
+    "deliveryFailed": "Kontroller iletilemedi",
+    "saveFailed": "GitHub kontrol ayarları kaydedilemedi."
   }
 }

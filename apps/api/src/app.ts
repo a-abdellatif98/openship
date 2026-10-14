@@ -1,3 +1,6 @@
+import { actionRoutes } from "./modules/actions/action.routes";
+import { actionRuntimeRoutes, actionTwirpRoutes } from "./modules/actions/action-runtime.routes";
+import { actionOidcRoutes } from "./modules/actions/action-oidc.routes";
 import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -225,6 +228,10 @@ app.route("/api/updates", updatesRoutes);
 // Org-wide issue feed — reads the caches the jobs above write; no detection of its own.
 app.route("/api/issues", issuesRoutes);
 app.route("/api/jobs", jobRoutes);
+app.route("/api/actions", actionRoutes);
+app.route("/api/actions/runtime", actionRuntimeRoutes);
+app.route("/api/actions/oidc", actionOidcRoutes);
+app.route("/twirp", actionTwirpRoutes);
 // Platform status notices — banner feed (public read) + operator push (internal).
 // Both modes; primarily consumed on the SaaS.
 app.route("/api/notices", noticeRoutes);
@@ -445,6 +452,7 @@ async function startControllerBackground(): Promise<void> {
         processRecurring: runScheduledJob,
       });
       console.log(`[boot] backup runner: ${runner.describe()}`);
+      (await import("@repo/platform/engine/modules/actions/lifecycle")).startActionController();
 
       // Generic job schedule: seed built-in system jobs (SSL renewal, orphan GC,
       // prunes, deployment reconcile) into the `job` table and register every
@@ -464,7 +472,9 @@ async function startControllerBackground(): Promise<void> {
           repos.jobRun
             .failStaleRunning()
             .then((n) => n > 0 && console.log(`[boot] reconciled ${n} orphaned job run(s)`))
-            .catch((err) => errorDiagnostics.warn("api/app", "[boot] failStaleRunning failed:", err)),
+            .catch((err) =>
+              errorDiagnostics.warn("api/app", "[boot] failStaleRunning failed:", err),
+            ),
         );
       }
 
@@ -493,17 +503,27 @@ async function startControllerBackground(): Promise<void> {
         void import("@repo/platform/engine/modules/cloud-support/index")
           .then(({ startCloudSupport }) => startCloudSupport())
           .catch(() =>
-            errorDiagnostics.warn("api/app",
+            errorDiagnostics.warn(
+              "api/app",
               "[cloud-support] Background delivery could not start; requests remain saved.",
             ),
           );
         void import("@repo/platform/engine/modules/cloud-analytics/index")
           .then(({ startCloudAnalytics }) => startCloudAnalytics())
-          .catch(() => errorDiagnostics.warn("api/app", "[cloud-analytics] Background delivery could not start."));
+          .catch(() =>
+            errorDiagnostics.warn(
+              "api/app",
+              "[cloud-analytics] Background delivery could not start.",
+            ),
+          );
         void import("@repo/platform/engine/lib/oblien-client")
           .then(({ getOblienBillingApi }) => getOblienBillingApi().assertResellerSupport())
           .catch((error) =>
-            errorDiagnostics.error("api/app", "[boot] Oblien reseller billing contract unavailable:", error),
+            errorDiagnostics.error(
+              "api/app",
+              "[boot] Oblien reseller billing contract unavailable:",
+              error,
+            ),
           );
       }
 
@@ -563,8 +583,13 @@ async function startControllerBackground(): Promise<void> {
 registerControllerLifecycle({
   start: startControllerBackground,
   stop: async () => {
-    await quiesceController();
-    backgroundStarted = false;
+    try {
+      await quiesceController();
+    } finally {
+      // A late Actions dispatch can refuse the handoff after its reconciler
+      // has stopped. Cancelling that move must be able to start it again.
+      backgroundStarted = false;
+    }
   },
 });
 if (await controllerIsActive()) await startControllerBackground();

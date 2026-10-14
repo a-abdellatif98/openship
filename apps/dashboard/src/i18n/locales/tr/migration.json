@@ -67,8 +67,48 @@
       "mapNoRepo": "Algılanan kapsayıcıları hizmetleriyle eşlemek için bir depo bağlayın (isteğe bağlı).",
       "linkRepoDesc": "Sonraki derlemeler ve otomatik dağıtımlar için Git kullanın.",
       "repoOnSourceHint": "Sonraki adımda bir depo bağlayın.",
-      "mapHint": "Kapsayıcıları depodaki hizmetleriyle eşleştirin."
-    }
+      "mapHint": "Kapsayıcıları depodaki hizmetleriyle eşleştirin.",
+      "select": "Seç",
+      "source": "Kaynak",
+      "domains": "Yapılandır",
+      "next": "İleri",
+      "back": "Geri",
+      "sourceHint": "İsteğe bağlı olarak bir depoyu bağlayın ve kapsayıcılarınızı compose hizmetleriyle eşleyin — çalışan imaj yine de yeniden kullanılır.",
+      "linkRepo": "Depoyu bağla",
+      "repoOptional": "isteğe bağlı",
+      "connectGithub": "GitHub'ı bağla",
+      "selectRepo": "Bir depo seçin",
+      "repoUrlPlaceholder": "veya github.com/sahip/depo yapıştırın",
+      "repoUrlInvalid": "GitHub deposunu sahip/depo veya github.com URL'si olarak girin.",
+      "repoUrlAdd": "Ekle",
+      "branch": "Dal",
+      "unlinkRepo": "Kaldır",
+      "mapTitle": "Kapsayıcıları compose hizmetleriyle eşleyin",
+      "mapToService": "Hizmet seçin",
+      "notInRepo": "Depoda yok",
+      "composeServicesTitle": "Depo hizmetleri",
+      "noComposeFound": "Bu depoda docker-compose bulunamadı — depo proje düzeyinde bağlanır.",
+      "mapSkipHint": "Bir depoyu bağlamak isteğe bağlıdır — devam etmek için atlayın (çalışan imaj olduğu gibi yeniden kullanılır).",
+      "mapField": "Depo hizmeti",
+      "repoConnectHint": "Depolarınıza göz atmak için panelde GitHub'ı bağlayın — veya bir depo URL'si yapıştırın.",
+      "repoPasteHint": "Veya bir depo URL'si yapıştırın.",
+      "parsingCompose": "Compose ayrıştırılıyor…",
+      "envTitle": "Ortam değişkenleri",
+      "publishDomains": "Etki alanlarını yayınla",
+      "routeTitle": "Rota",
+      "routeKeep": "Koru",
+      "routeNone": "Yok",
+      "sslOn": "SSL",
+      "sslOff": "SSL yok",
+      "internalOnly": "Yalnızca dahili — herkese açık değil.",
+      "serviceNewBadge": "Yeni",
+      "deployActionReuse": "İmajı yeniden kullan",
+      "deployActionBuild": "Derlenecek",
+      "deployActionPull": "Çekilecek"
+    },
+    "flatDocker": "Düz liste",
+    "flatDockerHint": "Openship etiketlerini yoksay — her şeyi (Openship tarafından yönetilen kapsayıcılar dahil) düz Docker olarak dahil et.",
+    "flatDockerShort": "Openship tarafından yönetilen kapsayıcıları da dahil et."
   },
   "run": {
     "title": "Teknoloji yığınınız taşınıyor",
@@ -174,7 +214,10 @@
     "snapshot": "Kayıtlı anlık görüntü",
     "containerMetadata": "Kapsayıcılardan",
     "checkSettings": "Kurtarma sonrasında derleme ayarlarını gözden geçirmeniz gerekebilir.",
-    "chooseHint": "Ayarlarını ve çalışan hizmetlerini kurtarmak için bir proje seçin."
+    "chooseHint": "Ayarlarını ve çalışan hizmetlerini kurtarmak için bir proje seçin.",
+    "lastSeen": "Son dağıtım {when}",
+    "fullRestore": "Tam geri yükleme",
+    "bestEffort": "Kısmi geri yükleme"
   },
   "scanFailed": "Docker incelemesi başarısız oldu",
   "adoptFailed": "Proje oluşturulamadı",
@@ -264,5 +307,13 @@
     "importDetails": "İçe aktarma ayrıntıları",
     "detectProjects": "Projeleri algıla",
     "includeManaged": "Yönetilen kapsayıcıları dahil et"
+  },
+  "view": {
+    "tabView": "Hizmetleri görüntüle",
+    "tabMigrate": "Geçir",
+    "adoptedGroup": "{project} tarafından yönetiliyor",
+    "openProject": "Projeyi aç",
+    "migrateToManage": "Yönetmek için geçir",
+    "back": "Hizmetlere geri dön"
   }
 }

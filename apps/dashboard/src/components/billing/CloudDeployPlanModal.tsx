@@ -19,6 +19,7 @@ export function CloudDeployPlanModal({
   workspaceId,
   serverName,
   initialCheckoutUrl,
+  onRetry,
 }: {
   restriction?: CloudDeployRestriction;
   workspaceId?: string;
@@ -27,6 +28,7 @@ export function CloudDeployPlanModal({
   /** A plan-first server purchase has already opened checkout. */
   initialCheckoutUrl?: string;
   onClose: () => void;
+  onRetry?: () => Promise<unknown>;
 }) {
   const { t } = useI18n();
   const copy = t.billing.deployGate;
@@ -42,6 +44,8 @@ export function CloudDeployPlanModal({
   const [error, setError] = useState<"owner" | "unavailable" | null>(null);
   const [checkoutStarted, setCheckoutStarted] = useState(Boolean(initialCheckoutUrl));
   const [checked, setChecked] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (busy.current) return;
@@ -78,6 +82,23 @@ export function CloudDeployPlanModal({
     recovery === "upgrade" && state && !state.overQuota &&
     (state.subscription?.offerReference ?? state.tier) !== initialOffer.current;
   const ready = recovery === "ready" || planChanged;
+  useEffect(() => {
+    if (ready || error === "owner") return;
+    const recheck = () => { if (document.visibilityState !== "hidden") void refresh(); };
+    window.addEventListener("focus", recheck);
+    const timer = checkoutStarted ? window.setInterval(recheck, 4000) : undefined;
+    return () => { window.removeEventListener("focus", recheck); if (timer !== undefined) window.clearInterval(timer); };
+  }, [ready, error, checkoutStarted, refresh]);
+
+  async function retryAction() {
+    if (!onRetry || retrying) return;
+    setRetrying(true);
+    setRetryError(null);
+    try { await onRetry(); }
+    catch (error) { observeCaughtError(error, "dashboard/components/billing/CloudDeployPlanModal"); setRetryError(error instanceof Error ? error.message : copy.loadError); }
+    finally { setRetrying(false); }
+  }
+
   const readyTitle = serverName !== undefined ? t.billing.workspaces.serverPlanReadyTitle : copy.readyTitle;
   const showPlans = !ready && !initialCheckoutUrl && (recovery === "subscribe" || recovery === "upgrade");
   const title = serverName !== undefined
@@ -141,6 +162,8 @@ export function CloudDeployPlanModal({
         <p id={descriptionId} className="mb-5 text-sm text-muted-foreground">
           {description}
         </p>
+        {!ready && restriction.message && <p className="mb-4 rounded-xl bg-muted/40 p-3 text-sm">{restriction.message}</p>}
+        {retryError && <p role="alert" className="mb-4 text-sm text-danger">{retryError}</p>}
         {loading && !state ? (
           <div
             role="status"
@@ -216,6 +239,7 @@ export function CloudDeployPlanModal({
       </div>
 
       <footer className="flex shrink-0 items-stretch justify-end gap-2 border-t border-border/40 px-4 py-3 sm:px-5">
+        {ready && onRetry && <Button disabled={retrying} onClick={() => void retryAction()}>{t.billing.workspaces.retryDeployment}</Button>}
         {!ready && error !== "owner" && (
           <Button
             type="button"

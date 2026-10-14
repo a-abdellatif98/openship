@@ -12,6 +12,7 @@ import {
   isNull,
   isNotNull,
   notExists,
+  notLike,
   sql,
 } from "drizzle-orm";
 import { ConflictError, generateId, DOMAIN_RETRY_DELAYS_MS } from "@repo/core";
@@ -631,20 +632,21 @@ export function createDomainRepo(db: Database) {
       return row?.verifyAttempts ?? 0;
     },
 
-    /** A failed TLS operation records its retry state without claiming a known
-     * working certificate disappeared. Only a definitive missing/invalid read
-     * may replace that last known state. */
-    async recordSslFailure(id: string, error: string, definitive = false) {
+    /** An unavailable observation preserves all certificate/DNS states. A failed
+     * operation preserves a working certificate; a proven invalid/missing
+     * certificate replaces it. All three share atomic retry bookkeeping. */
+    async recordSslFailure(id: string, error: string, kind: "operation" | "unknown" | "invalid" = "operation") {
       await withProjectConfigurationWrite(db, ownerPredicate(id), async (tx) => tx
         .update(domain)
         .set({
           verifyAttempts: sql`${domain.verifyAttempts} + 1`,
           lastVerifyError: error,
           lastCheckedAt: new Date(),
-          status: sql`case when ${domain.verified} then 'active' else 'failed' end`,
-          sslStatus: definitive
-            ? "error"
-            : sql`case when ${domain.sslStatus} in ('active', 'external') then ${domain.sslStatus} else 'error' end`,
+          status: kind === "unknown" ? sql`${domain.status}`
+            : sql`case when ${domain.verified} then 'active' else 'failed' end`,
+          sslStatus: kind === "unknown" ? sql`${domain.sslStatus}`
+            : kind === "invalid" ? "error"
+              : sql`case when ${domain.sslStatus} in ('active', 'external') then ${domain.sslStatus} else 'error' end`,
           updatedAt: new Date(),
         })
         .where(and(eq(domain.id, id), ne(domain.status, "removing"))));
@@ -669,14 +671,14 @@ export function createDomainRepo(db: Database) {
         await this.recordSslFailure(
           id,
           data.lastVerifyError ?? "No usable HTTPS certificate was found on the server.",
-          true,
+          "invalid",
         );
         return;
       }
-      if (data.sslStatus === "active" || data.sslStatus === "external") {
+      if (data.sslStatus === "active" || data.sslStatus === "external" || data.sslStatus === "provisioning") {
         const now = new Date();
         // A certificate read alone does not prove cloud DNS ownership. Clear
-        // TLS failures for verified rows; the verification transaction clears
+        // TLS failures/pending attempts for verified rows; the verification transaction clears
         // unverified rows when the ownership check itself succeeds.
         await withProjectConfigurationWrite(db, ownerPredicate(id), async (tx) => tx
           .update(domain)
@@ -745,6 +747,21 @@ export function createDomainRepo(db: Database) {
       return db.query.domain.findMany({
         where: and(inArray(domain.sslStatus, ["active", "error"]), lt(domain.sslExpiresAt, beforeDate), ne(domain.sslDnsMode, "manual")),
       });
+    },
+
+    /** Read-only health checks also revisit certificates the provider calls
+     * active. Scope, age and live ownership precede LIMIT for fair batching. */
+    async findDueCloudSslChecks(beforeDate: Date, limit = 25, domainId?: string) {
+      return db.select().from(domain).where(and(
+        domainId ? eq(domain.id, domainId) : undefined,
+        eq(domain.verified, true), eq(domain.domainType, "custom"),
+        eq(domain.externalIngress, false), eq(domain.manualSsl, false),
+        ne(domain.status, "removing"), notLike(domain.hostname, "%*%"),
+        or(isNull(domain.lastCheckedAt), lte(domain.lastCheckedAt, beforeDate)),
+        retryDue(), liveVerificationOwner(),
+        inArray(domain.projectId, db.select({ id: project.id }).from(project)
+          .where(isNotNull(project.workspaceId))),
+      )).orderBy(sql`coalesce(${domain.lastCheckedAt}, ${domain.createdAt})`, asc(domain.id)).limit(limit);
     },
 
     /**

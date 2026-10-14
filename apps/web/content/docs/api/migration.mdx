@@ -76,6 +76,14 @@ container IDs as keys; legacy service-name keys remain accepted. `routesByServic
 routes per service, preserving aliases, listen ports, path prefixes and exact matches. Environment values
 are saved in the service's production environment scope.
 
+A hostname can contain only explicit paths, such as `/api/` and an exact `/health`, without a
+service at `/`. Migration preserves that selection as a project-owned route: matching requests
+reach their selected services, and unmatched paths return `404`. An exact `/` match does not
+become a catch-all. If an existing source catch-all is omitted, the run asks you to confirm
+the selected paths or cancel and review them before creating project records or changing
+source containers. Routing retries retain the previous complete table when any selected
+service has no live upstream.
+
 When routes are selected, migration prepares the target edge before changing source containers. If another
 proxy must be replaced, the run waits for consent. Read `pendingPrompt` from
 `GET /api/migration/migrations/:id` (also included in the stream snapshot), then answer it with:

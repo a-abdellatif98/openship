@@ -11,6 +11,7 @@ export function ManagedControlPanel({
   icon,
   busy,
   error,
+  errorCode,
   refresh,
   children,
 }: {
@@ -19,6 +20,7 @@ export function ManagedControlPanel({
   icon: IconName;
   busy: boolean;
   error: string | null;
+  errorCode?: string | null;
   refresh: () => void;
   children: ReactNode;
 }) {
@@ -44,8 +46,20 @@ export function ManagedControlPanel({
         </Button>
       </div>
       {error && (
-        <div role="alert" className="space-y-2 rounded-xl bg-danger/10 p-4 text-sm text-danger">
-          <p className="break-words">{error}</p>
+        <div
+          role="alert"
+          className={`space-y-2 rounded-xl p-4 text-sm ${errorCode === "CLOUD_SERVER_CONTROL_UNAVAILABLE" ? "bg-warning-bg text-warning" : "bg-danger/10 text-danger"}`}
+        >
+          {errorCode === "CLOUD_SERVER_CONTROL_UNAVAILABLE" ? (
+            <>
+              <p className="font-medium">{t.servers.managedControls.controlUnavailable.title}</p>
+              <p className="break-words">
+                {t.servers.managedControls.controlUnavailable.description}
+              </p>
+            </>
+          ) : (
+            <p className="break-words">{error}</p>
+          )}
           <Button variant="secondary" size="sm" disabled={busy} onClick={refresh}>
             {t.servers.managedControls.retry}
           </Button>

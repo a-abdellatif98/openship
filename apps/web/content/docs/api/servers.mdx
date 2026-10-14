@@ -21,12 +21,14 @@ The normal Cloud flow creates the first shared server automatically when a
 customer chooses a plan or creates a project. To create an additional server:
 
 ```ts
-const managed = await ship.servers.createManaged({ name: "Production" });
+const purchaseKey = crypto.randomUUID();
+const managed = await ship.servers.createManaged({ name: "Production", idempotencyKey: purchaseKey });
+const checkoutKey = crypto.randomUUID();
 const checkout = await ship.billing.createSubscription({
   workspaceId: managed.id,
   planTierId: "pro",
   interval: "monthly",
-  idempotencyKey: crypto.randomUUID(),
+  idempotencyKey: checkoutKey,
 });
 ```
 
@@ -34,6 +36,9 @@ Complete checkout through the [billing workflow](/docs/api/billing). Verified
 payment queues server setup. Use `managed.serverId` for project placement,
 server usage, terminal access and lifecycle operations. `managed.id` is the
 subscription owner identifier used only for billing.
+Keep the creation key and checkout key for retries after an uncertain response.
+Creation reuses the same server within your organization, including its current
+name; a deleted purchase cannot be recreated with its old key.
 
 Self-hosted and desktop installations can use these same managed servers after
 connecting an Openship Cloud account. Create a new server with `createManaged`,
@@ -794,6 +799,9 @@ shared storage before removing the cluster runtime.
 
 | Operation | SDK | REST API |
 | --- | --- | --- |
+| Read the current outbound connection and revision without proxy credentials. Does not start the managed server. | `servers.managedOutbound(id)` | `GET /api/system/servers/:id/managed/outbound`<br />`server:read` |
+| List available managed outbound IPs and countries for this owned server, without credentials or internal pool identifiers. | `servers.managedOutboundOptions(id)` | `GET /api/system/servers/:id/managed/outbound/options`<br />`server:read` |
+| Apply a reviewed managed IP or custom public IPv4 HTTP/HTTPS proxy using expectedRevision and confirm:true. Changes outgoing connections for all projects; preserves internet policy, ingress and routes. Credentials are never returned or audited. | `servers.setManagedOutbound(id, input)` | `PATCH /api/system/servers/:id/managed/outbound`<br />`server:admin` |
 | Read the selected managed server image, operating system, lifecycle and purchased allocation. Does not start the VM or return its raw configuration. | `servers.managedInfo(id)` | `GET /api/system/servers/:id/managed/info`<br />`server:read` |
 | Read a bounded tail of managed server boot logs. Requires server admin; logs may contain application output. | `servers.managedBootLogs(id, input)` | `POST /api/system/servers/:id/managed/boot-logs`<br />`server:admin` |
 | Read SSH enablement and public connection instructions for this managed server. Never returns passwords. | `servers.managedSshStatus(id)` | `GET /api/system/servers/:id/managed/ssh`<br />`server:read` |

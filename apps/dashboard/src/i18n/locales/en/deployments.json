@@ -201,5 +201,42 @@
     "untouchedNote": "These keep running and are not touched: {names}",
     "confirm": "Roll back",
     "cancel": "Cancel"
+  },
+  "cloudBuildQueue": {
+    "label": "Cloud build queue",
+    "title": "Build queued",
+    "position": "Build queued · Position {position}",
+    "concurrency": "Waiting for a simultaneous build slot.",
+    "resources": "Waiting for available CPU or memory on the server.",
+    "server": "Waiting for the server to accept this build.",
+    "automaticStart": "It will start automatically.",
+    "allowance": "Simultaneous builds allowed by your plan: {count}.",
+    "unlimited": "Your plan has no simultaneous build limit.",
+    "active": "Active builds: {count}.",
+    "comparePlans": "Compare plans",
+    "optionalUpgrade": "Upgrading is optional. You can keep waiting.",
+    "compareConcurrency": "Compare plans for more simultaneous builds. Your build can remain in the queue.",
+    "compareResources": "Compare plans for more CPU or memory. You can keep waiting for server resources to become available."
+  },
+  "monitoring": {
+    "title": "Deployment overview",
+    "scope": "Selected project and search · UTC calendar days · retained deployment history",
+    "period": "Time window",
+    "days": "{count} days",
+    "refresh": "Refresh",
+    "attempts": "Deployment attempts",
+    "window": "Across the selected window",
+    "successRate": "Success rate",
+    "rateHint": "Successful / (successful + failed); excludes cancellations",
+    "failedHint": "Includes partial and blocked releases",
+    "activeHint": "Running or queued attempts in this window",
+    "unavailable": "Overview unavailable. Try refreshing.",
+    "trend": "Daily outcomes",
+    "avgBuild": "Average successful build",
+    "empty": "No deployments in this window.",
+    "projects": "Project breakdown",
+    "projectHint": "Top 6 by failures, then active attempts",
+    "failedShort": "failed",
+    "history": "Deployment history"
   }
 }

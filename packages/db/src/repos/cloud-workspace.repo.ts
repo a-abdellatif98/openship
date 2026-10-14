@@ -1,3 +1,4 @@
+import { assertNoCloudBuildActivities } from "./cloud-build-activity.repo";
 import { and, asc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { AppError, generateId } from "@repo/core";
 import type { Database, DatabaseTransaction } from "../client";
@@ -76,6 +77,16 @@ async function updatedLinkedProjects(
 
 export function createCloudWorkspaceRepo(db: Database) {
   return {
+    /** Internal cache sweep includes hosts whose last project moved/deleted.
+     * Return the owner, never accept a provider namespace as scan authority. */
+    async listBuildCacheHosts() {
+      return db.select({ id: cloudWorkspace.id, organizationId: cloudWorkspace.organizationId })
+        .from(cloudWorkspace)
+        .innerJoin(cloudDockerWorkspace, eq(cloudDockerWorkspace.ownerWorkspaceId, cloudWorkspace.id))
+        .where(and(isNull(cloudWorkspace.remote), isNull(cloudWorkspace.deletionInProgress),
+          eq(cloudDockerWorkspace.state, "ready"), isNotNull(cloudDockerWorkspace.workspaceId)))
+        .orderBy(asc(cloudWorkspace.id));
+    },
     async findById(id: string) {
       return db.query.cloudWorkspace.findFirst({ where: eq(cloudWorkspace.id, id) });
     },
@@ -94,10 +105,10 @@ export function createCloudWorkspaceRepo(db: Database) {
         .where(eq(cloudWorkspace.organizationId, organizationId))
         .orderBy(asc(cloudWorkspace.createdAt), asc(cloudWorkspace.id));
     },
-    async create(input: Pick<CloudWorkspace, "organizationId" | "name">) {
+    async create(input: Pick<CloudWorkspace, "organizationId" | "name"> & { id?: string }) {
       return db.transaction(async (tx) => {
         const [row] = await tx.insert(cloudWorkspace)
-          .values({ ...input, id: generateId("cws") }).returning();
+          .values({ ...input, id: input.id ?? generateId("cws") }).returning();
         await tx.insert(servers).values({
           organizationId: input.organizationId, workspaceId: row!.id,
           name: input.name, sshHost: null, sshPort: null, sshUser: null,
@@ -344,6 +355,7 @@ export function createCloudWorkspaceRepo(db: Database) {
           eq(cloudWorkspace.id, id), eq(cloudWorkspace.organizationId, organizationId),
         )).for("update");
         if (!row) throw new AppError("Managed server not found", 404, "CLOUD_WORKSPACE_NOT_FOUND");
+        await assertNoCloudBuildActivities(tx, id);
         if (row.activity) {
           if (row.activity.id !== activity.id || row.activity.controllerId !== activity.controllerId || row.activity.scope !== activity.scope)
             throw new AppError("This server has an operation in progress. Let it finish on the installation that started it before changing the server.", 409, "CLOUD_WORKSPACE_ACTIVITY_BUSY");
@@ -407,6 +419,12 @@ export function createCloudWorkspaceRepo(db: Database) {
         eq(cloudServerDeletion.operationId, operationId),
       ) });
     },
+    async findWorkspaceDeletion(workspaceId: string, organizationId: string) {
+      return db.query.cloudServerDeletion.findFirst({ where: and(
+        eq(cloudServerDeletion.workspaceId, workspaceId),
+        eq(cloudServerDeletion.organizationId, organizationId),
+      ) });
+    },
     /** Only called after provider deletion is confirmed. Membership is blocked
      * by deletionInProgress and independently protected by its RESTRICT FK. */
     async finishDeletion(id: string, organizationId: string) {
@@ -417,6 +435,7 @@ export function createCloudWorkspaceRepo(db: Database) {
           .where(and(eq(cloudWorkspace.id, id), eq(cloudWorkspace.organizationId, organizationId)))
           .for("update");
         if (!row?.deletionInProgress) throw new Error("Workspace deletion was not requested");
+        await assertNoCloudBuildActivities(tx, id);
         const [member] = await tx
           .select({ id: project.id })
           .from(project)

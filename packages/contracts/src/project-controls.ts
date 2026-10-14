@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { GitHubDeploymentChecksSchema } from "./deployment-checks";
 import {
   CreateProjectEnvironmentBody,
   MergeEnvVarsBody,
@@ -185,6 +186,12 @@ export const ProjectGitInfoSchema = Type.Union([
       }),
     ),
     auto_deploy: Type.Boolean(),
+    github_checks: Type.Optional(GitHubDeploymentChecksSchema),
+    github_checks_delivery: Type.Optional(Type.Union([Type.Object({
+      error: nullableString,
+      updatedAt: Type.String(),
+      pending: nullableString,
+    }), Type.Null()])),
     webhook_strategy: webhookStrategy,
     webhook_active: Type.Boolean(),
     webhook_domain: nullableString,
@@ -436,6 +443,7 @@ export const ProjectControlSchemas = {
         port: Type.Number(),
         listening: Type.Boolean(),
         checked: Type.Boolean(),
+        loopbackOnly: Type.Optional(Type.Boolean()),
         serviceId: Type.Optional(Type.String()),
         serviceName: Type.Optional(Type.String()),
         skippedReason: Type.Optional(Type.String()),

@@ -10,6 +10,8 @@ import {
   pinnedHostPortsToAvoid,
   prepareTargetPinnedHostPorts,
   releaseNewPinnedHostPortClaims,
+  suggestAlternativePinnedHostPort,
+  type AllocatedPinnedHostPort,
   type PinnedHostPort,
 } from "@repo/platform/engine/modules/deployments/pinned-host-ports";
 import type { HostPortTargetIdentity } from "@repo/platform/engine/lib/host-port-target";
@@ -99,6 +101,130 @@ describe("pinnedHostPortsToAvoid", () => {
       createdAt: new Date(0),
       updatedAt: new Date(0),
     }));
+  });
+
+  describe("a replacement chosen in the port-conflict dialog", () => {
+    function replacement() {
+      const allocation: AllocatedPinnedHostPort = {
+        port: 20001,
+        scanned: true,
+        preferred: 20001,
+        claim: storedClaim("original", "local", claims[0]!),
+        previousClaim: claims[0],
+        claimWasCreated: false,
+      };
+      return {
+        target: localTarget,
+        allocation,
+        excluded: new Set([20000]),
+        readClaims: vi.fn(async (): Promise<readonly PinnedHostPort[]> => claims),
+        allocate: vi.fn(async (options: Parameters<typeof pickHostPort>[1]) => ({
+          port: pickHostPort(new Set(), options),
+          scanned: true,
+        })),
+        isAvailable: vi.fn(async (_port: number): Promise<boolean | null> => true),
+        onSelected: vi.fn(),
+      };
+    }
+
+    it("avoids stopped and excluded ports, reserving only after the user chooses", async () => {
+      const input = replacement();
+      const suggestion = await suggestAlternativePinnedHostPort(input);
+      expect(suggestion?.port).toBe(20004);
+      expect(claimRepo.reserve).not.toHaveBeenCalled();
+      expect(input.onSelected).not.toHaveBeenCalled();
+
+      await expect(suggestion!.apply()).resolves.toBe(true);
+      expect(input.readClaims).toHaveBeenCalledTimes(2);
+      expect(input.isAvailable.mock.calls).toEqual([[20004], [20004]]);
+      expect(claimRepo.reserve).toHaveBeenCalledExactlyOnceWith({
+        targetKey: "local",
+        projectId: "single",
+        serviceId: null,
+        containerPort: null,
+        port: 20004,
+      });
+      expect(input.onSelected).toHaveBeenCalledWith(
+        expect.objectContaining({
+          port: 20004,
+          claimWasCreated: true,
+          previousClaim: claims[0],
+        }),
+      );
+      expect(claimRepo.release).not.toHaveBeenCalled();
+    });
+
+    it("skips Docker publishes the socket allocator cannot see", async () => {
+      const input = replacement();
+      input.isAvailable.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      expect((await suggestAlternativePinnedHostPort(input))?.port).toBe(20005);
+      expect(claimRepo.reserve).not.toHaveBeenCalled();
+    });
+
+    it("does not offer an unverified port", async () => {
+      const input = replacement();
+      input.isAvailable.mockResolvedValue(null);
+      expect(await suggestAlternativePinnedHostPort(input)).toBeNull();
+      expect(claimRepo.reserve).not.toHaveBeenCalled();
+      expect(input.onSelected).not.toHaveBeenCalled();
+    });
+
+    it.each([false, null])(
+      "keeps the original choice if availability becomes %s",
+      async (availability) => {
+        const input = replacement();
+        input.isAvailable.mockResolvedValueOnce(true).mockResolvedValueOnce(availability);
+        const suggestion = await suggestAlternativePinnedHostPort(input);
+        await expect(suggestion!.apply()).resolves.toBe(false);
+        expect(input.allocate).toHaveBeenCalledOnce(); // no unapproved fallback
+        expect(claimRepo.reserve).not.toHaveBeenCalled();
+        expect(input.onSelected).not.toHaveBeenCalled();
+      },
+    );
+
+    it("rechecks reservations when another project claims the suggestion", async () => {
+      const input = replacement();
+      const suggestion = await suggestAlternativePinnedHostPort(input);
+      input.readClaims.mockResolvedValue([
+        ...claims,
+        {
+          projectId: "other-project",
+          serviceId: null,
+          containerPort: 3000,
+          port: suggestion!.port,
+        },
+      ]);
+      await expect(suggestion!.apply()).resolves.toBe(false);
+      expect(claimRepo.reserve).not.toHaveBeenCalled();
+      expect(input.onSelected).not.toHaveBeenCalled();
+    });
+
+    it("honors a reservation race without changing the deploy configuration", async () => {
+      const input = replacement();
+      const suggestion = await suggestAlternativePinnedHostPort(input);
+      claimRepo.reserve.mockRejectedValueOnce(
+        new HostPortClaimConflictError("port", "local", 20004),
+      );
+      await expect(suggestion!.apply()).resolves.toBe(false);
+      expect(input.onSelected).not.toHaveBeenCalled();
+      expect(claimRepo.release).not.toHaveBeenCalled();
+    });
+
+    it("preserves the original recovery claim and can release only the new reservation", async () => {
+      const input = replacement();
+      const suggestion = await suggestAlternativePinnedHostPort(input);
+      await suggestion!.apply();
+      const selected = input.onSelected.mock.calls[0]![0] as AllocatedPinnedHostPort;
+      expect(selected.previousClaim).toBe(input.allocation.previousClaim);
+      await releaseNewPinnedHostPortClaims(localTarget, [input.allocation, selected]);
+      expect(claimRepo.release).toHaveBeenCalledExactlyOnceWith({
+        targetKey: "local",
+        projectId: "single",
+        serviceId: null,
+        containerPort: null,
+        port: 20004,
+      });
+    });
   });
 
   it("reads legacy server aliases until a canonical port supersedes them", async () => {

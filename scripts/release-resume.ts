@@ -9,6 +9,7 @@ const workflows = new Set([
   ".github/workflows/docker-images.yml",
   ".github/workflows/release-gate.yml",
   ".github/workflows/scaling-e2e.yml",
+  ".github/workflows/actions-e2e.yml",
 ]);
 
 export function resumeRuns(annotation: string): string[] {
@@ -38,6 +39,11 @@ export function affectsScope(path: string, scope: string): boolean {
   // Native/API archives can contain source and fixture files. Builds retain the
   // full tree as input; only the installed SDK excludes the API's test tree.
   if (scope === "sdk" && path.startsWith("apps/api/test/")) return false;
+  // This fixture is used only by the platform unit suite. Keep archives and the
+  // installed SDK conservative, while allowing unchanged real-host journeys to
+  // retain their verified results after a fixture-only type correction.
+  if (path === "packages/platform/src/engine/modules/actions/github-checks.test.ts")
+    return scope === "unit" || scope === "build" || scope === "sdk";
   const exclusive =
     path === "apps/api/test/helpers/cluster-host-lab.ts" ||
     path.startsWith("apps/api/test/fixtures/cluster-host/")
@@ -50,7 +56,9 @@ export function affectsScope(path: string, scope: string): boolean {
             ? "application"
             : path === "apps/api/test/e2e/rollback-build-restore.e2e.test.ts"
               ? "heavy"
-              : path === "apps/api/test/e2e/update-from-previous-release.e2e.test.ts"
+              : path === "apps/api/test/e2e/actions-runner.e2e.test.ts" || path === "apps/api/test/helpers/workspace-runtime.ts"
+                ? "actions-linux"
+                : path === "apps/api/test/e2e/update-from-previous-release.e2e.test.ts"
                 ? "update"
                 : path.startsWith("apps/api/test/e2e/")
                   ? "fast"
@@ -126,7 +134,9 @@ export function assertResumeBinding(source: string, workflowPath: string, jobId:
   const inputs = job?.steps?.find((step: RecordValue) => step.id === "resume")?.with;
   if (!inputs) throw new Error("The job does not declare its resume inputs.");
   const scope =
-    workflowPath.endsWith("/scaling-e2e.yml") && jobId === "scaling"
+    workflowPath.endsWith("/actions-e2e.yml") && ["linux", "macos"].includes(jobId)
+      ? `actions-${jobId}`
+      : workflowPath.endsWith("/scaling-e2e.yml") && jobId === "scaling"
       ? "${{ matrix.journey }}"
       : workflowPath.endsWith("/release-gate.yml")
         ? (

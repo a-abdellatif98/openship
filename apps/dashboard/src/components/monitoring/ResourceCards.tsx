@@ -16,6 +16,7 @@ import { Icon as UiIcon } from "@repo/ui/icons";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n, interpolate } from "@/components/i18n-provider";
+import { ConnectionNotice } from "@/components/shared/ConnectionNotice";
 import type {
   ProjectUsage,
   ResourceUsage,
@@ -36,6 +37,7 @@ const ZERO_USAGE: ResourceUsage = {
 interface Props {
   usage: ProjectUsage | null;
   isConnected: boolean;
+  isConnecting?: boolean;
   error: string | null;
   onReconnect: () => void;
   /**
@@ -56,33 +58,6 @@ const STATUS_DOT: Record<ServiceStatus, string> = {
   restarting: "bg-warning",
   failed: "bg-danger",
   stopped: "bg-muted-foreground/40",
-};
-
-/**
- * The stream's FAILURE state, on the services row.
- *
- * When the stream is live there is no badge at all: the parent card's subtitle already
- * says "Live, refreshed every few seconds", so a second green "Live" dot was redundant
- * chrome. Only disconnection earns a spot here — it changes what the numbers mean and
- * has to offer the retry, so it can't be silent.
- */
-const OfflineNotice: React.FC<{ onReconnect: () => void }> = ({ onReconnect }) => {
-  const { t } = useI18n();
-  const m = t.projects.monitoring;
-  return (
-    <div className="flex shrink-0 items-center gap-2">
-      <span aria-hidden className="size-2 rounded-full bg-muted-foreground/40" />
-      <span className="text-xs text-muted-foreground">{m.offline}</span>
-      <button
-        type="button"
-        onClick={onReconnect}
-        className="ml-1 flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <UiIcon name="refresh" className="size-3" />
-        {m.reconnect}
-      </button>
-    </div>
-  );
 };
 
 /**
@@ -257,6 +232,7 @@ const ServiceChip: React.FC<{
 export const ResourceCards: React.FC<Props> = ({
   usage,
   isConnected,
+  isConnecting = false,
   error,
   onReconnect,
   focusServiceKey = null,
@@ -265,11 +241,22 @@ export const ResourceCards: React.FC<Props> = ({
   const m = t.projects.monitoring;
   const statusLabels: Partial<Record<ServiceStatus, string>> =
     t.projectDetail.services.detail.status;
+  const connectionNotice = (error || (usage && !isConnected)) && (
+    <ConnectionNotice
+      title={isConnecting ? m.connecting : error ? m.unsupportedTitle : m.offline}
+      message={usage ? t.projects.analytics.staleData : t.projects.analytics.loadFailedDescription}
+      detail={error ?? undefined}
+      onRetry={onReconnect}
+      retrying={isConnecting}
+      retryLabel={m.reconnect}
+    />
+  );
 
   // `supported: false` is a real answer, not an error: BareRuntime's old stub
   // returned zeros and the dashboard drew them as data, so an unmeasurable
   // deployment looked exactly like an idle one.
   if (usage && !usage.supported) {
+    if (connectionNotice) return connectionNotice;
     return (
       <>
         <div className="flex items-start gap-2">
@@ -286,34 +273,17 @@ export const ResourceCards: React.FC<Props> = ({
   }
 
   if (!usage) {
+    if (connectionNotice) return connectionNotice;
     return (
-      <>
-        <div className="mb-4 flex items-center justify-between">
-          {error && (
-            <button
-              type="button"
-              onClick={onReconnect}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <UiIcon name="refresh" className="size-3" />
-              {m.reconnect}
-            </button>
-          )}
-        </div>
-        {error ? (
-          <p className="text-sm text-muted-foreground">{error}</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="space-y-2">
-                <div className="h-3 w-16 rounded bg-muted" />
-                <div className="h-7 w-20 rounded bg-muted" />
-                <div className="h-1.5 w-full rounded bg-muted" />
-              </div>
-            ))}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="space-y-2">
+            <div className="h-3 w-16 rounded bg-muted" />
+            <div className="h-7 w-20 rounded bg-muted" />
+            <div className="h-1.5 w-full rounded bg-muted" />
           </div>
-        )}
-      </>
+        ))}
+      </div>
     );
   }
 
@@ -334,9 +304,7 @@ export const ResourceCards: React.FC<Props> = ({
   return (
     <>
       <div className="space-y-4">
-        {/* No header row here any more. It carried nothing but the liveness pill — the title
-            belongs to the parent card — so it spent a whole row of height on one dot. The
-            pill now sits on the services row, which had empty space to the right of it. */}
+        {connectionNotice}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Metric
             icon={<UiIcon name="cpu" className="size-4" />}
@@ -370,32 +338,16 @@ export const ResourceCards: React.FC<Props> = ({
           />
         </div>
 
-      {/* Only for multi-service projects: a single-app deploy's one "service" is
-          the app itself, and repeating the numbers just read as duplication. A section of
-          the parent card rather than a card of its own — the chips belong WITH the totals
-          they break down. */}
-      {/* This row exists whether or not there are services, because it also carries the
-          offline notice — and a single-container app needs that just as much. When the
-          stream is live the header collapses to just the title; when it drops, the notice
-          appears on the right. */}
-      <div>
-        <div className="mb-2 flex items-center gap-3">
-          {hasServiceChips && (
-            <h3 className="text-xs font-medium text-muted-foreground">{m.servicesTitle}</h3>
-          )}
-          <span className="min-w-0 flex-1" />
-          {/* Only the FAILURE state shows here. Live is already stated by the card
-              subtitle, so a second "Live" pill was redundant — see OfflineNotice. */}
-          {!isConnected && <OfflineNotice onReconnect={onReconnect} />}
-        </div>
         {hasServiceChips && (
-          <ServiceStrip
-            services={usage.services}
-            focusServiceKey={focusServiceKey}
-            statusLabels={statusLabels}
-          />
+          <div>
+            <h3 className="mb-2 text-xs font-medium text-muted-foreground">{m.servicesTitle}</h3>
+            <ServiceStrip
+              services={usage.services}
+              focusServiceKey={focusServiceKey}
+              statusLabels={statusLabels}
+            />
+          </div>
         )}
-      </div>
       </div>
     </>
   );

@@ -20,7 +20,119 @@
     "useGeneratedDomains": "Kostenlose Domains nutzen",
     "editDomains": "Domains bearbeiten",
     "routePortCloudDesc": "Nur innerhalb dieses Cloud-Workspaces erreichbar. Füge eine Domain für eine öffentliche URL hinzu.",
-    "exposeTitle": "Domains und Routing"
+    "exposeTitle": "Domains und Routing",
+    "install": "Installieren",
+    "installing": "Wird installiert…",
+    "advanced": "Erweiterte Bereitstellungsoptionen",
+    "nameLabel": "Name",
+    "nameHint": "Wie diese App in Openship angezeigt wird.",
+    "domainTitle": "Wo soll sie erreichbar sein?",
+    "domainFree": "Kostenlose Subdomain",
+    "domainFreeHint": "Eine kostenlose Subdomain auf {domain}",
+    "domainCustom": "Eigene Domain",
+    "domainCustomPlaceholder": "app.beispiel.de",
+    "domainNone": "Keine öffentliche URL",
+    "domainNoneHint": "Nur intern — keine öffentliche Adresse.",
+    "customRequired": "Geben Sie Ihre Domain ein oder wählen Sie eine andere Option.",
+    "progressPreparing": "Wird vorbereitet…",
+    "progressDeploying": "Wird bereitgestellt…",
+    "progressLive": "Ihre App ist online",
+    "openApp": "App öffnen",
+    "goToApp": "Zur App",
+    "installFailed": "Installation fehlgeschlagen",
+    "installFailedBody": "Der Vorgang wurde gestoppt, bevor alles lief. Die technischen Details enthalten das vollständige Build-Protokoll.",
+    "installCancelledSelf": "Sie haben diese Installation abgebrochen.",
+    "installCancelledBody": "Die erstellten Container und Images wurden entfernt, und Daten-Volumes wurden beibehalten — eine erneute Installation verwendet sie wieder. Alles, was bereits aktiv war, blieb unberührt.",
+    "settledAtPhase": "Gestoppt bei {phase}",
+    "viewDetails": "Technische Details anzeigen",
+    "showLogs": "Logs anzeigen",
+    "hideLogs": "Logs ausblenden",
+    "deployLogs": "Deployment-Logs",
+    "logsWaiting": "Warte auf Ausgabe…",
+    "logsEmpty": "Keine Ausgabe erfasst.",
+    "back": "Zurück",
+    "phaseImages": "Images vorbereiten",
+    "phaseServices": "Dienste starten",
+    "phaseAppSetup": "Einrichtung abschließen",
+    "phaseReady": "Aktiv",
+    "phaseQueued": "In Warteschlange…",
+    "stepperTitle": "Installationsschritte",
+    "firstLoginTitle": "Erstanmeldung",
+    "firstLoginUser": "Benutzername",
+    "firstLoginPassword": "Passwort",
+    "destinationTitle": "Ziel der Installation",
+    "destinationHint": "Wählen Sie den Server oder die Cloud, auf dem diese App ausgeführt wird.",
+    "descMore": "Mehr",
+    "descLess": "Weniger",
+    "needsTitle": "Ressourcenbedarf",
+    "needsMemory": "{value} RAM",
+    "needsCpu": "{value}",
+    "hostFitTitle": "Dieser Server ist kleiner als für {app} erforderlich",
+    "hostFitMemory": "Benötigt {needed} RAM — dieser verfügt über {available}",
+    "hostFitCpu": "Benötigt {needed} — dieser verfügt über {available}",
+    "routePortLabel": "Nur Port (keine Domain)",
+    "routePortDesc": "Über Hostadresse und Port erreichbar — keine Domain oder Cloud erforderlich.",
+    "routeFreeLabel": "Kostenlose Subdomain",
+    "routeFreeDesc": "Eine kostenlose Subdomain auf {domain}, weitergeleitet über Openship Cloud.",
+    "routeFreeNeedsCloud": "Verbinden Sie Openship Cloud, um eine kostenlose Subdomain zu nutzen.",
+    "routeCustomLabel": "Eigene Domain",
+    "routeCustomDesc": "Leiten Sie eine eigene Domain auf diese App weiter.",
+    "routeDomainLabel": "Domain",
+    "routeDomainDesc": "Über eine Domain erreichbar — eine kostenlose Subdomain oder Ihre eigene.",
+    "httpBadge": "Web",
+    "tcpBadge": "Datenbank",
+    "tcpPublishLabel": "Port veröffentlichen",
+    "tcpPublishDesc": "Auf dem Host veröffentlichen, damit externe Tools eine Verbindung herstellen können.",
+    "tcpInternalLabel": "Nur intern",
+    "tcpInternalDesc": "Nur andere Dienste in dieser App können darauf zugreifen.",
+    "tcpFirewallNote": "Öffnen Sie Port {port} in der Firewall Ihres Servers für externe Verbindungen.",
+    "desktopReachNote": "Auf dem Desktop können Sie sie über localhost öffnen — oder den Port unter Server → Ports für einen Remote-Server weiterleiten.",
+    "statusInstalling": "Wird installiert",
+    "statusLive": "Online",
+    "statusCancelled": "Abgebrochen",
+    "statusFailed": "Fehlgeschlagen",
+    "stopInstall": "Installation abbrechen",
+    "stopping": "Wird gestoppt…",
+    "installCancelled": "Installation abgebrochen",
+    "startOver": "Neu beginnen",
+    "breadcrumbApps": "Apps",
+    "appEyebrow": "App",
+    "stopFailed": "Installation konnte nicht abgebrochen werden",
+    "progressStep": "Schritt {current} von {total}",
+    "progressServicesReady": "{done} von {total} Diensten bereit",
+    "summaryTitle": "Konfiguration",
+    "summaryDestination": "Ziel",
+    "summaryServices": "Dienste",
+    "mail": {
+      "title": "E-Mail einrichten",
+      "subtitle": "Stellen Sie Webmail auf Ihrer eigenen Domain bereit oder verbinden Sie ein bestehendes Postfach.",
+      "chooseSelf": "Eigenen Mailserver hosten",
+      "chooseSelfDesc": "Vollständiges SMTP/IMAP + Webmail (iRedMail) auf Ihrem Server — wir richten alles ein.",
+      "chooseConnect": "Bestehendes Postfach verbinden",
+      "chooseConnectDesc": "Nur die Webmail-Oberfläche bereitstellen, angebunden an einen externen SMTP/IMAP-Anbieter — Amazon SES, Oracle Cloud, Gmail, Fastmail und weitere.",
+      "provider": "Anbieter",
+      "presets": {
+        "custom": "Benutzerdefiniert",
+        "ses": "Amazon SES",
+        "gmail": "Gmail",
+        "fastmail": "Fastmail"
+      },
+      "sendOnlyNote": "{provider} sendet nur E-Mails — enthält keine Postfächer. IMAP muss dorthin verweisen, wo Ihre E-Mails tatsächlich gespeichert sind.",
+      "sendOnlyNoInbox": "Noch kein Posteingang? Richten Sie hier einen Mailserver ein und leiten Sie den Versand über {provider} weiter →",
+      "imapOnOurServer": "Postfächer lesen von {host} — dem eigenen Mailserver dieser Instanz. Nur der Versand läuft über {provider}.",
+      "relayNote": "Diese Instanz betreibt bereits einen Mailserver. Wenn die Postfächer darauf liegen, leiten Sie den Versand stattdessen über den Tab Zustellung → Versand weiter: IMAP bleibt lokal und nur der Versand geht an {provider}, pro Domain oder pro Adresse, und das eigene Webmail funktioniert weiterhin.",
+      "relayCta": "Stattdessen Relay konfigurieren →",
+      "hostname": "Webmail-Adresse",
+      "hostnameHint": "Die öffentliche URL zum Lesen von E-Mails, z. B. mail.example.com.",
+      "imapHost": "IMAP-Host",
+      "imapPort": "IMAP-Port",
+      "smtpHost": "SMTP-Host",
+      "smtpPort": "SMTP-Port",
+      "deploy": "Webmail bereitstellen",
+      "deploying": "Wird bereitgestellt…",
+      "hostnameRequired": "Geben Sie die Webmail-Adresse ein.",
+      "hostsRequired": "Geben Sie sowohl IMAP- als auch SMTP-Host ein."
+    }
   },
   "settingSection": {
     "edit": "Bearbeiten",
@@ -263,6 +375,10 @@
         "failed": "Interner Hostname konnte nicht aktualisiert werden",
         "invalid": "Gib mindestens einen Buchstaben oder eine Ziffer ein"
       }
+    },
+    "export": {
+      "title": "Projekt exportieren",
+      "description": "Alle Projekteinstellungen, Umgebungswerte und Anmeldedaten als JSON herunterladen."
     }
   },
   "backup": {
@@ -731,7 +847,12 @@
     "linkedTitleOne": "{count} Projekt ist mit dieser App verbunden",
     "linkedTitleOther": "{count} Projekte sind mit dieser App verbunden",
     "linkedNote": "Sie laufen mit unveränderten Daten weiter – nur diese Verbindung entfällt. Deploye sie neu, damit das greift.",
-    "linkedNoteRecordOnly": "Sie laufen weiter, aber die Verknüpfung verschwindet mit dem Eintrag – ein späterer Re-Import stellt sie nicht wieder her."
+    "linkedNoteRecordOnly": "Sie laufen weiter, aber die Verknüpfung verschwindet mit dem Eintrag – ein späterer Re-Import stellt sie nicht wieder her.",
+    "recordOnlyLabel": "Nur aus Openship entfernen",
+    "recordOnlyDesc": "Lässt die App und ihre Daten auf Ihrem Server weiterlaufen — nur der Openship-Eintrag wird entfernt. Sie können sie später wieder importieren.",
+    "recordOnlyReversible": "Umkehrbar — die App bleibt auf Ihrem Server.",
+    "recordOnlyNote": "Auf dem Server wird nichts verändert — die App läuft mit ihren Daten weiter. Nur der Eintrag in Openship wird entfernt und kann später erneut importiert werden.",
+    "confirmRecordOnly": "Eintrag entfernen"
   },
   "routing": {
     "title": "Routing",
@@ -762,13 +883,15 @@
       "expired": "Abgelaufen",
       "error": "Fehler",
       "inactive": "Inaktiv",
-      "unknown": "Unbekannt"
+      "unknown": "Unbekannt",
+      "external": "Externes TLS",
+      "manual": "Manuelles Zertifikat"
     },
     "typeCustom": "Benutzerdefinierte Domain",
     "typeFree": "Kostenlose Subdomain",
     "primaryDomainTitle": "Primäre Domain",
     "domainNTitle": "Domain {n}",
-    "portLabel": "Port {port}",
+    "portLabel": "Port: {port}",
     "noPortSelected": "Kein Port ausgewählt",
     "meta": {
       "accessTitle": "Zugriffs-URL",
@@ -811,7 +934,13 @@
       "includeWwwDesc": "Auch Einträge für www.{domain} erzeugen",
       "includeWwwFallback": "ihredomain.de",
       "adding": "Wird hinzugefügt...",
-      "submit": "Domain hinzufügen"
+      "submit": "Domain hinzufügen",
+      "noWww": "Diese Domain ist diesem Projekt bereits hinzugefügt.",
+      "servesPath": "Bereitstellungspfad",
+      "servesPathHint": "Anfragen an diese Domain werden von diesem Pfad in Ihrer Build-Ausgabe bedient.",
+      "servesPathRedeploy": "Neue Pfade werden bei Ihrem nächsten Deployment wirksam.",
+      "externalIngress": "Externer Ingress & TLS",
+      "externalIngressDesc": "TLS terminiert an Ihrem Reverse-Proxy (Cloudflare Tunnel, Nginx Proxy Manager oder ein Load-Balancer). Die Domain muss nicht auf diesen Server zeigen, und Openship stellt kein Zertifikat aus."
     },
     "dns": {
       "title": "DNS-Einträge",
@@ -863,7 +992,8 @@
       "title": "Route bearbeiten",
       "internalOnly": "Nur intern",
       "close": "Schließen",
-      "disabledWarning": "Der Dienst ist deaktiviert – Routen sind inaktiv, bis der Dienst wieder aktiviert wird."
+      "disabledWarning": "Der Dienst ist deaktiviert – Routen sind inaktiv, bis der Dienst wieder aktiviert wird.",
+      "save": "Änderungen speichern"
     },
     "menu": {
       "editRoute": "Route bearbeiten",
@@ -874,7 +1004,8 @@
       "renewing": "Wird erneuert...",
       "renewSsl": "SSL erneuern",
       "rechecking": "Wird erneut geprüft...",
-      "recheckSsl": "SSL erneut prüfen"
+      "recheckSsl": "SSL erneut prüfen",
+      "uploadCert": "Zertifikat hochladen"
     },
     "toast": {
       "enterPort": "Geben Sie den Port ein, an den diese Domain weiterleiten soll (1–65535).",
@@ -905,7 +1036,11 @@
       "enterPortShort": "Geben Sie den Port ein, an den diese Domain weiterleiten soll.",
       "noServicePort": "Kein Dienst veröffentlicht Port {port}. Fügen Sie diesen Port zuerst einem Dienst hinzu.",
       "enterCustom": "Geben Sie eine benutzerdefinierte Domain ein.",
-      "enterSubdomain": "Geben Sie eine Subdomain ein."
+      "enterSubdomain": "Geben Sie eine Subdomain ein.",
+      "certUploaded": "Zertifikat für {hostname} installiert.",
+      "certUploadFailed": "Installation des Zertifikats für {hostname} fehlgeschlagen.",
+      "publishing": "Veröffentlichung läuft — Deployment zur Installation des Edge und Anwendung Ihrer Domain…",
+      "publishFailed": "Domain gespeichert, aber Deployment wurde nicht gestartet — erneut deployen, um sie zu veröffentlichen."
     },
     "edge": {
       "setUp": "Edge einrichten",
@@ -941,7 +1076,11 @@
     },
     "records": {
       "failed": "Die DNS-Einträge für diese Domain konnten nicht geladen werden.",
-      "retry": "Erneut versuchen"
+      "retry": "Erneut versuchen",
+      "toggle": "DNS-Einträge",
+      "hint": "Fügen Sie diese bei Ihrem DNS-Anbieter hinzu und klicken Sie dann auf Überprüfen.",
+      "loading": "Einträge werden geladen…",
+      "none": "Keine Einträge für diese Domain hinzuzufügen."
     },
     "outputHint": {
       "body": "Keine Build-Ausgabe unter {path} gefunden — prüfen Sie Ihr Ausgabeverzeichnis und deployen Sie erneut.",
@@ -984,6 +1123,32 @@
         "cancelled": "Verifizierung abgebrochen",
         "expired": "TXT-Verifizierung abgelaufen"
       }
+    },
+    "verifyMissing": {
+      "both": "Weder der CNAME- noch der TXT-Eintrag wird bisher aufgelöst — fügen Sie die Einträge unten hinzu, warten Sie auf die DNS-Verteilung und prüfen Sie erneut.",
+      "cname": "Der CNAME-Eintrag wird noch nicht aufgelöst — fügen Sie ihn unten hinzu, warten Sie auf die DNS-Verteilung und prüfen Sie erneut.",
+      "txt": "Der TXT-Verifizierungseintrag wird noch nicht aufgelöst — fügen Sie ihn unten hinzu, warten Sie auf die DNS-Verteilung und prüfen Sie erneut."
+    },
+    "portHint": {
+      "body": "Auf Port {port} hat nichts geantwortet — Anfragen liefern möglicherweise 502, bis die App diesen Port überwacht.",
+      "bodyService": "Dienst „{service}“: Auf Port {port} hat nichts geantwortet — Anfragen liefern möglicherweise 502, bis der Dienst diesen Port überwacht."
+    },
+    "certUpload": {
+      "title": "Zertifikat hochladen",
+      "desc": "TLS mit eigenem Zertifikat (Bring-Your-Own oder Cloudflare Origin CA) anstelle von Let's Encrypt bereitstellen. Verwenden Sie dies, wenn ein vorgeschalteter Proxy vor dieser Domain liegt und der Origin dennoch ein echtes Zertifikat benötigt (Cloudflare Full-strict). Certbot wird für diese Domain deaktiviert, sobald ein Zertifikat hochgeladen wurde — erneuern Sie es durch Hochladen eines neuen Zertifikats.",
+      "certLabel": "Zertifikat (Fullchain-PEM)",
+      "certPlaceholder": "-----BEGIN CERTIFICATE-----",
+      "keyLabel": "Privater Schlüssel (PEM)",
+      "keyPlaceholder": "-----BEGIN PRIVATE KEY-----",
+      "submit": "Zertifikat installieren",
+      "submitting": "Wird installiert…",
+      "close": "Abbrechen"
+    },
+    "removeRoute": {
+      "title": "Route entfernen",
+      "description": "Die App läuft weiter — nur diese Route und ihre Edge-Registrierung werden entfernt. Sie können sie jederzeit wieder hinzufügen.",
+      "confirm": "Route entfernen",
+      "removing": "Wird entfernt…"
     }
   },
   "serviceEnvironment": {
@@ -1002,5 +1167,69 @@
     "server": "Verwalteter Server",
     "serverDescription": "Dateien aus einem nginx-Container auf deinem verwalteten Server ausliefern.",
     "nextDeploy": "Gespeicherte Hosting-Änderungen gelten ab dem nächsten Deployment."
+  },
+  "deploymentChecks": {
+    "title": "GitHub-Deployment-Checks",
+    "description": "Ergebnisse von Deployment und Diensten am bereitgestellten Commit anzeigen.",
+    "customize": "Checks anpassen",
+    "deployment": "Deployment-Ergebnis",
+    "services": "Alle Dienste, auch neue",
+    "selectedServices": "Dienste auswählen",
+    "includeErrors": "Fehlerdetails einschließen",
+    "errorsHint": "Bereinigte Fehlerzusammenfassungen werden für Personen mit Lesezugriff auf dieses Repository sichtbar.",
+    "emptySelection": "Mindestens einen Check auswählen oder die Berichterstattung ausschalten.",
+    "connectionHint": "Erfordert eine GitHub App mit Schreibzugriff auf Checks.",
+    "connection": "GitHub-Verbindung",
+    "deliveryFailed": "Checks konnten nicht übermittelt werden",
+    "saveFailed": "GitHub-Check-Einstellungen konnten nicht gespeichert werden."
+  },
+  "appSource": {
+    "title": "Quelle",
+    "description": "Diese App wird aus einem Release bereitgestellt — es gibt kein Repo zum Pushen; Updates erscheinen als neue Versionen.",
+    "sourceType": "Quelle",
+    "kindRelease": "Release",
+    "kindImage": "Container-Image",
+    "current": "Aktuelle Version",
+    "latest": "Neueste Version",
+    "repository": "Repository",
+    "notChecked": "Noch nicht geprüft",
+    "upToDate": "Aktuell",
+    "updateAvailable": "Update verfügbar",
+    "checkForUpdates": "Nach Updates suchen",
+    "checkFailed": "Updates konnten nicht geprüft werden",
+    "update": "Aktualisieren",
+    "updateTo": "Auf {version} aktualisieren",
+    "updating": "Wird aktualisiert…",
+    "updateFailed": "Aktualisierung fehlgeschlagen",
+    "toastTitle": "Quelle",
+    "cliManaged": "Dies ist die Steuerungsebene von Openship — sie aktualisiert sich selbst. Führen Sie „openship update“ auf dem Host aus, um sie zu aktualisieren; hier gibt es nichts zu ändern."
+  },
+  "routeRules": {
+    "title": "Routenregeln",
+    "description": "Rate-Limiting-, Sperr- und Zulassen/Ablehnen-Regeln auf Edge-Ebene — sofort wirksam, kein Redeploy.",
+    "loading": "Regeln werden geladen…",
+    "empty": "Noch keine Routenregeln. Fügen Sie unten eine hinzu.",
+    "allHosts": "Alle Hostnamen",
+    "allPaths": "Alle Pfade",
+    "addTitle": "Regel hinzufügen",
+    "pathLabel": "Pfad-Präfix (optional)",
+    "rps": "Anfragen / Sek.",
+    "burst": "Burst",
+    "methods": "Nur Methoden zulassen",
+    "banIps": "IPs / CIDRs sperren",
+    "banCountries": "Länder sperren (ISO)",
+    "allowCountries": "Nur Länder zulassen (ISO)",
+    "denyCidrs": "CIDRs ablehnen",
+    "allowReferers": "Hotlinking: Erlaubte Referrer",
+    "banUserAgents": "User-Agents sperren (Teilzeichenkette)",
+    "blockEmptyUa": "Leere User-Agents blockieren",
+    "blockStatus": "Antwort-Code bei Blockierung",
+    "add": "Regel hinzufügen",
+    "remove": "Entfernen",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert",
+    "saved": "Regel gespeichert",
+    "saveFailed": "Regel konnte nicht gespeichert werden",
+    "loadFailed": "Regeln konnten nicht geladen werden"
   }
 }

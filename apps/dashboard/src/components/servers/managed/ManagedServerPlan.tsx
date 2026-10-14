@@ -60,7 +60,7 @@ export function ManagedServerPlan({
         href={workspaceBillingHref("/billing/overview", server.id)}
         className="block text-center text-sm font-medium text-muted-foreground hover:text-foreground"
       >
-        {t.dashboard.nav.billing}
+        {t.billing.subscription.manage}
       </Link>
     </section>
   );

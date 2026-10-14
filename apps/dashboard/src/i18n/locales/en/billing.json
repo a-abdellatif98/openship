@@ -101,6 +101,7 @@
     }
   },
   "plansRoute": {
+    "requestedPlanUnavailable": "The selected plan is no longer available. Choose another plan below.",
     "loadError": "Failed to load plans",
     "genericError": "Something went wrong",
     "tryAgain": "Try again",
@@ -308,7 +309,8 @@
     "cancelNotice": "Renewal will stop at the end of your paid period. Your subscription stays in place until then.",
     "confirmCancel": "Stop renewal",
     "keepPlan": "Keep subscription",
-    "error": "Unable to update your subscription. Please retry."
+    "error": "Unable to update your subscription. Please retry.",
+    "manage": "Manage subscription"
   },
   "deployGate": {
     "title": "Choose a plan to deploy",
@@ -343,6 +345,7 @@
     }
   },
   "resourcesGuide": {
+    "concurrentBuilds": "Concurrent builds",
     "title": "How Cloud usage works",
     "credits": "Cloud credits",
     "creditsHint": "Builds and running apps use credits for CPU, memory, disk activity and data transfer. Larger workloads use credits faster.",
@@ -636,7 +639,7 @@
     "save": "Save",
     "delete": "Delete server",
     "confirmDelete": "Delete this empty server",
-    "deleteHint": "Remove every project first and end the subscription. This permanently removes the empty server and its remaining disk data.",
+    "deleteHint": "Removing projects does not cancel a subscription. Stop renewal in Billing and wait for the paid period to end before deleting a subscribed server. Deletion permanently removes the empty server and its remaining disk data.",
     "buildCapacityTitle": "Server capacity needs attention",
     "buildCapacityHint": "Builds use free capacity on this server. Stop an idle service or increase the server’s capacity, then retry.",
     "openWorkspace": "Open server",
@@ -824,7 +827,8 @@
     "monthly": "per month",
     "annual": "per year",
     "oneTime": "one-time payment",
-    "cancelUnavailable": "Cancellation isn’t available for this payment right now. Refresh or contact support.",
+    "cancelUnavailable": "Cancellation could not be verified. Refresh the payment status.",
+    "cancelUnsupported": "This payment cannot be cancelled here. Complete it or wait for it to expire before choosing another plan.",
     "support": "Contact support",
     "cancelHint": "The payment link will close. You can then choose another plan.",
     "confirmCancel": "Confirm cancellation",

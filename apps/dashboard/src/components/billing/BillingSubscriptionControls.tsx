@@ -2,7 +2,7 @@
 
 import { Icon as UiIcon } from "@repo/ui/icons";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { billingApi, type BillingState } from "@/lib/api/billing";
@@ -17,6 +17,7 @@ export function BillingSubscriptionControls({ state }: { state: BillingState }) 
   const [subscription, setSubscription] = useState(state.subscription);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setSubscription(state.subscription);
@@ -44,7 +45,8 @@ export function BillingSubscriptionControls({ state }: { state: BillingState }) 
         : copy.renewalEnabled;
 
   async function updateRenewal(action: "cancel" | "resume") {
-    if (busy) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -58,6 +60,7 @@ export function BillingSubscriptionControls({ state }: { state: BillingState }) 
     } catch (err) {
       setError(getApiErrorMessage(err, copy.error));
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }

@@ -20,7 +20,7 @@ beforeEach(() => {
   vi.resetAllMocks(); h.cloud = true; h.tier = "starter"; h.workspaceId = "subscription-a";
   h.sync.mockImplementation(async () => ({
     tier: h.tier,
-    // An explicit purchased slot limit exercises the gate independently of today's unlimited catalog.
+    // An explicit purchased slot limit exercises the gate independently of today's catalog.
     limits: { ...planLimits(h.tier as PlanTierId), runningServices: h.tier === "free" ? 0 : 3 },
     resourceLimits: resolvePlan(h.tier as PlanTierId).oblienLimits,
   }));
@@ -195,12 +195,21 @@ describe("Cloud deploy and update resource gates", () => {
     expect(resolveInheritedResources({ cpuCores: 0, memoryMb: 0 }, base)).toEqual({ ...base, cpuCores: 0, memoryMb: 0 });
     expect(resolveInheritedResources({ cpuCores: 0.25, memoryMb: 256 }, base)).toEqual({ ...base, cpuCores: 0.25, memoryMb: 256 });
   });
-  it("does not sum container ceilings into VM reservations or limit new plans by project count", async () => {
+  it("keeps container ceilings separate from service quotas and preserves saved unlimited terms", async () => {
     h.sync.mockResolvedValue({ tier: "team", limits: planLimits("team"), resourceLimits: resolvePlan("team").oblienLimits });
     const stack = Array.from({ length: 20 }, (_, index) => ({ name: `service-${index}`, image: "redis:8", advanced: { resources: { cpuCores: 1, memoryMb: 1024 } } }));
     await expect(assertCloudDeploymentLimits("org-a", { projectId: "existing", services: stack })).resolves.toBeUndefined();
-    expect(h.count).not.toHaveBeenCalled();
+    expect(h.count).toHaveBeenCalledOnce();
     expect(h.capacity).not.toHaveBeenCalled();
+    h.count.mockResolvedValue(101);
+    await expect(assertCloudDeploymentLimits("org-a", { projectId: "existing", services: stack }))
+      .rejects.toMatchObject({ reason: "running-services", workspaceId: "subscription-a" });
+    h.count.mockClear();
+    h.sync.mockResolvedValue({ tier: "team", limits: {
+      ...planLimits("team"), runningServices: null, maxProjects: null, concurrentBuilds: null,
+    }, resourceLimits: resolvePlan("team").oblienLimits });
+    await expect(assertCloudDeploymentLimits("org-a", { projectId: "existing", services: stack })).resolves.toBeUndefined();
+    expect(h.count).not.toHaveBeenCalled();
   });
   it("rejects a conflicting billing owner instead of using another server's plan", async () => {
     await expect(assertCloudDeploymentLimits("org-a", { projectId: "existing", workspaceId: "another-server", services: services() })).rejects.toMatchObject({ code: "CLOUD_WORKSPACE_TARGET_CONFLICT" });

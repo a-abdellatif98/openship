@@ -81,7 +81,7 @@ function setup() {
 }
 
 describe("shared-storage cleanup boundaries", () => {
-  it.each(["missing", "false", "create-race"])(
+  it.each(["missing", "false", "create-race", "cache-race"])(
     "confirms empty storage removal when Longhorn's setting is %s",
     async (initial) => {
       const { adapter, request, objects } = setup();
@@ -115,13 +115,29 @@ describe("shared-storage cleanup boundaries", () => {
                 apiVersion: "batch/v1",
                 kind: "Job",
                 metadata: { name: "longhorn-uninstall", namespace: "longhorn-system" },
-                spec: { template: { spec: {} } },
+                spec: { backoffLimit: 1, template: { spec: {} } },
               },
             ]
           : [],
       );
       const actual = request.getMockImplementation()!;
+      let jobReads = 0;
       request.mockImplementation(async (method, path, body) => {
+        if (
+          initial === "cache-race" &&
+          method === "GET" &&
+          path.endsWith("/jobs/longhorn-uninstall")
+        ) {
+          const job = objects.get(path);
+          if (job?.status?.active && ++jobReads > 1) {
+            job.status = {
+              failed: 1,
+              succeeded: 1,
+              conditions: [{ type: "Complete", status: "True" }],
+            };
+          }
+          if (job) return job;
+        }
         if (method === "POST" && path === settings) {
           if (initial === "create-race") {
             objects.set(confirmation, structuredClone(setting));
@@ -146,7 +162,17 @@ describe("shared-storage cleanup boundaries", () => {
           const job = {
             ...body,
             metadata: { ...body.metadata, uid: "uninstall-job" },
-            status: { conditions: [{ type: "Complete", status: "True" }] },
+            status:
+              initial === "cache-race"
+                ? body.spec.backoffLimit > 0
+                  ? { failed: 1, active: 1 }
+                  : {
+                      failed: 1,
+                      conditions: [
+                        { type: "Failed", status: "True", reason: "BackoffLimitExceeded" },
+                      ],
+                    }
+                : { conditions: [{ type: "Complete", status: "True" }] },
           };
           objects.set(`${path}/${body.metadata.name}`, job);
           return job;
@@ -159,6 +185,7 @@ describe("shared-storage cleanup boundaries", () => {
         request.mock.calls.some(([method, path]) => method === "POST" && path.endsWith("/jobs")),
       ).toBe(true);
       expect(objects.has("/api/v1/namespaces/longhorn-system")).toBe(false);
+      if (initial === "cache-race") expect(jobReads).toBeGreaterThan(1);
     },
   );
   it("finishes interrupted cleanup while preserving local database and custom storage classes", async () => {

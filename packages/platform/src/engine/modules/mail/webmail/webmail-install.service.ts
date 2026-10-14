@@ -37,6 +37,7 @@ import {
   type OpenshipReadiness, mailHostname } from "@repo/core";
 import { repos, type Domain, type Project } from "@repo/db";
 import type { Platform } from "@repo/adapters";
+import type { MailWebmailRecoveryCandidate } from "@repo/contracts";
 import { assertResourceInOrg } from "../../../lib/resource-access";
 import { pickCanonicalDomainRow, resolveServicePublicEndpoints } from "../../../lib/public-endpoints";
 import type { ExecutionContext as RequestContext } from "@repo/platform";
@@ -59,6 +60,7 @@ import { requireLinkedCloudServer } from "../../../lib/cloud/server-link";
 import { workspaceForServer } from "../../../lib/cloud-workspace-scope";
 import { authorization } from "../../../lib/authorization";
 import { listProjectRouteRows } from "../../domains/project-route.service";
+import { MAIL_DOMAIN_OWNER } from "../../../lib/domain-ssl";
 import { updateService } from "../../services/service.service";
 import { mutateState, readState, type MailServerState } from "../mail-state";
 
@@ -170,6 +172,8 @@ export interface StartWebmailDeployInput {
    * are in the install being removed — that is the operator's call, not ours.
    */
   replaceLegacy?: boolean;
+  /** Explicitly reconnect an existing catalog webmail after its mail registration lost the link. */
+  reconnectProjectId?: string;
 }
 
 export interface StartExternalWebmailDeployInput {
@@ -281,6 +285,9 @@ interface WebmailInstallPlan {
    * certificate renewal, not to any project.
    */
   routeAfterLink?: boolean;
+  /** Same-host mail daemons are reached through Docker's host gateway while
+   * their certificate hostname remains unchanged. Remote backends use DNS. */
+  hostBackend?: { hostname: string; local: boolean };
 }
 
 async function runWebmailInstall(
@@ -338,6 +345,25 @@ async function runWebmailInstall(
   // Before the deploy, never after: the deploy's success hook resolves the mail
   // server FROM the project, and a build can finish before a later write lands.
   await plan.beforeDeploy?.(projectId);
+  if (plan.hostBackend) {
+    const service = (await repos.service.listByProject(projectId)).find(
+      (row) => row.name === webmailEndpoint(template).service,
+    );
+    if (!service) {
+      throw new AppError("The webmail service is missing. Refresh before deploying.", 409, "WEBMAIL_SERVICE_MISSING");
+    }
+    const previous = (service.advanced as ComposeAdvanced | null)?.extraHosts ?? {};
+    const aliases = { ...previous };
+    if (plan.hostBackend.local) aliases[plan.hostBackend.hostname] = "host-gateway";
+    else if (aliases[plan.hostBackend.hostname] === "host-gateway") {
+      delete aliases[plan.hostBackend.hostname];
+    }
+    if (JSON.stringify(aliases) !== JSON.stringify(previous)) {
+      await updateService(ctx, projectId, service.id, {
+        advanced: { extraHosts: Object.keys(aliases).length ? aliases : null },
+      });
+    }
+  }
 
   // The mail host's route, now that the link authorizing it exists. Same plan builder
   // and same per-service write as a first install — the only difference is that it could
@@ -506,17 +532,53 @@ export async function startWebmailDeploy(
   // operator, who couldn't do it anyway.
   const useProxyVariant = target.deployTarget === "cloud" && isOwnMailSubdomain;
 
-  const linked = await resolveLinkedWebmailProject(
+  let linked = await resolveLinkedWebmailProject(
     ctx.organizationId,
     input.mailServerId,
     record?.webmailProjectId ?? null,
   );
+  if (record?.webmailProjectId && !linked) {
+    throw new AppError("Could not resolve this mail server's linked webmail. Refresh its status before continuing.", 503, "WEBMAIL_LINK_UNAVAILABLE");
+  }
+  let reconnect: Project | null = null;
+  if (input.reconnectProjectId) {
+    if ((record?.webmailProjectId && record.webmailProjectId !== input.reconnectProjectId) ||
+      (linked && linked.id !== input.reconnectProjectId)) {
+      throw new AppError("This mail server already has a linked webmail. Refresh its status before continuing.", 409, "WEBMAIL_LINK_CHANGED");
+    }
+    if (!linked) {
+      const project = await repos.project.findById(input.reconnectProjectId);
+      assertResourceInOrg(project, "project", ctx.organizationId, input.reconnectProjectId);
+      await authorization.authorize(ctx, { resourceType: "project", resourceId: project.id, action: "write" });
+      const candidates = await listWebmailRecoveryCandidates(ctx, { serverId: input.mailServerId, domain: installDomain });
+      if (!candidates.some(candidate => candidate.projectId === project.id)) {
+        throw new AppError("Choose an unlinked webmail app on this mail server that already uses its mail hostname.", 409, "WEBMAIL_RECONNECT_INVALID");
+      }
+      if (target.deployTarget !== "server" || target.serverId !== project.serverId || input.hostname !== mailHost) {
+        throw new AppError("Reconnect this webmail on its existing server and hostname first. Its destination can be changed afterwards.", 409, "WEBMAIL_RECONNECT_INVALID");
+      }
+      const owner = await repos.domain.findByHostname(mailHost);
+      if (owner && (owner.ownerType !== MAIL_DOMAIN_OWNER || owner.projectId !== null)) {
+        throw new AppError("This hostname already has another route owner. Resolve its domain ownership before reconnecting webmail.", 409, "WEBMAIL_RECONNECT_INVALID");
+      }
+      await resolveSnapshotTarget(project, { deployTarget: target.deployTarget, serverId: target.serverId });
+      reconnect = project;
+      linked = project;
+    }
+  } else if (!linked && (await findWebmailRecoveryProjects(ctx.organizationId, { serverId: input.mailServerId, domain: installDomain })).length) {
+    throw new AppError("An existing webmail app needs reconnecting. Open Emails → Deploy webmail and choose that app instead of creating another one.", 409, "WEBMAIL_RECONNECT_REQUIRED");
+  }
+
   // A pre-catalog row is replaced, never redeployed — see LEGACY_WEBMAIL_TEMPLATE_ID.
   const legacy = linked && isLegacyWebmailProject(linked) ? linked : null;
   if (legacy && !input.replaceLegacy) throw legacyReplaceConsentRequired(legacy);
 
   const template = await requireWebmailTemplate(ctx.organizationId);
   const endpoint = webmailEndpoint(template);
+
+  if (reconnect && !(await repos.mailServer.reconnectWebmailProject(input.mailServerId, installDomain, reconnect.id))) {
+    throw new AppError("The mail server's webmail link changed. Refresh its status before continuing.", 409, "WEBMAIL_LINK_CHANGED");
+  }
 
   // The teardown is the LAST thing before the install, after every cheap refusal
   // above has passed: nothing may delete a working webmail and only then discover
@@ -552,8 +614,20 @@ export async function startWebmailDeploy(
     // `mail.<install>` is routable only by the mail server's LINKED webmail, and the
     // link is stamped in `beforeDeploy` — so this one route has to wait for it (#566).
     routeAfterLink: isOwnMailSubdomain && !useProxyVariant,
-    beforeDeploy: (projectId) =>
-      repos.mailServer.setWebmailProject(input.mailServerId, projectId),
+    hostBackend: {
+      hostname: mailHost,
+      local: target.deployTarget === "server" && target.serverId === input.mailServerId,
+    },
+    beforeDeploy: async (projectId) => {
+      if (reconnect) {
+        const current = await repos.mailServer.get(input.mailServerId);
+        if (current?.domain !== installDomain || current.webmailProjectId !== projectId) {
+          throw new AppError("The mail server's webmail link changed. Refresh its status before continuing.", 409, "WEBMAIL_LINK_CHANGED");
+        }
+      } else {
+        await repos.mailServer.setWebmailProject(input.mailServerId, projectId);
+      }
+    },
   });
 }
 
@@ -628,6 +702,40 @@ export async function resolveLinkedWebmailProject(
       observeCaughtError(diagnosticFailure, "platform/engine/modules/mail/webmail/webmail-install.service");
     }); // best-effort stamp; the fallback still answers correctly
   return legacy;
+}
+
+/** Detection prevents duplicate installs even when a scoped caller cannot read an existing app. */
+async function findWebmailRecoveryProjects(
+  organizationId: string,
+  mailServer: { serverId: string; domain: string },
+): Promise<Project[]> {
+  const hostname = mailHostname(mailServer.domain);
+  const projects = await repos.project.listAppsOnServer(organizationId, mailServer.serverId, WEBMAIL_TEMPLATE_ID);
+  const candidates: Project[] = [];
+  for (const project of projects) {
+    if (project.workspaceId || project.deletionInProgress) continue;
+    if (await repos.mailServer.findByWebmailProject(project.id)) continue;
+    const services = await repos.service.listByProject(project.id);
+    const hasMailHost = services.some(service => resolveServicePublicEndpoints(service, {
+      projectSlug: project.slug ?? project.name,
+    }).some(endpoint => endpoint.domainType === "custom" && endpoint.customDomain?.toLowerCase() === hostname));
+    if (hasMailHost) candidates.push(project);
+  }
+  return candidates;
+}
+
+/** Read-only suggestions. Only an explicit mail-server + project write may grant routing rights. */
+export async function listWebmailRecoveryCandidates(
+  ctx: RequestContext,
+  mailServer: { serverId: string; domain: string },
+): Promise<MailWebmailRecoveryCandidate[]> {
+  const candidates: MailWebmailRecoveryCandidate[] = [];
+  for (const project of await findWebmailRecoveryProjects(ctx.organizationId, mailServer)) {
+    if (await authorization.checkPermissionOnResource(ctx, { resourceType: "project", resourceId: project.id, action: "read" })) {
+      candidates.push({ projectId: project.id, name: project.name, hostname: mailHostname(mailServer.domain), serverId: mailServer.serverId });
+    }
+  }
+  return candidates;
 }
 
 // ─── Status summary ──────────────────────────────────────────────────────────

@@ -5,3 +5,4 @@ export { hashStringToInt, type AdvisoryLockHandle } from "./advisory-lock-factor
 const locks = createAdvisoryLocks({ getDriver, getPgPool, poolMax: PG_POOL_MAX });
 export const withAdvisoryLock = locks.withAdvisoryLock;
 export const tryAcquireAdvisoryLock = locks.tryAcquireAdvisoryLock;
+export const runOutsideAdvisoryLock = locks.runOutsideAdvisoryLock;

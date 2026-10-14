@@ -221,7 +221,8 @@
     "off": "aus",
     "previewTitle": "Bereitstellungsvorschau",
     "previewHint": "Weiter zur App-Konfiguration. Die Bereitstellung startet auf der nächsten Seite.",
-    "back": "Zurück"
+    "back": "Zurück",
+    "gpuBadge": "GPU"
   },
   "summary": {
     "buildAndDeploy": "Bauen & deployen:",
@@ -305,7 +306,12 @@
     "legacyBody": "Es wurde von einem älteren Openship deployt, das Webmail als Bundle statt als Image auslieferte, und kann daher nicht erneut deployt werden. Ein Deploy entfernt es jetzt – Projekt, Container und seine Sitzungsdatenbank – und installiert an seiner Stelle die Webmail-App. Alle angemeldeten Personen werden abgemeldet, und benutzerspezifische Webmail-Einstellungen gehen verloren.",
     "legacyKept": "Postfächer, Mail-Daten und alle Nachrichten bleiben unangetastet auf dem Mail-Server.",
     "deployFailedTitle": "Deploy fehlgeschlagen",
-    "deployFailed": "Deploy konnte nicht gestartet werden"
+    "deployFailed": "Deploy konnte nicht gestartet werden",
+    "reconnectTitle": "Vorhandenes Webmail neu verknüpfen",
+    "reconnectBody": "Die Verknüpfung zum Mailserver fehlt. Wähle die vorhandene App, um Projekt, Zugangsdaten und gespeicherte Einstellungen zu behalten.",
+    "reconnectChoose": "Wähle vor dem Fortfahren die zu verknüpfende Webmail-App.",
+    "reconnectPlacement": "Die Verknüpfung behält Server und Hostnamen bei. Das Ziel kannst du danach ändern.",
+    "reconnectButton": "Verknüpfen und bereitstellen"
   },
   "serveMode": {
     "heading": "How it's served",

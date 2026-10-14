@@ -1,4 +1,4 @@
-import { formatCpuCores, formatMemoryMb, planServiceResources } from "@repo/core";
+import { formatMemoryMb } from "@repo/core";
 import { Navbar, Footer } from "@/components/landing";
 import {
   STANDARD,
@@ -10,6 +10,7 @@ import {
   type PricedPlan,
 } from "@/lib/pricing";
 import { CLOUD_CTA_HREF, SELF_HOST_CTA_HREF, faq } from "./_data";
+import { cloudPlanHref } from "@/lib/cloud-links";
 
 // Match the public catalog and JSON-LD cache window.
 export const revalidate = 60;
@@ -39,52 +40,47 @@ const count = (value: number | null) =>
 
 function PlanResources({ plan }: { plan: PricedPlan }) {
   const pool = plan.resourceLimits;
-  const service = planServiceResources(plan.limits);
   const hasPool =
     pool?.max_total_vcpus != null &&
     pool.max_total_ram_mb != null &&
     pool.max_total_disk_gb != null;
 
+  // Show finite allowances that distinguish the plans alongside shared capacity.
+  const facts = [
+    ...(plan.limits.maxProjects != null ? [{ label: "Projects & apps", value: count(plan.limits.maxProjects) }] : []),
+    ...(plan.limits.runningServices != null ? [{ label: "Running services", value: count(plan.limits.runningServices) }] : []),
+    ...(plan.limits.concurrentBuilds != null ? [{ label: "Concurrent builds", value: count(plan.limits.concurrentBuilds) }] : []),
+    ...(plan.limits.buildMinutesPerMonth !== null
+      ? [{ label: "Build time", value: `${count(plan.limits.buildMinutesPerMonth)} min/mo` }]
+      : plan.billingMode !== "monthly" ? [{ label: "Build time", value: "Metered" }] : []),
+  ];
+
   return (
-    <dl className="pp-plan-resources">
-      <div className="pp-plan-resource">
-        <dt>Managed server capacity</dt>
-        <dd>
-          {hasPool ? (
-            <>
-              {formatCpuCores(pool.max_total_vcpus!)} · {formatMemoryMb(pool.max_total_ram_mb!)} RAM
-              <span>{pool.max_total_disk_gb!.toLocaleString("en")} GB disk</span>
-            </>
-          ) : (
-            "See dashboard"
-          )}
-        </dd>
-      </div>
-      <div className="pp-plan-resource">
-        <dt>Per service, up to</dt>
-        <dd>
-          {service
-            ? `${formatCpuCores(service.cpuCores)} · ${formatMemoryMb(service.memoryMb)} RAM`
-            : "Custom limits"}
-        </dd>
-      </div>
-      <div className="pp-plan-limit">
-        <dt>Projects</dt>
-        <dd>{count(plan.limits.maxProjects)}</dd>
-      </div>
-      <div className="pp-plan-limit">
-        <dt>Running services</dt>
-        <dd>{count(plan.limits.runningServices)}</dd>
-      </div>
-      <div className="pp-plan-limit">
-        <dt>Build time</dt>
-        <dd>
-          {plan.limits.buildMinutesPerMonth === null
-            ? plan.billingMode === "monthly" ? "No time cap" : "Metered"
-            : `${count(plan.limits.buildMinutesPerMonth)} min/mo`}
-        </dd>
-      </div>
-    </dl>
+    <div className="pp-plan-resources">
+      {hasPool ? (
+        <dl className="pp-plan-capacity" aria-label="Managed server capacity">
+          {[
+            { label: "vCPU", value: pool.max_total_vcpus!.toLocaleString("en") },
+            { label: "RAM", value: formatMemoryMb(pool.max_total_ram_mb!) },
+            { label: "Storage", value: `${pool.max_total_disk_gb!.toLocaleString("en")} GB` },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : <p className="pp-plan-capacity-fallback">See dashboard for server capacity</p>}
+      {facts.length > 0 && (
+        <dl className="pp-plan-limits">
+          {facts.map(({ label, value }) => (
+            <div className="pp-plan-limit" key={label}>
+              <dt>{label}</dt><dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
   );
 }
 
@@ -161,7 +157,7 @@ export default async function PricingPage() {
                       </div>
                       <p className="pp-plan-credits">
                         {plan.billingMode === "monthly" ? (
-                          "CPU, RAM and disk covered all month"
+                          "One managed server, billed monthly"
                         ) : plan.monthlyCredits === null ? (
                           "See dashboard for included credits"
                         ) : (
@@ -171,16 +167,16 @@ export default async function PricingPage() {
                           </>
                         )}
                       </p>
-                      <a
-                        href={CLOUD_CTA_HREF}
-                        className={`pp-plan-cta ${plan.popular ? "pp-plan-cta--filled" : ""}`}
-                      >
-                        {chooseLabel(plan.name)}
-                      </a>
                       <PlanResources plan={plan} />
                       <p className="pp-plan-support">
                         {supportLabels[plan.support] ?? "See support options"}
                       </p>
+                      <a
+                        href={cloudPlanHref(plan.id)}
+                        className={`pp-plan-cta ${plan.popular ? "pp-plan-cta--filled" : ""}`}
+                      >
+                        {chooseLabel(plan.name)}
+                      </a>
                     </article>
                   );
                 })}
@@ -199,6 +195,10 @@ export default async function PricingPage() {
                     How billing works <span aria-hidden="true">↗</span>
                   </a>
                 </div>
+                <p className="pp-email-note">
+                  <strong>Managed email · Coming soon.</strong> Cloud server plans host applications;
+                  they do not provision a mail server. Self-hosted email remains available on your own server.
+                </p>
                 <div className="pp-standard">
                   <h3>{STANDARD.title}</h3>
                   <ul>

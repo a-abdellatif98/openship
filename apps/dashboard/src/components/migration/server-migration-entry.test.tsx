@@ -726,6 +726,130 @@ it("keeps the self-hosted in-place flow and its reviewed volume choice", async (
   });
 });
 
+it.each([
+  [false, false],
+  [true, false],
+  [true, true],
+])(
+  "loads the server-tab destination inventory after retry=%s, failure=%s",
+  async (retry, failure) => {
+    h.scanStream.mockResolvedValue({ ...scannedStack(), serverId: "source-a" });
+    h.getMigration.mockResolvedValueOnce({
+      run: {
+        id: "failed-run",
+        status: "failed",
+        mode: "same_server",
+        projectName: "Imported Redis",
+        sourceServerId: "source-a",
+        targetServerId: "source-a",
+        error: "Temporary connection failure",
+        inputSnapshot: {},
+      },
+    });
+    if (failure)
+      h.listServers.mockRejectedValueOnce(
+        new Error("Destination inventory unavailable"),
+      );
+    h.migrate.mockResolvedValue({
+      migrationId: "retry-import",
+      confirmationToken: "retry-token",
+    });
+    await act(async () =>
+      root.render(
+        <ServerMigrationWizard
+          variant="tab"
+          serverId="source-a"
+          initialRunId={retry ? "failed-run" : undefined}
+          onClose={vi.fn()}
+        />,
+      ),
+    );
+    if (retry) {
+      expect(h.listServers).not.toHaveBeenCalled();
+      await act(async () => button("Edit & retry").click());
+    } else {
+      await act(async () => button("Scan server").click());
+    }
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[aria-label="Select all services in Standalone containers"]',
+        )!
+        .click(),
+    );
+    await act(async () => {
+      const name = container.querySelector<HTMLInputElement>(
+        'input[id^="import-name-"]',
+      )!;
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!.call(name, "Imported Redis");
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    for (let step = 0; step < 3; step++)
+      await act(async () => button("Next").click());
+    if (failure) {
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "Destination inventory unavailable",
+      );
+      expect(button("Migrate").disabled).toBe(true);
+      await act(async () => button("Try again").click());
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+    }
+    expect(container.textContent).not.toContain("No server connected");
+    expect(container.textContent).toContain("First server");
+    expect(button("Migrate").disabled).toBe(false);
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-haspopup]")!
+        .click(),
+    );
+    expect(document.body.textContent).toContain("Second server");
+    expect(h.migrate).not.toHaveBeenCalled();
+    let finishPreview!: (result: unknown) => void;
+    h.preview.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishPreview = resolve;
+        }),
+    );
+    const second = Array.from(document.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Second server"),
+    )!;
+    await act(async () => second.click());
+    expect(button("Migrate").disabled).toBe(true);
+    expect(h.preview.mock.lastCall?.[0]).toMatchObject({
+      sourceServerId: "source-a",
+      targetServerId: "source-b",
+    });
+    await act(async () =>
+      finishPreview({
+        preview: {
+          sameServer: false,
+          services: [],
+          volumesToMove: [],
+          hasBlocked: false,
+          downtimeWarning: true,
+          droppedProxies: [],
+          warnings: [],
+          plan: { totalBytes: 0, partial: false, items: [] },
+        },
+      }),
+    );
+    expect(button("Migrate").disabled).toBe(false);
+    await act(async () => button("Migrate").click());
+    expect(h.migrate).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        sourceServerId: "source-a",
+        targetServerId: "source-b",
+        projectName: "Imported Redis",
+        serviceContainerIds: ["redis-container"],
+      }),
+    );
+  },
+);
+
 it("uses the same default cards selection and destination review in the modal", async () => {
   useCloud();
   h.scanStream.mockResolvedValue(scannedStack());

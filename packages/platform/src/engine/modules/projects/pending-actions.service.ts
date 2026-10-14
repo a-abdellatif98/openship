@@ -30,6 +30,7 @@
  */
 
 import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
+import { getPortCheckIssue, getPortCheckTarget, type PortCheckResult } from "@repo/core";
 import { activeDeploymentForProject, findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { repos } from "@repo/db";
 import type { Deployment } from "@repo/db";
@@ -55,7 +56,7 @@ export type PendingActionKind =
   | "domain_unverified"
   /** A certificate that errored or expired. */
   | "ssl_error"
-  /** Advisory: the app doesn't appear to be listening where routing points. */
+  /** Exposed-port review: missing listener or confirmed container-only binding. */
   | "port_advisory"
   /** Advisory: vercel.json rules the proxy could not reproduce, so they aren't live. */
   | "routing_rules_dropped";
@@ -101,13 +102,7 @@ type DeployMeta = {
   composeDeployment?: { decision?: string; failedServiceNames?: string[] };
   edgeUnsynced?: boolean;
   deployWarning?: string;
-  portCheck?: Array<{
-    port?: number;
-    serviceId?: string;
-    serviceName?: string;
-    checked?: boolean;
-    listening?: boolean;
-  }> | null;
+  portCheck?: PortCheckResult[] | null;
   /**
    * Dismissed advisories. Heterogeneous ON PURPOSE — `skipPortCheck` persists the
    * caller's `target` verbatim, and the UI sends a service id (string) for a
@@ -376,33 +371,36 @@ function buildDomainActions(domains: DomainRow[]): PendingAction[] {
 }
 
 /**
- * Advisory: after deploying, the app wasn't listening where routing points.
- *
- * Stays `advisory` on purpose — the probe has a 5s budget and degrades to
- * "unknown", so it is a strong hint, not proof. Dismissing it is a legitimate
- * outcome (that is what skip-port-check records).
+ * A missing listener remains advisory: it may still be starting. A confirmed
+ * loopback-only Docker listener needs a binding/proxy change. Neither holds the
+ * deployment; both reuse the same review and dismissal path.
  */
 function buildPortAdvisories(dep: Deployment, isCompose: boolean): PendingAction[] {
   const meta = dep.meta as DeployMeta;
   const skipped = meta?.portCheckSkipped ?? [];
   return (meta?.portCheck ?? [])
-    .filter((r) => r.checked && r.listening === false)
-    // Mirrors `skipTarget` in PortAdvisoryModal EXACTLY — service id only for a
-    // compose project, otherwise the raw numeric port. Getting this wrong breaks
-    // dismissal in both directions: we'd re-surface something already dismissed,
-    // and the target WE hand back would be one the dashboard's own matcher never
-    // recognises, so its modal would keep nagging too.
-    .map((r) => ({ r, target: isCompose && r.serviceId ? r.serviceId : (r.port as number) }))
-    .filter(({ target }) => !skipped.includes(target))
-    .map(({ r, target }) => ({
+    .map((r) => ({ r, issue: getPortCheckIssue(r), target: getPortCheckTarget(r, isCompose) }))
+    .filter(({ issue, target }) => issue !== null && !skipped.includes(target))
+    .map(({ r, target, issue }) => ({
       id: `port_advisory:${dep.id}:${target}`,
       kind: "port_advisory" as const,
-      severity: "advisory" as const,
-      title: `Nothing is listening on port ${r.port}`,
+      severity: issue === "loopback-only" ? ("action_required" as const) : ("advisory" as const),
+      title:
+        issue === "loopback-only"
+          ? `Port ${r.port} is only reachable inside the container`
+          : `Nothing is listening on port ${r.port}`,
       message:
-        `${r.serviceName ?? "The app"} was expected on port ${r.port}, but nothing answered there. ` +
-        `If it listens on a different port, update the project's port; if this is wrong, dismiss it.`,
-      details: { port: r.port, serviceId: r.serviceId, serviceName: r.serviceName },
+        issue === "loopback-only"
+          ? `${r.serviceName ?? "The app"} listens on loopback, so the edge cannot reach port ${r.port}. ` +
+            `For a routed app, bind to 0.0.0.0 and redeploy, or route to its intended proxy. The deployment is still running.`
+          : `${r.serviceName ?? "The app"} was expected on port ${r.port}, but nothing answered there. ` +
+            `If it listens on a different port, update the project's port; if this is wrong, dismiss it.`,
+      details: {
+        port: r.port,
+        serviceId: r.serviceId,
+        serviceName: r.serviceName,
+        ...(issue === "loopback-only" ? { loopbackOnly: true } : {}),
+      },
       resolveWith: [
         {
           label: "Dismiss",

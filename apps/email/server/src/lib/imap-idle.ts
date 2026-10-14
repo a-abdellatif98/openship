@@ -63,6 +63,9 @@ export async function bridgeImapIdle(
     client.on('exists', onChange);
     client.on('expunge', onChange);
     client.on('flags', onChange);
+    // Catch up only after selection/listener registration. The browser's
+    // HTTP open event can precede IMAP readiness and miss delivery in between.
+    onChange();
     heartbeat = setInterval(() => { void flush(); }, 25_000);
     heartbeat.unref?.();
     // ImapFlow renews IDLE through maxIdleTime; it also handles the NOOP

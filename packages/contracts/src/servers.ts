@@ -77,9 +77,30 @@ export const CreateServerInputSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-export const UpdateServerInputSchema = Type.Object(connectionFields, {
-  additionalProperties: false,
-});
+/** Manual GPU mark: "yes"/"no" override the probe, `null` goes back to following it. */
+export const GpuOverrideSchema = Type.Union([Type.Literal("yes"), Type.Literal("no"), Type.Null()]);
+export const UpdateServerInputSchema = Type.Object(
+  { ...connectionFields, gpuOverride: Type.Optional(GpuOverrideSchema) },
+  { additionalProperties: false },
+);
+
+/**
+ * Whether a server can hand a GPU to a container. `detected` is what the daemon reported, `override`
+ * is the operator's manual mark, and `available` is the answer that wins (manual beats probe in both
+ * directions). `probed: false` means the daemon could not be read (unreachable / cloud), so
+ * `detected` says nothing; the UI must not read it as "no GPU".
+ */
+export const ServerGpuSchema = Type.Object(
+  {
+    available: Type.Boolean(),
+    detected: Type.Boolean(),
+    count: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+    override: GpuOverrideSchema,
+    probed: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+export type ServerGpu = Static<typeof ServerGpuSchema>;
 export type CreateServerInput = Static<typeof CreateServerInputSchema>;
 export type UpdateServerInput = Static<typeof UpdateServerInputSchema>;
 
@@ -118,6 +139,8 @@ const serverFields = {
   connection: Type.Optional(Type.Union([Type.Literal("local"), Type.Literal("ssh"), Type.Literal("cloud")])),
   managed: Type.Optional(Type.Union([CloudWorkspaceSchema, Type.Null()])),
   terminalSessionLimit: Type.Optional(Type.Integer({ minimum: 0 })),
+  /** Absent on managed (cloud) servers, which have no GPU model. */
+  gpu: Type.Optional(ServerGpuSchema),
   capabilities: Type.Optional(Type.Object({
     monitor: Type.Boolean(),
     terminal: Type.Boolean(),

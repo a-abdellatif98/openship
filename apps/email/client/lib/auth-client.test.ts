@@ -53,7 +53,7 @@ describe("webmail sign-in errors", () => {
       credentials: "include",
       body: JSON.stringify(input),
     });
-    expect(fetcher.mock.calls[1]?.[1]).toEqual({ credentials: "include" });
+    expect(fetcher.mock.calls[1]?.[1]).toEqual({ credentials: "include", signal: expect.any(AbortSignal) });
   });
 
   it("does not report success if the browser retained another mailbox session", async () => {
@@ -65,5 +65,35 @@ describe("webmail sign-in errors", () => {
     expect((await signIn.email(input)).error?.message).toBe(
       "Could not confirm your sign-in. Please try again.",
     );
+  });
+
+  it.each(["sign-in", "session confirmation"])("aborts a stalled %s so the form can retry", async (stage) => {
+    const setTimer = globalThis.setTimeout;
+    const shortTimer = Object.assign(
+      (callback: Parameters<typeof setTimeout>[0]) => setTimer(callback, 10),
+      { __promisify__: setTimer.__promisify__ },
+    );
+    // Replace this function callback once; the DOM string-handler overload is
+    // irrelevant here, while Node's timer helper remains on the replacement.
+    spyOn(globalThis, "setTimeout").mockImplementationOnce(shortTimer as typeof setTimeout);
+    const fetcher = spyOn(globalThis, "fetch");
+    if (stage === "session confirmation") fetcher.mockResolvedValueOnce(Response.json({ ok: true }));
+    const stalledFetch = Object.assign(
+      (_url: RequestInfo | URL, options?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        const signal = options!.signal!;
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      }),
+      { preconnect: globalThis.fetch.preconnect },
+    );
+    fetcher.mockImplementationOnce(stalledFetch);
+    expect(await signIn.email(input)).toEqual({
+      error: { message: "Sign in timed out. Please try again." },
+    });
+    // A successful retry replaces the failed operation; no stale timeout or
+    // failed session is allowed to turn its result into an error.
+    fetcher.mockResolvedValueOnce(Response.json({ ok: true })).mockResolvedValueOnce(
+      Response.json({ email: input.email, name: null, expiresAt: "2099-01-01" }),
+    );
+    expect(await signIn.email(input)).toEqual({ error: null });
   });
 });

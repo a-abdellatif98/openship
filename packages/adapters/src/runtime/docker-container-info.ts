@@ -74,6 +74,8 @@ export function dockerPublishedPortInfo(
 export function containerInfoFromDockerSummary(container: DockerContainerSummary): ContainerInfo {
   return {
     containerId: container.id,
+    // Retention compares immutable identity, never a mutable image tag.
+    ...(container.imageId ? { imageId: container.imageId } : {}),
     status: dockerContainerStatus(container.state, { statusLine: container.status }),
     ...(container.ip ? { ip: container.ip } : {}),
     ...dockerPublishedPortInfo(container.ports),

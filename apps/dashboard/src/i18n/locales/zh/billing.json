@@ -101,6 +101,7 @@
     }
   },
   "plansRoute": {
+    "requestedPlanUnavailable": "所选套餐已不再提供。请在下方选择其他套餐。",
     "loadError": "加载套餐失败",
     "genericError": "出现错误",
     "tryAgain": "重试",
@@ -292,7 +293,8 @@
     "cancelNotice": "已付费周期结束后将不再续订。在此之前，你的订阅仍然有效。",
     "confirmCancel": "停止续订",
     "keepPlan": "保留订阅",
-    "error": "无法更新订阅，请重试。"
+    "error": "无法更新订阅，请重试。",
+    "manage": "管理订阅"
   },
   "checkout": {
     "checking": "正在确认您的订单…",
@@ -343,6 +345,7 @@
     }
   },
   "resourcesGuide": {
+    "concurrentBuilds": "并发构建",
     "title": "了解 Cloud 用量",
     "credits": "Cloud 积分",
     "creditsHint": "构建和运行中的应用会因 CPU、内存、磁盘读写和数据传输消耗积分。工作负载越大，积分消耗越快。",
@@ -582,7 +585,7 @@
     "save": "保存",
     "delete": "删除服务器",
     "confirmDelete": "删除此空服务器",
-    "deleteHint": "请先删除所有项目并结束订阅。此操作将永久删除空服务器及剩余的磁盘数据。",
+    "deleteHint": "删除项目不会取消订阅。请在账单中停止续订，并等到已付费周期结束后再删除订阅中的服务器。 删除操作会永久移除空服务器及其剩余磁盘数据。",
     "buildCapacityTitle": "请检查服务器容量",
     "buildCapacityHint": "构建使用此服务器的空闲容量。请停止闲置服务或增加容量，然后重试。",
     "openWorkspace": "打开服务器",
@@ -824,7 +827,8 @@
     "monthly": "每月",
     "annual": "每年",
     "oneTime": "一次性付款",
-    "cancelUnavailable": "此付款目前无法取消。请刷新或联系支持。",
+    "cancelUnavailable": "无法确认是否可以取消。请刷新付款状态。",
+    "cancelUnsupported": "此付款无法在这里取消。请完成付款或等待其过期后再选择其他套餐。",
     "support": "联系支持",
     "cancelHint": "付款链接将关闭。之后您可以选择其他方案。",
     "confirmCancel": "确认取消",

@@ -94,7 +94,12 @@
     "grantRejectedTitle": "あなたのアカウントではそれを付与できません",
     "grantRejected": "あなた自身のアクセス権では対応できないため、{resource} は削除されました。概要を確認して、もう一度承認してください。",
     "deny": "拒否",
-    "authorize": "承認"
+    "authorize": "承認",
+    "dgReadSource": "スコープ指定されたパスからファイルの内容を読み取る",
+    "dgNotReadSource": "リポジトリから任意のファイルの内容を読み取る",
+    "levelViewHint": "読み取り専用: 設定、ログ、メタデータ。変更不可。",
+    "levelManageHint": "デプロイ、再起動、設定の変更。削除は不可。",
+    "levelFullHint": "リソース自体の削除を含むすべての操作。"
   },
   "acceptInvite": {
     "invalidInvitation": "無効な招待",
@@ -154,10 +159,25 @@
     "title": "デバイスを承認",
     "instancePre": "アドレス ",
     "instancePost": " の Openship インスタンスが、あなたの Openship Cloud アカウントへの接続を求めています。",
+    "organization": "組織",
+    "switch": "切り替え",
+    "switchAccount": "アカウントを切り替え",
+    "switchOrganization": "組織を切り替え",
+    "choose": "選択",
+    "chooseOrganization": "組織を選択",
+    "chooseOrganizationHint": "接続する前に組織を選択してください。",
+    "loadingOrganizations": "組織を読み込み中…",
+    "organizationsError": "組織を読み込めませんでした。もう一度お試しください。",
+    "noOrganizations": "このアカウントで利用できる組織はありません。",
+    "switchOrganizationError": "組織を切り替えられませんでした。接続はまだ承認されていません。",
+    "switchAccountError": "サインアウトできませんでした。アカウントの切り替えをもう一度お試しください。",
+    "retry": "再試行",
     "signedInAs": "サインイン中",
     "authorizing": "認可しています…",
     "authorize": "承認",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "deviceDoneTitle": "Openship Cloud に接続しました",
+    "deviceDoneBody": "このタブを閉じてターミナルに戻ることができます。セットアップは自動的に続行されます。"
   },
   "cloudConnect": {
     "noCode": "認証コードが提供されませんでした。もう一度お試しください。",
@@ -224,7 +244,18 @@
     "restoreComplete": "復元が完了しました。",
     "restoreStatus": "復元 {status}",
     "failed": "失敗",
-    "close": "閉じる"
+    "close": "閉じる",
+    "cancelFailed": "復元のキャンセルに失敗しました",
+    "cancelPending": "キャンセルをリクエストしました。復元は次の安全なポイントで停止します。このウィンドウに結果が表示されます。",
+    "destructiveNotYet": "まだ何も書き込まれていないため、今キャンセルしても安全です。",
+    "destructiveNow": "データを書き込み中です。今キャンセルすると不完全なデータが残ります。",
+    "abortRestore": "復元を中止",
+    "abortTitle": "この復元を中止しますか？",
+    "abortBodyClean": "復元ではまだ何も書き込まれていません。今キャンセルしてもデータは元のまま保持されます。停止していたサービスは再起動されます。",
+    "abortBodyDestructive": "復元はすでに書き込みを開始しています。今中止するとターゲットに不完全なデータが残り、サービスは意図的に停止したままになります。開始する前に、この復元（または新しい復元）を完了まで再実行してください。",
+    "abortKeepGoing": "復元を続行",
+    "abortConfirm": "はい、中止します",
+    "partialDataNotice": "復元ターゲットに不完全なデータが含まれており、サービスは意図的に停止されたままです。開始する前に、この復元（または新しい復元）を完了まで再実行してください。"
   },
   "terminalTabs": {
     "shell": "シェル {n}",
@@ -368,6 +399,19 @@
     "historyPage": "ページ {page}",
     "incremental": "増分",
     "moreContents": "他 {count} 件",
-    "destinationDetails": "保存先の詳細"
+    "destinationDetails": "保存先の詳細",
+    "providerLabel": "プロバイダー",
+    "providerAws": "AWS S3",
+    "providerR2": "Cloudflare R2",
+    "providerB2": "Backblaze B2",
+    "providerWasabi": "Wasabi",
+    "providerDo": "DigitalOcean Spaces",
+    "providerMinio": "MinIO / カスタム",
+    "fieldAccountId": "アカウント ID",
+    "hintAccountId": "Cloudflare アカウント ID — R2 エンドポイントの構築に使用されます。",
+    "hintEndpointMinio": "完全な S3 エンドポイント URL（例: https://minio.example.com:9000）",
+    "testConnection": "接続をテスト",
+    "testing": "接続をテスト中…",
+    "testOk": "接続完了 — バケットへのアクセスと書き込みが可能です。"
   }
 }

@@ -7,6 +7,44 @@ const confirmed = Type.Object({ confirm: Type.Literal(true) }, { additionalPrope
 const revision = Type.String({ pattern: "^[a-f0-9]{64}$" });
 const workloadId = Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$" });
 const tail = Type.Integer({ minimum: 1, maximum: 500 });
+const proxyHost = Type.String({ minLength: 7, maxLength: 15, pattern: "^[0-9]+(?:\\.[0-9]+){3}$" });
+const proxyProtocol = Type.Union([Type.Literal("http"), Type.Literal("https")]);
+const proxyCredential = Type.String({
+  minLength: 1,
+  maxLength: 256,
+  pattern: "^[\\x21-\\x7e]+$",
+  not: { pattern: "[:@/?]" },
+});
+
+export const ManagedOutboundSchema = Type.Object(
+  {
+    mode: Type.Union([Type.Literal("managed"), Type.Literal("custom"), Type.Null()]),
+    ip: nullableString,
+    countryCode: nullableString,
+    proxy: Type.Union([
+      Type.Object(
+        {
+          host: proxyHost,
+          port: Type.Integer({ minimum: 1, maximum: 65535 }),
+          protocol: proxyProtocol,
+          hasCredentials: Type.Boolean(),
+        },
+        { additionalProperties: false },
+      ),
+      Type.Null(),
+    ]),
+    /** Missing provider version or incomplete observation: inspect, but do not edit. */
+    revision: Type.Union([revision, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+const outboundReview = { expectedRevision: revision, confirm: Type.Literal(true) };
+const customProxy = {
+  host: proxyHost,
+  port: Type.Integer({ minimum: 1, maximum: 65535 }),
+  protocol: proxyProtocol,
+};
 
 export const ManagedServerInfoSchema = Type.Object(
   {
@@ -97,6 +135,45 @@ const logs = Type.Object(
 /** These controls belong to a single managed server. Never accept provider
  * workspace IDs, namespace tokens, arbitrary provider paths or raw config. */
 export const ManagedServerResourceSchemas = {
+  managedOutbound: { action: "read", output: ManagedOutboundSchema },
+  managedOutboundOptions: {
+    action: "read",
+    output: Type.Object(
+      {
+        ips: Type.Array(
+          Type.Object(
+            { ip: proxyHost, countryCode: nullableString },
+            { additionalProperties: false },
+          ),
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  setManagedOutbound: {
+    action: "admin",
+    input: Type.Union([
+      Type.Object(
+        { ...outboundReview, mode: Type.Literal("managed"), ip: Type.Optional(proxyHost) },
+        { additionalProperties: false },
+      ),
+      Type.Object(
+        {
+          ...outboundReview,
+          mode: Type.Literal("custom"),
+          proxy: Type.Union([
+            Type.Object(customProxy, { additionalProperties: false }),
+            Type.Object(
+              { ...customProxy, username: proxyCredential, password: proxyCredential },
+              { additionalProperties: false },
+            ),
+          ]),
+        },
+        { additionalProperties: false },
+      ),
+    ]),
+    output: ManagedOutboundSchema,
+  },
   managedInfo: { action: "read", output: ManagedServerInfoSchema },
   managedBootLogs: {
     action: "admin",
@@ -220,3 +297,4 @@ export const ManagedServerResourceSchemas = {
 export type ManagedServerInfo = Static<typeof ManagedServerInfoSchema>;
 export type ManagedSshStatus = Static<typeof ManagedSshStatusSchema>;
 export type ManagedWorkload = Static<typeof ManagedWorkloadSchema>;
+export type ManagedOutbound = Static<typeof ManagedOutboundSchema>;

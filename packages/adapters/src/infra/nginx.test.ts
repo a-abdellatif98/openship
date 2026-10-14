@@ -308,6 +308,31 @@ const PROXY: RouteConfig = {
 const OURS: RouteConfig = { ...PROXY, terminatesTlsLocally: true };
 const BOOTSTRAP_DIR = "/etc/letsencrypt/openship-bootstrap/app.example.com";
 
+describe("NginxProvider path-only routes", () => {
+  test.each([false, true])("returns 404 outside explicit paths (existing TLS cert: %s)", async (withCert) => {
+    const { nginx, conf, files } = setup({ certDomains: withCert ? ["app.example.com"] : [] });
+    await nginx.registerRoute({
+      domain: "app.example.com",
+      tls: true,
+      terminatesTlsLocally: true,
+      notFound: true,
+      proxyLocations: [
+        { pathPrefix: "/v3", targetUrl: "http://10.0.0.2:9000" },
+        { pathPrefix: "/mcp", targetUrl: "http://10.0.0.3:4000", exact: true },
+        { pathPrefix: "/", targetUrl: "http://10.0.0.2:9000", exact: true },
+      ],
+    });
+    const config = conf("app-example-com")!;
+    expect(config).toMatch(/location \/ \{\s*(?:if[\s\S]*?\n\s*\}\s*)?return 404;/);
+    expect(config).toContain("location ^~ /v3 {");
+    expect(config).toContain("location = /mcp {");
+    expect(config).toContain("location = / {");
+    expect(config).not.toContain("proxy_pass undefined");
+    expect(config).toContain("listen 443 ssl;");
+    expect(JSON.parse(files.get(`${SITES}/app-example-com.route.json`)!)).toMatchObject({ notFound: true });
+  });
+});
+
 /**
  * Openship Cloud's shared edge proves this box controls a routing target by fetching
  * a token over plain HTTP from the target. Every `:80` shape must answer it, because

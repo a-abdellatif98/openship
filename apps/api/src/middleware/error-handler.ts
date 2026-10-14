@@ -48,11 +48,13 @@ export function handleApiError(err: unknown, c: Context) {
       const withDetail = e as AppError & {
         reason?: string;
         planTierId?: string;
+        workspaceId?: string | null;
         slots?: unknown[];
       };
       return {
         ...(withDetail.reason ? { reason: withDetail.reason } : {}),
         ...(withDetail.planTierId ? { planTierId: withDetail.planTierId } : {}),
+        ...(withDetail.workspaceId ? { workspaceId: withDetail.workspaceId } : {}),
         ...(withDetail.slots ? { slots: withDetail.slots } : {}),
       };
     }

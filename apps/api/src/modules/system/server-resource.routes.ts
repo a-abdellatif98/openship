@@ -273,6 +273,38 @@ r.patch(
 );
 
 r.get(
+  "/servers/:id/managed/outbound",
+  {
+    tag: "server:read",
+    authorizationHandledByOperation: true,
+    auditHandledByOperation: true,
+    mcp: { description: "Read this managed server's outbound connection and revision. Returns only public IP/proxy metadata, never credentials. Does not start the server." },
+  },
+  managedCtrl.managedOutbound,
+);
+r.get(
+  "/servers/:id/managed/outbound/options",
+  {
+    tag: "server:read",
+    authorizationHandledByOperation: true,
+    auditHandledByOperation: true,
+    mcp: { description: "List available managed outbound IPs and countries for this owned Cloud server. No proxy credentials or internal pool identifiers are exposed." },
+  },
+  managedCtrl.managedOutboundOptions,
+);
+r.patch(
+  "/servers/:id/managed/outbound",
+  {
+    tag: "server:admin",
+    authorizationHandledByOperation: true,
+    auditHandledByOperation: true,
+    body: ServerResourceSchemas.setManagedOutbound.input,
+    mcp: { description: "Change this managed server's outbound connection after explicit review. Send expectedRevision from managed/outbound and confirm:true. Choose a listed managed IP, or a custom public IPv4 HTTP/HTTPS proxy with both credentials or neither. Affects outgoing connections for every project; preserves internet policy, ingress and routes. Credentials are never returned or audited." },
+  },
+  managedCtrl.setManagedOutbound,
+);
+
+r.get(
   "/servers/:id/managed/info",
   {
     tag: "server:read",

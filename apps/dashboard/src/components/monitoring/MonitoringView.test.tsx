@@ -907,9 +907,25 @@ describe("resource card structure", () => {
     const html = render({ isUsageConnected: false });
     expect(html).toContain("Disconnected");
     expect(html).toContain("Reconnect");
-    // A static green dot looks identical whether the stream works or died minutes ago, so
-    // the disconnected state must change the colour too.
-    expect(html).toContain("bg-muted-foreground/40");
+    expect(html).toContain("Showing the last available data");
+    expect(html).not.toContain("Live, refreshed every few seconds");
+  });
+
+  it("keeps old readings visible with a disabled reconnect while a new sample is pending", () => {
+    const html = render({ isUsageConnected: false, isUsageConnecting: true, usageError: "Connection lost" });
+    expect(html).toContain("63.4%");
+    expect(html).toContain("Connecting");
+    const reconnect = [...html.matchAll(/<button\b[\s\S]*?<\/button>/g)]
+      .find(([button]) => button.includes("Reconnect"));
+    expect(reconnect?.[0]).toContain("disabled");
+  });
+
+  it("shows live-traffic failure feedback and stops the live pulse", () => {
+    const html = render({ live: { enabled: true, onEnabledChange: () => {}, onReconnect: () => {}, total: 0, ripples: [], feed: [], status: "error" } });
+    expect(html).toContain("Live requests unavailable");
+    expect(html).toContain("Reconnect");
+    expect(html).not.toContain("animate-ping");
+    expect(html).toContain("United States");
   });
 
   it("wraps each metric in a tile that is not a second card surface", () => {
@@ -1036,7 +1052,9 @@ describe("analytics failure isolation (#396)", () => {
     expect(html).toContain("Retry");
     expect(html).toContain("Resource usage");
     expect(html).toContain("United States");
-    expect(html).not.toContain("Traffic overview");
+    // The failed section is named in the notice, but its empty chart control is absent.
+    const buttons = [...html.matchAll(/<button\b[\s\S]*?<\/button>/g)];
+    expect(buttons.some(([button]) => button.includes("Traffic overview"))).toBe(false);
   });
 
   it("preserves Monitoring's intentional All domains option", () => {

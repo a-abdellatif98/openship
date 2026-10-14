@@ -141,5 +141,22 @@
       "kind": "http",
       "defaultMode": "domain"
     }
-  ]
+  ],
+  "marketplace": {
+    "features": [
+      {
+        "title": "Agent control plane",
+        "description": "Manage coding-agent runtimes in one console."
+      },
+      {
+        "title": "Private runtime",
+        "description": "Keep the runtime behind the control plane."
+      },
+      {
+        "title": "Sessions and credentials",
+        "description": "Manage access and agent sessions in one place."
+      }
+    ],
+    "articleFile": "articles/mindwire.md"
+  }
 }

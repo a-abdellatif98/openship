@@ -466,16 +466,8 @@ export async function skipPortCheck(
   organizationId: string,
   target: number | string,
 ) {
-  const dep = await getDeployment(deploymentId, organizationId);
-  const meta = (dep.meta as Record<string, unknown> | null) ?? {};
-  const existing = Array.isArray(meta.portCheckSkipped)
-    ? (meta.portCheckSkipped as (number | string)[])
-    : [];
-  if (!existing.includes(target)) {
-    await repos.deployment.updateStatus(deploymentId, dep.status, {
-      meta: { ...meta, portCheckSkipped: [...existing, target] },
-    });
-  }
+  await getDeployment(deploymentId, organizationId);
+  await repos.deployment.skipPortCheck(deploymentId, target);
   return { success: true };
 }
 

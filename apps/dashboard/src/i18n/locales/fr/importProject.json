@@ -75,6 +75,9 @@
       "onFailureWarn": "Garder le déploiement en ligne et le signaler pour vérification",
       "onFailureFail": "Faire échouer le déploiement et continuer à servir la version précédente"
     },
+    "runtimeVersionLabel": "Version du runtime",
+    "runtimeVersionDefault": "Par défaut",
+    "runtimeVersionDesc": "Utilise des images de compilation et d’exécution adaptées à la version sélectionnée. Nécessite une compilation Docker générée par Openship.",
     "buildImageLabel": "Image de compilation",
     "buildImageDesc": "Image de conteneur de compilation pour les builds cloud ou serveur. Remplacez-la lorsque l'image de base détectée est incorrecte.",
     "productionPathsLabel": "Chemins de production",
@@ -111,7 +114,9 @@
     "releaseDescription": "Commandes facultatives après le build. Un échec arrête le déploiement. Applications Docker et Bare uniquement.",
     "releaseCommand": "Commande {number}",
     "addReleaseCommand": "Ajouter une commande",
-    "removeReleaseCommand": "Supprimer la commande {number}"
+    "removeReleaseCommand": "Supprimer la commande {number}",
+    "runtimeImageLabel": "Image d’exécution",
+    "runtimeImageDesc": "Image de base de production facultative pour Docker. Doit être compatible avec le runtime et la recette générée ; laissez vide pour utiliser la valeur par défaut."
   },
   "projectSettings": {
     "framework": "Framework",
@@ -364,8 +369,26 @@
       "changePort": "Changer le port",
       "skip": "Ignorer",
       "applied": "Routage mis à jour vers le port {port}.",
-      "changeError": "Impossible de mettre à jour le port. Veuillez réessayer."
+      "changeError": "Impossible de mettre à jour le port. Veuillez réessayer.",
+      "loopbackTitle": "L’app ne peut pas recevoir le trafic routé",
+      "loopbackNote": "Le déploiement est en cours d’exécution, mais un port routé nécessite votre attention.",
+      "loopbackBody": "Le port {port} écoute uniquement à l’intérieur du conteneur.",
+      "loopbackBodyService": "Le service \"{service}\" écoute uniquement à l’intérieur du conteneur sur le port {port}.",
+      "loopbackHelp": "Pour une app recevant du trafic routé, écoutez sur 0.0.0.0 et redéployez, ou dirigez le trafic vers le proxy prévu.",
+      "openSettings": "Ouvrir les paramètres",
+      "skipError": "Impossible de masquer cet avertissement. Veuillez réessayer."
     }
+  },
+  "deploymentHealth": {
+    "recheck": "Revérifier la santé",
+    "checking": "Vérification…",
+    "healthy": "Les services sont sains",
+    "atDeployment": "Avertissement au déploiement",
+    "currentHealth": "État actuel des services",
+    "startupHint": "Si l’app démarre encore, attendez puis revérifiez. Si elle redémarre ou signale une erreur, consultez ses journaux pour trouver la cause.",
+    "viewLogs": "Voir les journaux",
+    "unavailable": "La santé n’a pas pu être vérifiée. Réessayez quand le serveur est accessible.",
+    "historical": "Ce déploiement n’est plus actif. Ouvrez le projet pour voir les services actuels."
   },
   "composeDeployment": {
     "title": {

@@ -22,6 +22,8 @@ export const mapRowToDeployment = (row: any): Deployment => {
     status: statusMap[row.status] ?? row.status,
     domain: row.url ?? "",
     framework: row.framework ?? "",
+    serviceDeploymentMode: row.meta?.serviceDeploymentMode === "services" || row.meta?.serviceDeploymentMode === "single"
+      ? row.meta.serviceDeploymentMode : undefined,
     commit: {
       hash: row.commitSha?.slice(0, 7) ?? "N/A",
       fullHash: row.commitSha ?? null,
@@ -217,7 +219,7 @@ export const sortDeploymentsByDate = (deployments: Deployment[]): Deployment[] =
 export const filterDeployments = (
   deployments: Deployment[],
   filters: {
-    status?: "all" | "success" | "failed" | "building" | "pending" | "canceled";
+    status?: "all" | DeploymentHistoryFilter;
     searchQuery?: string;
     projectId?: string | "all";
   }
@@ -225,7 +227,8 @@ export const filterDeployments = (
   const { status = "all", searchQuery = "", projectId = "all" } = filters;
 
   return deployments.filter((deployment) => {
-    const matchesStatus = status === "all" || historyGroup(deployment.status) === status;
+    const group = historyGroup(deployment.status);
+    const matchesStatus = status === "all" || group === status || (status === "active" && (group === "building" || group === "pending"));
     const matchesSearch =
       !searchQuery ||
       deployment.commit.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -242,10 +245,11 @@ export const filterDeployments = (
  * Calculates deployment statistics
  */
 export const calculateDeploymentStats = (deployments: Deployment[]) => {
-  const counts = { total: deployments.length, success: 0, failed: 0, building: 0, pending: 0, canceled: 0 };
+  const counts = { total: deployments.length, success: 0, failed: 0, building: 0, pending: 0, canceled: 0, active: 0 };
   for (const deployment of deployments) {
     const group = historyGroup(deployment.status);
     if (group) counts[group] += 1;
+    if (group === "building" || group === "pending") counts.active += 1;
   }
   return counts;
 };

@@ -103,7 +103,11 @@
       "routeNone": "Aucun",
       "sslOn": "SSL",
       "sslOff": "Sans SSL",
-      "internalOnly": "Interne uniquement — non exposé publiquement."
+      "internalOnly": "Interne uniquement — non exposé publiquement.",
+      "serviceNewBadge": "Nouveau",
+      "deployActionReuse": "Réutiliser l'image",
+      "deployActionBuild": "Sera construit",
+      "deployActionPull": "Sera téléchargé"
     }
   },
   "run": {
@@ -125,7 +129,10 @@
     "movingImage": "image",
     "movingVolume": "volume",
     "partial": "Partielle — certains chemins n'ont pas été déplacés",
-    "routeHint": "Vos services restent privés tant que les routes ne sont pas configurées. Ajoutez ou vérifiez leurs domaines dans l’onglet Domaines du projet."
+    "routeHint": "Vos services restent privés tant que les routes ne sont pas configurées. Ajoutez ou vérifiez leurs domaines dans l’onglet Domaines du projet.",
+    "addDomains": "Ajouter des domaines",
+    "viewDeployLogs": "Voir les journaux de déploiement",
+    "deployDetail": "Journaux de déploiement"
   },
   "cutover": {
     "title": "Finaliser la migration",
@@ -184,7 +191,9 @@
     "selectProject": "Sélectionner tous les services de {name}",
     "clearSelection": "Effacer la sélection",
     "selectionKeyboard": "Appuyez sur Entrée ou Espace pour sélectionner un service.",
-    "expandProject": "Services de {name}"
+    "expandProject": "Services de {name}",
+    "proxyExcluded": "Proxy inverse ({ports}) — non importé ; le point d'entrée Openship le remplace.",
+    "edgePortReserved": "Ports {ports} réservés pour le point d'entrée Openship ; non publiés."
   },
   "reimport": {
     "title": "Projets Openship détectés",

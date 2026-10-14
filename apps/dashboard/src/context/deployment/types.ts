@@ -14,6 +14,7 @@ import {
   type StackId,
   type RoutingConfig,
   type OpenshipReadiness,
+  type PortCheckResult,
   type ResourceTier as CoreResourceTier,
 } from "@repo/core";
 import type { BuildLog } from "@/utils/deploymentPhaseDetector";
@@ -364,6 +365,8 @@ export interface CloudResourceCustom {
 }
 
 export interface DeploymentConfig {
+  /** Explicitly staged Actions links and future push deployment rules. */
+  actions?: Pick<import("@repo/contracts").ActionProjectPolicy, "mode" | "workflowIds" | "requiredWorkflowIds">;
   /** Existing deployable environment to update/deploy, when launched from a project page. */
   projectId?: string;
   /** One-click catalog app (repo-less services project). Deploys from its saved
@@ -423,6 +426,8 @@ export interface DeploymentConfig {
   detectedFramework: FrameworkId | null;
   packageManager: string;
   buildImage: string;
+  runtimeVersion?: string | null;
+  runtimeImage?: string | null;
   publicEndpoints: PublicEndpoint[];
   envVars: EnvironmentVariable[];
   /**
@@ -467,6 +472,7 @@ export interface DeploymentConfig {
    * and nothing post-start can delay or veto it.
    */
   readiness?: OpenshipReadiness | null;
+  githubChecks?: import("@repo/core").GitHubDeploymentChecks | null;
   /** Ordered commands required before activating a single-app release. */
   releaseCommands?: string[] | null;
   /**
@@ -758,15 +764,8 @@ export function getPublicEndpointHosts(
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
-/** One exposed port's advisory probe result (mirrors the API `PortCheckResult`). */
-export interface PortCheckUI {
-  port: number;
-  listening: boolean;
-  checked: boolean;
-  serviceId?: string;
-  serviceName?: string;
-  skippedReason?: string;
-}
+/** Use the engine's persisted/SSE shape for live checks and deployment review. */
+export type PortCheckUI = PortCheckResult;
 
 /** One routed path's advisory static-output result (mirrors `OutputCheckResult`). */
 export interface OutputCheckUI {
@@ -784,7 +783,16 @@ export interface OutputCheckUI {
   skippedReason?: string;
 }
 
+export interface CloudBuildQueueStatus {
+  position: number | null;
+  reason: "concurrency" | "resources" | "server";
+  simultaneousBuilds: number | null;
+  activeBuilds: number;
+  workspaceId: string;
+}
+
 export interface DeploymentState {
+  queue: CloudBuildQueueStatus | null;
   deploymentId: string | null;
   isDeploying: boolean;
   isStopping: boolean;
@@ -855,6 +863,7 @@ export const BUILD_PHASES: ReadonlyArray<{ id: string; label: string; oneTime?: 
 ];
 
 export const INITIAL_STATE: DeploymentState = {
+  queue: null,
   deploymentId: null,
   isDeploying: false,
   isStopping: false,
@@ -991,6 +1000,8 @@ export interface DeploymentContextType {
   stopDeployment: () => Promise<void>;
   redeploy: (deploymentId: string) => Promise<string | null>;
   respondToPrompt: (action: string) => Promise<void>;
+  /** Reflect a successful port edit/dismissal only in the deployment it belongs to. */
+  resolvePortCheck: (deploymentId: string, target: number | string) => void;
   /** Open the shared clone-credential modal for a github-credential error code
    *  (single handler for the deploy wizard, redeploy, and the build page).
    *  Returns true when it opened; false when the code isn't credential-related. */

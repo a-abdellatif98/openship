@@ -23,6 +23,11 @@ dim and dark lift the inner surface. Form dropdowns use a lighter surface than t
 the trigger override above is intentional because `filled` alone uses the input background.
 
 Keep visible keyboard focus, error indicators, meaningful selection outlines, and useful dividers.
+Runtime version selection belongs in the existing deploy wizard's build settings, using the shared
+filled dropdown. Derive the default and supported versions from the selected stack's runtime policy, and report incompatible custom
+builders inline. Docker builds offer an optional runtime base image in Advanced settings, with
+its managed default as the placeholder. Keep overrides explicit, validate compatibility, and
+show failures inline; blank resets the override. Bare and service-owned recipes do not offer it. The saved project Configuration card shows the selected version beside its build settings.
 Borderless cards do not remove those functional indicators. Menus should use the shared dropdown
 component's existing positioning, keyboard behavior, and menu surface.
 
@@ -30,12 +35,241 @@ Reuse [Input](../apps/dashboard/src/components/ui/input.tsx),
 [CustomSelect](../apps/dashboard/src/components/ui/CustomSelect.tsx), and
 [Button](../apps/dashboard/src/components/ui/button.tsx) instead of copying their implementations.
 
+## Actions
+
+Actions reuses the shared topology canvas, server selector, page layout and filled
+controls. Keep workflow configuration, runner setup and execution history in one
+module. Jobs schedules commands or invokes a saved workflow; workflow jobs link to
+the original Actions run and its logs. Draw one node
+per logical workflow job, with matrix executions in the selectable job list.
+Show persisted step state and resumable logs together. GitHub mode uses the same
+step presentation, with a direct link to live GitHub logs and completed logs in
+Openship. Preserve GitHub-owned Checks instead of publishing duplicate status. Refreshing or switching
+views must not discard a running job's state. Only confirm cancellation after the
+worker stops, and show cleanup while its destination remains occupied.
+Expected cancellation uses its status badge; keep engine cancellation details in
+the logs rather than displaying them as a second error alert.
+
+Run details defaults to a collapsible job-and-step list beside the selected log.
+Keep each job's expansion independent, and share selection and one resumable log
+loader with the optional Topology view. Store the selected job, step and view in
+the URL so refresh restores them. Topology reuses the editor's Arrange, fit/zoom
+and Expand all / Collapse all controls. Pack disconnected jobs across the available
+space; preserve dependency columns and arrows. A single job shows its connected
+step cards immediately. Keep the log beside the graph on wide screens and stack
+the navigation above it on narrow screens. GitHub's completed log is supplied for
+the whole job; label that scope when a step is selected instead of inventing step
+boundaries. Independent step logs use their recorded step IDs.
+Queued and waiting states use the same yellow, motion-safe loading indicator as
+active jobs, while keeping their distinct status labels. Run approval lives in the
+third **Approvals** tab with a yellow attention icon when review is needed; never
+place an approval card above the run workspace. Keep the current job, step and log
+cursor mounted while reviewing access. Refreshing restores the tab, and an approved,
+cancelled or finished attempt cannot retain an actionable approval card.
+
+Key remote data by instance, user and organization. Clear private results on a
+scope switch while loading the new scope; stale requests must not populate it.
+Preserve already loaded logs while polling. Surface capability mismatches beside
+the selected destination instead of offering runtimes that cannot execute there.
+Native-runner setup explicitly describes access as the connected server user.
+Cloud Actions funding is separate from application-server billing and must remain
+clearly scoped in the UI.
+Actions page titles match Projects: 24px, medium weight, and explicit foreground
+color. Use the normal 340px sidebar on the Actions home page, with a themed SVG
+workflow illustration for empty workflows, runners and run history. The sidebar
+guides first use through runner, workflow and first run, based on the loaded
+records; after a run exists, show the current overview and latest run. Keep Cloud
+funding and Desktop availability guidance in that column. Use the same loaded
+data for the list and guidance, and keep fetch failures distinct from empty
+accounts. Stack the sidebar below the list on narrow containers.
+Use the same workflow editor from Actions, Project → Actions and the deployment
+wizard. The dialog uses the available viewport, with a persistent canvas on the left
+and a scrollable 400–420px inspector on the right. Topology is the default; List and YAML
+are peer views of the same draft. Source and Run settings stay in the inspector.
+Use the shared canvas skeleton with compact workflow nodes while editor data,
+repository discovery or the canvas code loads. Keep the current graph visible
+while validating edits. An empty canvas starts with one actionable workflow node;
+reserve the large illustration for the Actions home empty state.
+In Topology, selecting a job or dependency replaces those controls with its editor.
+In List, expand jobs and edit steps independently on the left; keep workflow controls
+on the right. Reuse the same job-and-step editor in both locations without rendering
+a duplicate. Job settings open by default when selecting a topology node and remain
+a compact disclosure in List. Expanded steps stay in shared state across views;
+opening an item never closes another. Keep Save
+visible beneath the inspector. Stack the canvas and controls on narrow screens.
+Use the shared PNG `play-circle` icon for Actions in navigation, workflow cards and
+the editor. The large editor uses the shared modal's translucent frosted surface;
+its inspector uses `bg-popover/60` with backdrop blur. Apply translucency to surfaces,
+not text or controls; keep filled fields distinct using the theme's background and
+foreground tokens. Workflow nodes are compact neutral rows with a status icon,
+job name and runner label, without service-card footers. A muted info accent on the
+draft's play icon and selected outline gives identity without tinting the node fill.
+They reuse the shared canvas with their own node renderer and compact layout dimensions.
+A job expands into separate step cards below its compact job node, without an enclosing
+box. Choose the grid columns from the available canvas width and height, reserving space
+for neighboring jobs through the shared layout. A single-job workflow shows its steps
+immediately; the editor toolbar offers Expand all / Collapse all for larger workflows.
+Directional arrows follow YAML execution order across each row and down to the next;
+job dependencies remain connected to the job. Selecting a step node reveals its
+shared step editor. Each card remains independently movable and each job can still
+expand independently. Reflow when the canvas size changes; preserve manual positions
+while editing fields or selecting nodes.
+The List view is a vertical job outline with expandable steps and explicit dependency
+labels; its rail does not imply execution order or completed progress. Reserve other
+color for run status, errors and repository differences; plus buttons, sections and
+configuration icons stay neutral. The canvas owns its required styles so direct navigation is
+consistent with navigation from a project.
+Node, step, connection and trigger edits update the original YAML while preserving
+unrelated fields and comments. Reject dependency cycles and dangling job-output
+references; undo/redo affects the same draft across views. Review repository changes
+before committing, using the reviewed file SHA. Repository discovery selects the
+integration from the file path; do not expose engine-selection tabs. Files in
+`.github/workflows` use GitHub's scheduler and the selected Openship runners;
+standalone YAML and `.openship/workflows` use the independent controller.
+Repository preview and saving follow the same rule, including existing drafts.
+GitHub workflows always commit changed YAML,
+use repository-managed credentials/storage, and explain the explicit
+`self-hosted, openship` routing labels and repository-wide runner trust. Independent
+workflows offer Automatic repository updates or Review first; the latter stores the existing inline YAML snapshot and continues
+using it until an explicit review and save. Loading a newer repository file must not
+overwrite that snapshot or an edited draft. No second sync engine or runner path is
+needed. Keep variables, secrets and artifact storage in one disclosure. The wizard
+preserves deployment fields while the editor is open and links selected workflows
+when the project is saved.
+Repository setup offers a compact file checklist with Select all. Keep a separate
+draft and undo history for each file while previewing them on the same canvas.
+Keep repository entry, the picker and refresh on one row, with icon buttons
+and accessible labels; branch/tag selection follows underneath.
+Below repository entry, offer a direct **Use a custom workflow instead** shortcut to
+Standalone. Initialize new workflow names from their validated YAML, preserving
+explicit edits and cleared names. A blocked Continue or Save action has a compact
+inline requirements list above it; each actionable requirement opens the relevant
+settings or YAML editor. Keep validation-in-progress distinct from an invalid draft,
+and use the neutral workflow icon for canvas guidance, without a brand logo.
+Runner destinations, enabled state and project links apply to the selected files;
+trigger edits belong to the previewed file. Review every changed file before a
+repository commit. Import files and links in one transaction; a retry reuses saved
+workflows and preserves their configuration.
+Keep the active workflow file visible beside its trigger controls, with a compact
+file selector for a batch. Switching files updates the canvas and trigger editor together;
+never present an unloaded file as having another file's conditions. Show branch, path,
+tag and event-type filters in collapsed trigger rows so their scope is visible immediately.
+Run settings uses compact trigger rows with shared switches and expandable controls.
+Branches, paths, tags and event types use filled add/remove chips; keep commas inside
+glob patterns literal. Include/exclude choices replace the opposite YAML filter.
+Schedules have individual UTC inputs, and additional YAML-only events remain visible.
+Keep the Workflow / Run settings / Access / Checks tabs and save action visible while the inspector scrolls.
+Project and deployment entry points keep their project association implicit; the generic
+editor puts additional project links in a closed disclosure and preserves links when untouched.
+Run settings leads with the required runner destination. Selecting an empty runner field
+opens the shared runner form in a modal; saving returns to the same workflow draft and selects
+the new runner. Existing runners use a compact picker. Its rows, selected value and runner
+cards share an execution summary: OS, Docker/native mode and verified native/emulated CPU
+architectures. Do not infer capabilities from custom labels. Put the host OS/version,
+default image, resource limits and routing labels in a closed details disclosure; opening
+details must not change selection. Keep unverified and failed probes visible.
+Cloud funding opens the shared budget
+in a dialog; only hosted payment opens separately so the draft survives.
+Access replaces the blanket runner-consent checkbox with a policy: who may run,
+whether each run needs approval, and whether fork pull requests may use disposable
+Cloud runners. Default to the connected account, approval for each run and forks blocked.
+Keep the policy when changing selected files or runners; reset it when changing repositories.
+Use verified GitHub account identities for selected users. Keep GitHub protection settings
+one link away and explain that those protections still apply alongside Openship approval.
+Run approval shows the commit, attempt, requester and destinations before execution.
+Missing destination details remain retryable; readers see who can approve instead of a
+button they cannot use. After a rejected approval, refresh the run so an old review cannot
+remain actionable. Blocked access links back to workflow settings.
+Checks shows the connected GitHub identity, selected repository and verified reporting
+availability in a compact row. Keep account connection distinct from repository permission;
+show a direct Connect, Review access or Retry action instead of assuming automatic reporting.
+Use the existing GitHub connection controls in a dialog without discarding the workflow draft.
+Notification channels are added and verified in an inline dialog using the shared Settings
+form. Show a single Add channel action, use the created channel only after verification,
+and keep optional outcome choices compact. Do not send users to another page to finish setup.
+Account-wide subscriptions and workflow choices share one durable delivery identity per run
+and channel; changing notification choices affects future runs, not runs already in progress.
+Project Actions owns one deployment policy: Manual, Push, or After required Actions
+pass. Its Workflows, Runs and Deployment automation tabs keep the existing project
+sidebar; do not add a second settings rail inside the project content column.
+Open workflow creation in the same full-width setup dialog used by the deployment
+wizard. Show the persisted pending request, exact commit and retry/cancel controls
+alongside workflow runs. Required checks cover every push to the project branch;
+optional workflows can filter paths. Keep policy failures visible and retryable,
+and never start the wizard's deployment before saving its selected rules.
+Use **Actions → Budget** for live usage rates, estimated VM minutes, provider
+balance and deposit history. Keep the comparison beside a standard 340px funding
+column. State that estimates assume full CPU and RAM before transfer or disk I/O;
+CPU time, measured memory and transfer consume one balance. Never imply guaranteed
+minutes or a separate included transfer allowance. Payment returns reconcile the
+saved purchase, then distinguish confirmed funds from runner setup. Preserve page
+state and show an unavailable balance as unknown, not zero. Connected Macs default
+to native execution and clear incompatible labels when the destination changes.
+Runner setup starts with three destination choices: existing server, dedicated
+managed server, or temporary Cloud pool. Reuse the shared server acquisition and
+plan dialogs; return the new server to the same capability form. Temporary pool
+funding stays in the shared Budget dialog. Preserve the workflow draft and show
+an unavailable pool distinctly from an empty pool. Existing and dedicated servers
+keep their normal billing and explicit per-job capacity limits.
+The capability form starts with the shared server picker and a compact environment summary.
+Browse catalog opens visual Ubuntu, native macOS/Linux and custom-image presets using
+the shared logos and option cards. Only offer presets compatible with the inspected
+server. Presets fill the existing runner configuration and keep resource limits; new
+connected runners get OS/architecture labels from the capability probe, without implicit
+Ubuntu-version aliases. Preserve saved runner labels during inspection. Presets
+do not create another execution path. Keep image, labels and resource overrides under
+Advanced settings, with the current configuration and matched labels in the sidebar.
+Retain saved runner settings on inspection, and make missing-tool checks retryable.
+The default environment is a convenience, not a limit on job images. Job settings
+can choose a Linux container image and one CPU architecture using standard YAML.
+Show verified native/emulated architecture badges on container runners. Offer explicit
+CPU emulation setup only for a Docker-capable server; keep the destination locked while
+it runs and recheck capabilities before displaying the result. Native Macs continue to
+use their installed tools and physical CPU.
+
 ## Layout and density
+
+GitHub deployment reporting uses the same compact settings card in Project → Source
+and the shared deploy wizard. Lead with one enabled toggle and a short description;
+keep overall/per-service selection and failure-detail sharing under Customize checks.
+Retain selections when reporting is disabled, a branch is rescanned, or the wizard is
+reopened. Delivery failures belong beside these preferences, with the GitHub connection
+link, and must not replace deployment status or appear as a build failure.
+
+Monitoring includes a Notifications tab for account-owned channels, organization
+alert preferences, and personal delivery history. Settings keeps the same shared
+editor for existing links. Show enabled and verified states separately: a paused
+or unverified destination is not ready to deliver. Verification sends a real test
+only after an explicit click. Keep recent delivery outcomes distinct from incident
+health; reading history never marks messages seen or retries an external send.
+Private drafts and delivery results reset on account, organization, and instance
+changes. Load errors must not look like an account with no channels.
+Read preferences and organization defaults together. A failed defaults read must
+show an error and Retry, never editable empty defaults. Preserve a previous
+successful snapshot on refresh failure, with preference controls disabled until
+a successful retry.
+
+Global deployment history lives in Monitoring’s final Deployments tab. Lead with server-side
+7/30/90-day outcome totals, a daily chart and a project breakdown, followed by the history.
+Project and search filters scope both; status filters drill into the history without changing
+the summary denominator. Use UTC calendar days and label the retained-history scope. Exclude
+cancellations and unfinished attempts from success rate; count queued attempts as in progress.
+Each project retains its own history.
+Old `/deployments` links redirect to Monitoring while preserving filters.
 
 Instance relocation has one entry in **Settings → Instance → Instance location**. Keep moving
 the control plane, connecting a Desktop, and backup/archive recovery distinct. Reuse the
 shared server selector and option cards for API-only versus API + dashboard. Show progress
 and recovery in the same card; do not add another direct-transfer or Team migration wizard.
+Keep **Connect to an existing instance** and **Move to a server** visible on Desktop.
+A connected Desktop shows **Reconnect** and **Move back to Desktop**. An active server
+shows **Connect a Desktop**, **Move to another server**, and **Move to Desktop**.
+Reserve More options for receiving an instance, returning to the local instance, and
+previous-server recovery; do not repeat visible actions in that menu. Stack the shared
+buttons on narrow containers. Distinguish connection, move, and receive codes by name,
+and show where to generate and paste each one. Receiving offers explicit choices to
+paste a move code or create a receive code; never interpret a blank field as consent
+to generate a code. Changing the destination or receive method requires fresh consent.
 Choose the destination before asking a fresh Desktop user to create an account. Keep that
 account form inside the same dialog, retain the server and address, and return to explicit
 move confirmation after account setup. Team and push-to-deploy prerequisites link directly
@@ -80,6 +314,14 @@ check retryable before starting the move.
 - Single-app deployment progress uses 32px phase markers with 18–20px glyphs. Keep the
   connectors centered and separated from each marker by the card-colored ring, with the
   current phase and step count underneath.
+- Completed service startup warnings offer a read-only health recheck and a logs link.
+  Briefly follow starting healthchecks on the visible page; failed reads expose retry.
+  Only a reported healthy result for the same active deployment resolves the startup
+  advisory. Preserve its original warning as history and leave unrelated warnings intact.
+- A host-port conflict uses the shared deployment decision dialog. When the API offers a
+  verified alternative, show its exact port as the primary action and explain that choosing
+  it keeps the existing service running. Keep stop actions explicitly destructive; a changed
+  suggestion requires a new choice. Reuse the same prompt after refresh.
 - Connected and managed destinations use the same searchable server rows; managed rows show
   project count and purchased capacity in place of an SSH address. Keep the add-server action
   inside the multi-server menu and beside the single-server summary.
@@ -96,13 +338,21 @@ check retryable before starting the move.
   same layout in Cloud and self-hosted mode; do not hide it in an Advanced accordion.
 - Machine power defaults to the full available server capacity. Project settings and
   deployment setup share the resource editor and tier labels. Optional limits apply to
-  containers; the managed server's purchased allocation stays separate.
+  containers; the managed server's purchased allocation stays separate. Catalog
+  sizing is advisory. Unset build and service dimensions receive no additional Docker
+  limits; Cloud admission reservations must not appear as user-configured caps.
   In destination settings, offer Full capacity and Customized as peer selection cards;
   Customized keeps the presets visible below. Keep a Back action in the page header.
 - Project Settings presents curated app fields and project-wide controls in one flow.
   Keep shared environment, machine power and rollback settings there, including for
   Compose and monorepo projects. Apps & Services owns the service list and per-service
   editors; do not embed that page or add App settings / Deployment modes inside Settings.
+- Ready native databases use the existing **Use in a project** connection modal.
+  Preselect the opened database, keep its credentials masked, and offer writable
+  consumers on the same native cluster. Explain incompatible placement inline;
+  never expose a public connection option for a native database or copy its ownership.
+  Other outputs from a source project keep their existing target choices when no
+  native database is selected. Connection errors must remain visible and allow retry.
 - Destination, runtime and resource choices share [OptionCard](../apps/dashboard/src/components/shared/OptionCard.tsx),
   including its selected border and radio marker. Do not introduce a separate switch style.
   New single-app setups default to Direct on servers with less than 2 GiB RAM, using
@@ -148,6 +398,24 @@ check retryable before starting the move.
   Connected local installations use the person's own verified Cloud account and show its
   email. A shared team connection never exposes its owner's private inbox to teammates;
   offer a Cloud sign-in link when the current person has no personal link.
+- Backups uses a compact storage summary above full-width history and destination sections.
+  The project tab uses the page's Backup title once; keep Refresh right-aligned above the summary
+  without a second heading or introductory description.
+  Keep secondary descriptions quiet, and stack history rows on phones while retaining dates,
+  sizes, payloads and restore/detail actions. Destination detail pages retain their sidebar summary.
+- Keep project grid cards within their original compact footprint. Put identity and domain
+  beside the shared More dropdown, followed by a quiet status, destination and timestamp row.
+  Keep service, deployment and log shortcuts left-aligned at the bottom as content-width
+  `bg-muted` controls, which lift in dim/dark themes rather than using the recessed input background.
+  Live sits at the bottom-right with the existing `ServiceStatusIndicator` hollow ring and muted text, without a filled pill; keep attention states
+  prominent and preserve their action links. Give More menu items their shared icons.
+  Show Services only when the persisted count is positive; never invent a count.
+  Keep Projects loading inside the same search/view layout, with skeletons matching the
+  selected grid or list view and the grid’s actual column widths and card spacing. Reserve
+  the same responsive 340px right column while loading, with filter and guidance placeholders.
+  Use flat theme surfaces and color-only hover feedback, with no drop shadows, elevation
+  or hover movement. Project names use 16px text, domains 14px, and metadata/status 12px;
+  do not shrink metadata to 10–11px.
 - Projects and catalog Apps have separate top-level sidebar entries and lists, backed by the
   same project data and status handling. Apps uses a compact installed list with Home's
   app illustration and a link to the full catalog alongside it. The illustration's icons
@@ -162,7 +430,9 @@ check retryable before starting the move.
   Transfer uses the provider's current-period usage and explicit unlimited benefit.
   Zero available bytes alone does not mean blocked access; respect its grace/status.
   Expired compute coverage never presents an unlimited benefit as active access.
-- Plan comparisons lead with CPU, memory, storage and service/project limits. Keep build
+- Plan comparisons lead with CPU, memory, storage and the offer’s support level. Show
+  finite project, service and build-concurrency allowances when the offer defines them.
+  Omit per-service ceilings and repeated unlimited rows. Preserve saved plan terms. Keep build
   time separate from runtime capacity; show minutes only when the offer defines a time
   allowance. Summarize monthly coverage and shared capacity in the common checklist
   below the comparison, alongside shared capabilities. Keep additional transfer, backup
@@ -190,6 +460,10 @@ check retryable before starting the move.
   Do not call today's catalog terms the current plan if they differ from the saved purchase,
   or offer a preset that would shrink an existing disk. New-server purchases have their own
   explicit entry and never inherit the selected server's billing scope.
+  A preset chosen on the public Pricing page continues to Cloud checkout after
+  sign-in without a second plan-selection click. Validate it against the live
+  catalog and bind the retry identity to the authenticated organization. Reloads
+  reuse the same server and payment; generic Get server links remain browse-only.
   Unscoped billing opens an existing subscription directly; never
   auto-switch a checkout return or an explicitly selected server. New customers see only
   Monthly server and Pay as you go in the existing top tab bar, without empty billing-history
@@ -216,6 +490,9 @@ check retryable before starting the move.
   name, with Resume and provider-supported cancellation. Never present a pending or
   unknown cancellation as complete. After confirmed cancellation, offer another plan
   and reuse the existing delete confirmation for an unused, unpaid server.
+  Distinguish failed cancellation checks (Refresh) from payments without provider-supported
+  cancellation (complete the payment or wait for expiry). Show the support link once;
+  neither condition may clear a payable checkout or allow a competing subscription.
 - Monthly servers show purchased resources, paid-through coverage and measured CPU time;
   they have no compute-credit donut, exhaustion alert or credit top-up action. Keep optional
   managed proxy transfer and retained-storage charges distinct from compute coverage, with
@@ -299,6 +576,22 @@ check retryable before starting the move.
 
 ## Typography and copy
 
+Saved Cloud server links remain visible after sign-out so local project destinations do not
+disappear. Mark them **Cloud sign-in required**, with a direct action through the existing
+Cloud connection flow. Distinguish a different owning account from temporary Cloud failure.
+While Cloud authority is unverified, do not mount live SSH/networking/usage controls or offer
+plan changes, provisioning, edits or deletion. Reconnect refreshes the same link; it must not
+create another server. A missing control route on an older Cloud API shows **Control unavailable**
+with upgrade guidance; structured resource and permission 404s retain their original meaning.
+
+Managed server navigation leads with Overview, Terminal and SSH access. Group listener inspection
+under Networking, and component health and Runtime API under Settings; preserve existing tab links.
+The managed terminal uses the full content width. Other views keep the shared 340px plan sidebar.
+Network controls separate the outbound connection from internet policy, with one explicit save per
+operation. Show the current connection separately from the draft, use filled controls and responsive
+field pairs, and keep private address/ingress diagnostics in a disclosure. Failed reads retain a
+status retry; they must not appear as an empty pool or trigger a mutation.
+
 Account protection lives in **Settings → Security**, using the existing settings
 navigation and section cards. Keep authenticator setup, recovery codes, and
 passkeys together for accounts hosted on that instance. Enrollment verifies a
@@ -313,6 +606,14 @@ and supporting metadata. Match nearby page headings instead of introducing a new
 Use **Domains & routing** for sections covering domains, published ports, and internal access. Use
 **Domains** when the section only manages hostnames. Put shared UI copy in the locale dictionaries.
 Keep hints concise and explain choices where they help the user decide.
+Routing rules have visible sections for rewrites, redirects, response headers, and
+URL behavior. Group proxy settings into uploads, timeouts, response buffering,
+compression, headers/protocol, and upstream TLS. Use human labels and shared filled
+controls; keep directive names in each group's Technical details disclosure.
+Trailing slashes have three choices: automatic, add, and remove. Live edge inspection
+is an explicit refresh, not an automatic SSH request when the page opens. Show
+proxy overrides only for targets that apply them, preserving stored values when
+editing other routing rules.
 
 Routing retries keep their logs inline and reconnect to the same server operation after a
 refresh. Refresh domain status and the routing warning from the canonical project response;
@@ -326,6 +627,11 @@ copy and a read-only status retry where available. Keep last-known details, labe
 unknown, and reserve repair/setup prompts for confirmed states. The root layout owns the browser/API
 connection notice. Monitoring groups explicit network failures across affected servers and keeps
 raw diagnostics in a closed Technical details disclosure.
+The global notice is compact and has no drop shadow. Brief transport interruptions
+that recover within 1.5 seconds do not flash it; a slow individual request is not
+evidence that the API is disconnected. Its retry reads API liveness only, never
+repeats a failed mutation. Any newer HTTP response clears obsolete connection
+failures, while the original request still reports its own error to its caller.
 
 Service terminals distinguish a pending status read from a confirmed stopped service. Keep the
 terminal mounted when a status check becomes unavailable; offer a manual terminal connection
@@ -342,6 +648,19 @@ keyboard focus and expose the selected filter with `aria-pressed`.
 
 Use the shared icon library and the [icon guide](client-icons.md). Avoid decorative icons that
 repeat an adjacent label or add clutter to a compact row.
+Project rows and deployment history share `ProjectStackIcon` after the catalog-logo and
+favicon choices. A missing or unrecognized framework uses the neutral application icon;
+only a declared static framework uses HTML5. Service-group deployments with no app framework
+use `layers`, based on their saved execution mode. Adding services to a recognized app must
+not replace its framework artwork.
+
+Migration retries reuse the shared destination picker after a fresh scan, even when opened
+from an existing run. Keep loading, fetch errors and empty inventory distinct, and preserve
+the selected destination's validation and transfer review before enabling Migrate.
+
+Catalog brand artwork is bundled in both dashboard and website public assets and mapped in
+the shared `AppLogo` renderer. Preserve upstream attribution and keep setup behavior in
+catalog definitions, rather than adding app-specific dashboard branches.
 
 ## Catalog forms
 
@@ -365,3 +684,32 @@ Inspect light, dim, and dark themes; narrow and wide containers; and expanded an
 navigation. Check keyboard focus, open dropdowns, long labels, and RTL when the layout changes.
 Use focused behavior tests for changes to field selection, validation, or payloads. A copy or
 spacing adjustment needs visual verification, not a test that asserts a CSS class string.
+
+## Mail webmail recovery
+
+Cloud's Emails entry connects an existing IMAP/SMTP backend through the standard
+webmail app installer. Keep its client card beside a compact Managed email / Coming
+soon notice. Cloud mail entry points must not mount local server setup, registry or
+administration requests. Desktop and self-hosted instances retain the normal mail
+console and setup flow. Navigation remains Emails across these modes.
+
+When a mail registration has lost its webmail link, the Deploy webmail screen
+shows existing catalog apps that already use that mail hostname on the mail
+server. Suggestions are read-only and require an explicit selection before
+Reconnect and deploy. Reuse the selected project's credentials, service and
+volume identities. Keep its server and hostname fixed during recovery, and show
+that constraint inline. Never create a second app or grant hostname ownership
+just because an app looks like webmail. A failed status read shows the shared
+error and Retry state; a changed link requires refreshing before another attempt.
+
+## Cloud authorization
+
+Desktop, self-hosted and CLI Cloud consent share a compact identity panel. Show
+the signed-in account (name, email and avatar) and the actual active organization.
+Use explicit Switch controls; expand organization choices inline without leaving
+the request. Never substitute the first organization when the session has none.
+Loading or failed organization reads show a skeleton or retry beside the identity
+and block authorization. Account switching signs out before continuing to login;
+organization switching reloads the same request after the server confirms the
+session change. Preserve callback, device mode, state and PKCE parameters, and
+require another explicit Authorize click after either switch.

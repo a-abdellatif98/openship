@@ -1142,7 +1142,86 @@
       "rulesUnavailable": "Outbound rules are unavailable. Refresh before editing them.",
       "invalidRules": "Enter 1–50 destinations. Use * alone, or specify hostnames/IPs without a URL, port or path.",
       "confirm": "Apply these outbound rules to every project on this server? Disabling internet clears the outbound allowlist. Re-enabling it uses the destinations shown above.",
-      "routingHint": "Public domains, TLS and private networking use Openship’s project and network controls. This form does not change their routes, ingress rules or proxy credentials."
+      "routingHint": "Public domains, TLS and private networking use Openship’s project and network controls. This form does not change their routes, ingress rules or proxy credentials.",
+      "policyTitle": "Internet access",
+      "policyHint": "Control which destinations apps and builds can reach.",
+      "addresses": "Private address & ingress"
+    },
+    "outbound": {
+      "title": "Outbound connection",
+      "description": "Choose how this server connects to the internet.",
+      "currentIp": "Current outbound IP",
+      "managed": "Managed by Openship",
+      "custom": "Custom proxy",
+      "unavailable": "Current settings could not be verified. Refresh before making changes.",
+      "connection": "Connection type",
+      "address": "Managed IP address",
+      "search": "Search IP or country",
+      "optionsFailed": "Available addresses could not be loaded.",
+      "managedHint": "Choose a managed IP. Automatic keeps the current managed address, or assigns one when switching from a custom proxy.",
+      "host": "Proxy IPv4 address",
+      "port": "Port",
+      "protocol": "Protocol",
+      "proxyHint": "Use a public IPv4 HTTP/HTTPS proxy. The provider checks it before applying.",
+      "authentication": "Proxy authentication",
+      "username": "Username",
+      "password": "Password",
+      "savedCredentials": "Credentials are saved. Re-enter both fields when replacing this proxy.",
+      "credentialsHint": "Enter both fields, up to 256 visible characters each, without spaces or : @ / ?.",
+      "impact": "Changes affect outgoing connections for every project on this server.",
+      "applying": "Applying…",
+      "apply": "Apply connection",
+      "current": "Current",
+      "automatic": "Automatic",
+      "invalid": "Check the IPv4 address and port (1–65535). If authentication is enabled, enter both credentials."
+    },
+    "navigation": {
+      "connection": "Outbound & access",
+      "listeners": "Listening ports",
+      "general": "General",
+      "ssh": "SSH"
+    },
+    "cloudConnection": {
+      "titles": {
+        "not_connected": "Sign in to Openship Cloud",
+        "account_mismatch": "Connect the server’s Cloud account",
+        "unavailable": "Cloud status unavailable"
+      },
+      "descriptions": {
+        "not_connected": "This is a saved link to a Cloud server. Sign in to the account and organization that own it to view its live state and manage it.",
+        "account_mismatch": "This server belongs to a different Cloud account or organization. Connect its owning account to continue.",
+        "unavailable": "The server could not be verified through Cloud. Refresh its status before using server controls."
+      },
+      "labels": {
+        "not_connected": "Cloud sign-in required",
+        "account_mismatch": "Different Cloud account",
+        "unavailable": "Cloud unavailable"
+      },
+      "signIn": "Sign in to Cloud",
+      "connecting": "Connecting…"
+    },
+    "controlUnavailable": {
+      "title": "Control unavailable",
+      "description": "This control is not available on the connected Cloud API version yet. Openship Cloud needs an update before it can be used."
     }
+  },
+  "gpu": {
+    "title": "GPU",
+    "subtitle": "Whether containers on this server can use a graphics card.",
+    "notDetected": "No GPU detected",
+    "notProbed": "Could not check this server right now",
+    "countOne": "1 GPU",
+    "countMany": "{count} GPUs",
+    "runtimeOnly": "NVIDIA runtime found, card count unknown",
+    "modeLabel": "Mark this server",
+    "modeAuto": "Detect automatically",
+    "modeYes": "Has a GPU",
+    "modeNo": "No GPU (keep GPU services off it)",
+    "modeHint": "Detection reads the Docker daemon. If it is wrong for this server, mark it by hand; your mark wins over detection.",
+    "mismatchYes": "Marked \"Has a GPU\", but none was detected. GPU services will be sent here anyway.",
+    "mismatchNo": "Marked \"No GPU\", but a GPU was detected. GPU services will be warned off this server.",
+    "saved": "GPU setting saved",
+    "saveFailed": "Could not save the GPU setting",
+    "badge": "GPU"
   }
 }

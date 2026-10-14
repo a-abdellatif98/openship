@@ -980,6 +980,13 @@ export const AUDIT_EVENTS: Record<string, AuditEventDef> = {
     label: "GitHub admin action",
     tone: "warning",
   },
+  "issues.history.clear": {
+    category: "system",
+    action: "cleared resolved monitoring history",
+    label: "Monitoring history cleared",
+    tone: "warning",
+    description: "Resolved incident history in this organization was removed. Active incidents remain.",
+  },
   "notification_channel.created": {
     category: "system",
     action: "added the notification channel",

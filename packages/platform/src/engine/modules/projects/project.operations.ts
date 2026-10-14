@@ -1,6 +1,11 @@
 import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import type { ProjectDependencies } from "../../../projects";
-import type { CreateProjectInput, EnsureProjectInput } from "@repo/contracts";
+import {
+  isEnsureProjectResult,
+  isProject,
+  type CreateProjectInput,
+  type EnsureProjectInput,
+} from "@repo/contracts";
 import type { ExecutionContext } from "../../../context";
 import { ValidationError } from "@repo/core";
 import { authorization } from "../../lib/authorization";
@@ -14,6 +19,7 @@ import { createProjectLocalDependencies } from "./project-local.operations";
 import { getProjectHome } from "./project-home.operations";
 import { subscribeProjectLogs, openProjectServerLogs } from "./project-logs.operations";
 import { subscribeRoutingRetry } from "./project-routing-retry.operations";
+import { maybeCloudProjectRequest } from "../../lib/cloud/project-creation";
 
 async function checkSource(input: Partial<CreateProjectInput>) {
   if (input.gitProvider === "external")
@@ -43,6 +49,10 @@ const recordAudit: ProjectDependencies["recordAudit"] = (ctx, event) => {
 };
 
 const create = async (ctx: ExecutionContext, input: EnsureProjectInput) => {
+  const cloud = await maybeCloudProjectRequest(ctx, "/api/projects", input, isProject, {
+    envelope: "data",
+  });
+  if (cloud) return { ...cloud, source: "cloud" as const };
   const service = await import("./project.service");
   await checkSource(input);
   if (input.routeStrategy === undefined) {
@@ -73,6 +83,13 @@ export const projectDependencies: ProjectDependencies = {
     );
   },
   async ensure(ctx, input) {
+    const cloud = await maybeCloudProjectRequest(
+      ctx,
+      "/api/projects/ensure",
+      input,
+      isEnsureProjectResult,
+    );
+    if (cloud) return cloud;
     const service = await import("./project.service");
     await checkSource(input);
     return service.ensureProject(input, ctx.organizationId, ctx);

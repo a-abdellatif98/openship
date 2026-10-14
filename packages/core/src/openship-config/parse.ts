@@ -7,7 +7,13 @@
  * Every field is optional; unknown top-level keys are warnings, not errors.
  */
 
-import { STACK_IDS } from "../stacks";
+import {
+  STACK_IDS,
+  ROLE_KINDS,
+  ROLE_HEALTH_KINDS,
+  type RoleHealth,
+  type StackRole,
+} from "../stacks";
 import { ALL_PACKAGE_MANAGERS } from "../stacks";
 import type { RoutingConfig } from "../metadata/types";
 import {
@@ -29,8 +35,11 @@ import {
   type OpenshipService,
   type ParseResult,
 } from "./schema";
+import { validateImageReference } from "../project-source";
 import { isValidEnvKey, normalizeProjectRootDirectory } from "../utils";
+import { isRuntimeVersion, runtimeVersionError } from "../runtime-version";
 import { isValidServiceName } from "../service-name";
+import { isComposeDuration } from "../duration";
 
 const TOP_LEVEL_KEYS = new Set([
   "$schema",
@@ -44,12 +53,16 @@ const TOP_LEVEL_KEYS = new Set([
   "releaseCommands",
   "outputDirectory",
   "buildImage",
+  "runtimeVersion",
+  "runtimeImage",
   "productionPaths",
   "volumes",
   "runtime",
   "productionMode",
   "workload",
   "port",
+  "roles",
+  "optimize",
   "env",
   "domains",
   "routes",
@@ -359,7 +372,10 @@ function parseServices(ctx: Ctx, v: unknown, path: string): OpenshipService[] | 
       return;
     }
     if (!isValidServiceName(name)) {
-      ctx.err(p, "requires a service name starting with a letter or digit and containing only letters, digits, dots, underscores or hyphens");
+      ctx.err(
+        p,
+        "requires a service name starting with a letter or digit and containing only letters, digits, dots, underscores or hyphens",
+      );
       return;
     }
     out.push({
@@ -383,6 +399,143 @@ function parseServices(ctx: Ctx, v: unknown, path: string): OpenshipService[] | 
     });
   });
   return out;
+}
+
+function parseRoleHealth(ctx: Ctx, v: unknown, path: string): RoleHealth | undefined {
+  if (v === undefined) return undefined;
+  if (!ctx.isObj(v)) {
+    ctx.err(path, "must be an object");
+    return undefined;
+  }
+  if (v.kind === undefined) {
+    ctx.err(`${path}.kind`, "is required");
+    return undefined;
+  }
+  const kind = ctx.enumOf(v.kind, `${path}.kind`, ROLE_HEALTH_KINDS);
+  if (kind === undefined) return undefined;
+  if (kind === "http") {
+    ctx.err(
+      `${path}.kind`,
+      '"http" is not supported for roles: roles run portless, so an HTTP probe has nothing to call; use "process" or "exec"',
+    );
+    return undefined;
+  }
+  const command = ctx.str(v.command, `${path}.command`);
+  if (kind === "exec" && !command?.trim()) {
+    ctx.err(`${path}.command`, "requires a non-empty command for an exec health check");
+    return undefined;
+  }
+  return {
+    kind,
+    path: ctx.str(v.path, `${path}.path`),
+    command,
+  };
+}
+
+/**
+ * Runtime roles beyond the web process (issue #935). Presence of the field at
+ * all - including `[]` - overrides the stack's own `defaultRoles` presets;
+ * see `resolveStackRoles`. `kind: "web"` is rejected: the web role is always
+ * derived from `startCommand`, never declared here.
+ */
+function parseRoles(ctx: Ctx, v: unknown, path: string): StackRole[] | undefined {
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v)) {
+    ctx.err(path, "must be an array of role objects");
+    return undefined;
+  }
+  const out: StackRole[] = [];
+  const seen = new Set<string>();
+  v.forEach((item, i) => {
+    const p = `${path}[${i}]`;
+    if (!ctx.isObj(item)) {
+      ctx.err(p, "must be an object");
+      return;
+    }
+    const name = ctx.str(item.name, `${p}.name`);
+    if (!name?.trim()) {
+      ctx.err(`${p}.name`, "requires a non-empty `name`");
+      return;
+    }
+    if (seen.has(name)) {
+      ctx.err(`${p}.name`, `duplicates role "${name}"; each role needs a unique name`);
+      return;
+    }
+    seen.add(name);
+    if (item.kind === undefined) {
+      ctx.err(`${p}.kind`, "is required");
+      return;
+    }
+    const kind = ctx.enumOf(item.kind, `${p}.kind`, ROLE_KINDS);
+    if (kind === undefined) return;
+    if (kind === "web") {
+      ctx.err(`${p}.kind`, '"web" is derived from `startCommand`, not declared in `roles`');
+      return;
+    }
+    const command = ctx.str(item.command, `${p}.command`);
+    if (!command?.trim()) {
+      ctx.err(`${p}.command`, "requires a non-empty `command`");
+      return;
+    }
+    const replicas = parseReplicas(ctx, item.replicas, `${p}.replicas`);
+    const declaredSingleton = ctx.bool(item.singleton, `${p}.singleton`);
+    // A scheduler is, by definition, one instance.
+    const singleton = kind === "scheduler" ? true : declaredSingleton;
+    if (singleton && replicas !== undefined && replicas > 1) {
+      ctx.err(
+        `${p}.replicas`,
+        kind === "scheduler"
+          ? `conflicts with kind "scheduler", which is always a singleton; remove \`replicas\` or use kind "worker"`
+          : "conflicts with `singleton: true`; a singleton runs exactly one instance",
+      );
+      return;
+    }
+    const stopSignal = parseStopSignal(ctx, item.stopSignal, `${p}.stopSignal`);
+    const stopGracePeriod = parseStopGracePeriod(ctx, item.stopGracePeriod, `${p}.stopGracePeriod`);
+    out.push({
+      name,
+      kind,
+      command,
+      replicas,
+      singleton,
+      health: parseRoleHealth(ctx, item.health, `${p}.health`),
+      stopSignal,
+      stopGracePeriod,
+    });
+  });
+  return out;
+}
+
+function parseStopSignal(ctx: Ctx, v: unknown, path: string): string | undefined {
+  const sig = ctx.str(v, path);
+  if (sig === undefined) return undefined;
+  if (!/^SIG[A-Z0-9]+$/.test(sig) && !/^[1-9]\d*$/.test(sig)) {
+    ctx.err(path, 'must be a signal name like "SIGTERM" or a positive integer');
+    return undefined;
+  }
+  return sig;
+}
+
+// The shared grammar in `../duration`, which the runtime and the compose parser
+// read too, so a value accepted here is one the runtime applies as written.
+
+function parseStopGracePeriod(ctx: Ctx, v: unknown, path: string): string | undefined {
+  const dur = ctx.str(v, path);
+  if (dur === undefined) return undefined;
+  if (!isComposeDuration(dur)) {
+    ctx.err(path, 'must be a duration like "90s", "1m30s", "10m", or a bare number of seconds');
+    return undefined;
+  }
+  return dur;
+}
+
+function parseReplicas(ctx: Ctx, v: unknown, path: string): number | undefined {
+  if (v === undefined) return undefined;
+  if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 1) {
+    ctx.err(path, "must be a safe integer >= 1");
+    return undefined;
+  }
+  return v;
 }
 
 function parseMonorepo(ctx: Ctx, v: unknown, path: string): OpenshipMonorepo | undefined {
@@ -464,6 +617,25 @@ function parsePackageManager(ctx: Ctx, v: unknown, path: string): string | undef
   return s;
 }
 
+function parseRuntimeImage(ctx: Ctx, raw: unknown): string | undefined {
+  const image = ctx.str(raw, "runtimeImage");
+  if (image === undefined) return undefined;
+  if (!image.trim() || image.length > 200 || validateImageReference(image.trim())) {
+    ctx.err("runtimeImage", "must be a valid Docker image reference");
+    return undefined;
+  }
+  return image.trim();
+}
+
+function parseRuntimeVersion(ctx: Ctx, raw: unknown): string | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRuntimeVersion(raw)) {
+    ctx.err("runtimeVersion", "must be a numeric version such as 8.3 or 8.3.1");
+    return undefined;
+  }
+  return raw;
+}
+
 /** Parse + validate raw `openship.json` JSON (already `JSON.parse`d) into a config. */
 export function parseOpenshipConfig(raw: unknown): ParseResult {
   const ctx = new Ctx();
@@ -486,12 +658,16 @@ export function parseOpenshipConfig(raw: unknown): ParseResult {
     releaseCommands: ctx.strArray(raw.releaseCommands, "releaseCommands"),
     outputDirectory: ctx.str(raw.outputDirectory, "outputDirectory"),
     buildImage: ctx.str(raw.buildImage, "buildImage"),
+    runtimeVersion: parseRuntimeVersion(ctx, raw.runtimeVersion),
+    runtimeImage: parseRuntimeImage(ctx, raw.runtimeImage),
     productionPaths: ctx.strArray(raw.productionPaths, "productionPaths"),
     volumes: ctx.strArray(raw.volumes, "volumes"),
     runtime: ctx.enumOf(raw.runtime, "runtime", OPENSHIP_RUNTIMES),
     productionMode: ctx.enumOf(raw.productionMode, "productionMode", OPENSHIP_PRODUCTION_MODES),
     workload: ctx.enumOf(raw.workload, "workload", OPENSHIP_WORKLOADS),
     port: ctx.int(raw.port, "port", 1, 65535),
+    roles: parseRoles(ctx, raw.roles, "roles"),
+    optimize: ctx.bool(raw.optimize, "optimize"),
     env: parseEnv(ctx, raw.env, "env"),
     domains: parseDomains(ctx, raw.domains, "domains"),
     routes: parseRoutes(ctx, raw.routes, "routes"),
@@ -500,6 +676,11 @@ export function parseOpenshipConfig(raw: unknown): ParseResult {
     services: parseServices(ctx, raw.services, "services"),
     monorepo: parseMonorepo(ctx, raw.monorepo, "monorepo"),
   };
+
+  if (config.framework && config.runtimeVersion) {
+    const error = runtimeVersionError(config.framework, config.runtimeVersion);
+    if (error) ctx.err("runtimeVersion", error);
+  }
 
   // Strip undefined so the overlay only carries fields the user actually declared.
   for (const k of Object.keys(config) as (keyof OpenshipConfig)[]) {

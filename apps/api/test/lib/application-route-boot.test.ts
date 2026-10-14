@@ -111,6 +111,8 @@ it.each([true, false])(
     expect(paths.has("/api/migration/sources")).toBe(true);
     expect(paths.has("/api/diagnostics/client-errors")).toBe(cloud);
     expect(paths.has("/api/migration/migrate")).toBe(true);
+    expect(paths.has("/api/actions/oidc/token")).toBe(true);
+    expect(paths.has("/api/actions/oidc/jwks")).toBe(true);
     const { getMcpTools, resetMcpToolCache } = await import("../../src/modules/mcp/mcp-tools");
     resetMcpToolCache();
     const names = getMcpTools().map((tool) => tool.name);

@@ -293,6 +293,7 @@ else:
     expect(h.recordSslFailure).toHaveBeenCalledWith(
       "dom_*.example.com",
       expect.stringMatching(/connected DNS provider.*Manual TXT/),
+      "operation",
     );
   });
 
@@ -311,6 +312,7 @@ else:
     expect(h.recordSslFailure).toHaveBeenCalledWith(
       "dom_app.example.com",
       expect.stringContaining("DNS provider credential rejected: Invalid token"),
+      "operation",
     );
   });
 
@@ -398,7 +400,7 @@ else:
     expect(selected.provisionCert).not.toHaveBeenCalled();
     expect(h.provisionCert).not.toHaveBeenCalled();
     if (present) expect(h.recordSslFailure).not.toHaveBeenCalled();
-    else expect(h.recordSslFailure).toHaveBeenCalledWith(`dom_${host}`, expect.stringContaining("manual TXT"), true);
+    else expect(h.recordSslFailure).toHaveBeenCalledWith(`dom_${host}`, expect.stringContaining("manual TXT"), "invalid");
   });
 
   it("does not report deployment HTTPS ready when activation fails with a valid certificate on disk", async () => {
@@ -414,7 +416,7 @@ else:
     expect(result.verified).toBe(false);
     expect(selected.provisionCert).not.toHaveBeenCalled();
     expect(h.updateSsl).not.toHaveBeenCalled();
-    expect(h.recordSslFailure).toHaveBeenCalledWith(`dom_${host}`, "Edge reload failed");
+    expect(h.recordSslFailure).toHaveBeenCalledWith(`dom_${host}`, "Edge reload failed", "unknown");
   });
 });
 

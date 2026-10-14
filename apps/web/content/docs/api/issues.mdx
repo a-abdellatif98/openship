@@ -31,6 +31,16 @@ curl "$OPENSHIP_URL/api/issues?status=open" \
 Each issue includes its severity, source, target, message, and any supported resolution action.
 Counts are grouped as `outage`, `actionRequired`, `advisory`, and `total`.
 
+## Clear resolved history
+
+Desktop and self-hosted organization owners/admins can call `ship.issues.clearHistory()`
+(or `DELETE /api/issues/history`). The response is `{ deleted: number }`. This permanently
+removes resolved incidents in the current organization, including history beyond the feed
+limit. Active incidents, later recoveries, other organizations, audit logs and notifications
+remain. The list response exposes `canClearHistory` for the current caller; read-only and
+restricted credentials cannot use this operation. The dashboard requires confirmation,
+and `openship monitoring clear-history --yes` exposes the same operation from the CLI.
+
 ## Inspect workload health
 
 <Tabs items={['SDK', 'REST API']} groupId="api-transport" persist>
@@ -85,5 +95,6 @@ daemon answers successfully.
 | Refresh current workload health without enabling the scheduler. | `issues.scanHealth()` | `POST /api/issues/health/scan`<br />`project:list` |
 | Run applicable issue checkers, or only container/server health. | `issues.rescan(input?)` | `POST /api/issues/rescan`<br />`job:write` · Self-hosted |
 | Read the status of an issue rescan. | `issues.rescanStatus()` | `GET /api/issues/rescan/status`<br />`job:read` · Self-hosted |
+| Permanently clear resolved incident history in the current organization; preserves active incidents and later recoveries. Owner/admin only. | `issues.clearHistory()` | `DELETE /api/issues/history`<br />`project:admin` · Self-hosted |
 
 {/* api-operations:end */}

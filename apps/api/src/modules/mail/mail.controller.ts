@@ -76,6 +76,7 @@ import { applyRelayToState } from "@repo/platform/engine/modules/mail/admin/outb
 // from this server's state file.
 import {
   resolveLinkedWebmailProject,
+  listWebmailRecoveryCandidates,
   resolveWebmailSummary,
   type WebmailSummary,
 } from "@repo/platform/engine/modules/mail/webmail/webmail-install.service";
@@ -310,6 +311,12 @@ export async function getStatus(c: Context) {
     // Both reads share the connection we were opening anyway — and it's what
     // lets the admin panel say "the engine is stopped, here's the fix" instead of
     // letting every tab discover it as a 409 of its own.
+    if (mailRecord?.webmailProjectId && !webmail) {
+      throw new Error("Could not resolve the mail server's linked webmail project.");
+    }
+    const webmailRecoveryCandidates = !webmail && mailRecord?.domain
+      ? await listWebmailRecoveryCandidates(ctx, mailRecord)
+      : undefined;
     const probed = await sshManager.withExecutor(serverId, async (executor) => {
       const found = await readState(executor, { strict: true });
       let observationError: string | undefined;
@@ -329,6 +336,7 @@ export async function getStatus(c: Context) {
     }
     return c.json({
       ...statusFromState(state, serverId, webmail),
+      ...(webmailRecoveryCandidates ? { webmailRecoveryCandidates } : {}),
       // OMITTED, never nulled, when the probe couldn't conclude: absence means
       // "we didn't look", and the dashboard banner must never claim an engine is
       // missing off a failed read.

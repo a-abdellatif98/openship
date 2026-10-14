@@ -40,8 +40,8 @@ export const CLOUD_EDGE_BANDWIDTH_GB: Readonly<Record<PlanTierId, number | null>
 };
 
 // Version price/term changes so checkout retries cannot reuse an earlier quote.
-export const OFFER_VERSION = "10";
-const MONTHLY_OFFER_VERSIONS: ReadonlySet<string> = new Set(["9", OFFER_VERSION]);
+export const OFFER_VERSION = "11";
+const MONTHLY_OFFER_VERSIONS: ReadonlySet<string> = new Set(["9", "10", OFFER_VERSION]);
 const TOPUP_OFFER_VERSION = "3";
 export const offerReference = (tier: PlanTierId) => `openship:${tier}:v${OFFER_VERSION}`;
 
@@ -95,7 +95,7 @@ export function subscriptionPlan(subscription: OblienSubscription, organizationI
     if (!tier) throw new AppError("This cloud plan is not supported by this Openship version", 503, "OBLIEN_PLAN_UNSUPPORTED");
     // Platform subscriptions predate explicit service ceilings; retain their
     // preset rather than applying a new retail offer to an existing customer.
-    return { tier, limits: { ...planLimits(tier), maxServiceResources: undefined }, resourceLimits: inheritedResourceLimits(tier) };
+    return { tier, limits: { ...planLimits(tier), ...(tier !== "free" ? { maxProjects: null, runningServices: null, concurrentBuilds: null } : {}), maxServiceResources: undefined }, resourceLimits: inheritedResourceLimits(tier) };
   }
   const { offer, metadata } = subscription;
   const tier = metadata?.openship_plan as PlanTierId;

@@ -18,10 +18,23 @@ openship monitoring [options] [command]
 | --- | --- |
 | [`issues [options]`](/docs/cli/reference/monitoring#openship-monitoring-issues) | List issues with counts and available recovery actions |
 | [`summary`](/docs/cli/reference/monitoring#openship-monitoring-summary) | Show open issue counts |
+| [`clear-history [options]`](/docs/cli/reference/monitoring#openship-monitoring-clear-history) | Clear resolved incidents in the selected organization; preserves active issues (self-hosted owner/admin) |
 | [`health`](/docs/cli/reference/monitoring#openship-monitoring-health) | Show workload health, scan freshness and watcher capabilities |
 | [`scan`](/docs/cli/reference/monitoring#openship-monitoring-scan) | Run an authorized current workload health scan |
 | [`rescan [options]`](/docs/cli/reference/monitoring#openship-monitoring-rescan) | Run the shared instance rescan (self-hosted administrator) |
 | [`watch`](/docs/cli/reference/monitoring#openship-monitoring-watch) | Configure the existing engine health watcher |
+
+## openship monitoring clear-history
+
+Clear resolved incidents in the selected organization; preserves active issues (self-hosted owner/admin)
+
+```text
+openship monitoring clear-history [options]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-y, --yes` | Confirm permanent removal of resolved incident history |
 
 ## openship monitoring health
 

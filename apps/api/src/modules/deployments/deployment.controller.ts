@@ -23,6 +23,7 @@ export async function list(c: Context) {
     page: Number(c.req.query("page") ?? 1), perPage: Number(c.req.query("perPage") ?? 50),
     status: c.req.query("status") as import("@repo/core").DeploymentHistoryFilter | undefined,
     search: c.req.query("search"),
+    days: c.req.query("days") ? Number(c.req.query("days")) : undefined,
   });
   applyOperationContext(c, result.context);
   return c.json({ success: true, ...result.data });
@@ -259,6 +260,7 @@ export async function buildRedeploy(c: Context) {
 export async function buildStart(c: Context) {
   const result = await getPlatformKernel().deployments.start(operationContext(c), param(c, "id"));
   applyOperationContext(c, result.context);
+  if (result.data.awaiting_actions) return c.json({ success: true, ...result.data }, 202);
   return streamBuildSession(c, result.data.deployment_id, {
     event: "started", data: JSON.stringify({ type: "started", ...result.data }),
   });

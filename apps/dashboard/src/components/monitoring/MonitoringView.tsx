@@ -58,9 +58,13 @@ export interface MonitoringViewProps {
   historySupported?: boolean;
   usage: ProjectUsage | null;
   isUsageConnected: boolean;
+  isUsageConnecting?: boolean;
   usageError: string | null;
   onReconnectUsage: () => void;
   analyticsError?: string | null;
+  geoError?: string | null;
+  historyError?: string | null;
+  isRefreshingData?: boolean;
   onRetryAnalytics?: () => void;
   /**
    * Scope for the resource views. null = All (the summed stack).
@@ -138,9 +142,13 @@ export const MonitoringView: React.FC<MonitoringViewProps> = ({
   historySupported = true,
   usage,
   isUsageConnected,
+  isUsageConnecting = false,
   usageError,
   onReconnectUsage,
   analyticsError,
+  geoError,
+  historyError,
+  isRefreshingData = false,
   onRetryAnalytics,
   serviceKey,
   onServiceKeyChange,
@@ -155,8 +163,13 @@ export const MonitoringView: React.FC<MonitoringViewProps> = ({
   live,
 }) => {
   const { t } = useI18n();
-  const showAnalyticsError = !!analyticsError && !isLoadingAnalytics;
+  const showAnalyticsError = !!analyticsError;
   const m = t.projects.monitoring;
+  const failedReads = [
+    { section: m.trafficTitle, error: analyticsError, hasData: !!analytics },
+    { section: m.visitorsTitle, error: geoError, hasData: !!geo },
+    { section: m.historyTitle, error: historySupported ? historyError : null, hasData: !!history },
+  ].filter((read) => read.error);
 
   const showResources = hasMeasurableWorkload(usage, usageError);
   const services = history?.services ?? [];
@@ -215,8 +228,17 @@ export const MonitoringView: React.FC<MonitoringViewProps> = ({
       )}
 
       {/* ── Reference numbers, as a strip ─────────────────────────────────── */}
-      {showAnalyticsError && <AnalyticsError error={analyticsError!} onRetry={onRetryAnalytics} />}
-      {!showAnalyticsError && (
+      {failedReads.length > 0 && (
+        <AnalyticsError
+          title={m.dataUnavailable}
+          sections={failedReads.map((read) => read.section)}
+          error={failedReads.map((read) => `${read.section}: ${read.error}`).join("\n")}
+          hasData={failedReads.some((read) => read.hasData)}
+          onRetry={onRetryAnalytics}
+          retrying={isRefreshingData}
+        />
+      )}
+      {(!showAnalyticsError || hasAnalytics) && (
         <div className="grid grid-cols-2 divide-border/50 overflow-hidden rounded-2xl bg-card sm:grid-cols-4 sm:divide-x">
           <StatTile
             icon={<UiIcon name="server" className="size-4" />}
@@ -234,7 +256,7 @@ export const MonitoringView: React.FC<MonitoringViewProps> = ({
           <StatTile
             icon={<UiIcon name="users" className="size-4" />}
             label={visitorsLabel}
-            value={visitors == null ? (isLoadingGeo ? "…" : "0") : formatCount(visitors)}
+            value={geoError && !geo ? "—" : visitors == null ? (isLoadingGeo ? "…" : "0") : formatCount(visitors)}
             hint={[
               isCloudGeo ? t.projectDetail.general.traffic.last24Hours : m.dailyWindow,
               geo?.approximate ? m.approximate : null,
@@ -273,7 +295,9 @@ export const MonitoringView: React.FC<MonitoringViewProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-medium text-foreground">{m.resourcesTitle}</h3>
-              <p className="mt-0.5 text-xs text-muted-foreground">{m.resourcesSubtitle}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {isUsageConnecting ? m.connecting : usageError ? m.unsupportedTitle : isUsageConnected ? m.resourcesSubtitle : m.offline}
+              </p>
             </div>
             {/* Scope lives in the header of what it governs, not in a card of its own. */}
             {services.length > 1 && (
@@ -298,6 +322,7 @@ export const MonitoringView: React.FC<MonitoringViewProps> = ({
           <ResourceCards
             usage={usage}
             isConnected={isUsageConnected}
+            isConnecting={isUsageConnecting}
             error={usageError}
             onReconnect={onReconnectUsage}
             focusServiceKey={serviceKey}
@@ -325,31 +350,33 @@ export const MonitoringView: React.FC<MonitoringViewProps> = ({
       )}
 
       {/* ── Where it came from, before how much of it ─────────────────────── */}
-      <VisitorMap
-        data={geo}
-        isLoading={isLoadingGeo}
-        live={live}
-        // Lives in the map's header because that is where it was asked for, but it scopes
-        // the WHOLE tab — the traffic chart, paths and responses all follow it.
-        // `DomainSwitcher`, not a bare <select>: the native control renders in OS chrome,
-        // so it ignored the theme entirely and looked nothing like the toggle beside it.
-        // This is also the same switcher the logs header and the Overview URL card use, so
-        // a multi-domain project changes domain the same way everywhere in the app.
-        domainSelector={
-          domains.length > 1 && onDomainScopeChange ? (
-            <DomainSwitcher
-              domains={domains}
-              value={domainScope ?? ""}
-              onChange={(d) => onDomainScopeChange(d || null)}
-              allowAll
-            />
-          ) : null
-        }
-      />
+      {(!geoError || geo) && (
+        <VisitorMap
+          data={geo}
+          isLoading={isLoadingGeo}
+          live={live}
+          // Lives in the map's header because that is where it was asked for, but it scopes
+          // the WHOLE tab — the traffic chart, paths and responses all follow it.
+          // `DomainSwitcher`, not a bare <select>: the native control renders in OS chrome,
+          // so it ignored the theme entirely and looked nothing like the toggle beside it.
+          // This is also the same switcher the logs header and the Overview URL card use, so
+          // a multi-domain project changes domain the same way everywhere in the app.
+          domainSelector={
+            domains.length > 1 && onDomainScopeChange ? (
+              <DomainSwitcher
+                domains={domains}
+                value={domainScope ?? ""}
+                onChange={(d) => onDomainScopeChange(d || null)}
+                allowAll
+              />
+            ) : null
+          }
+        />
+      )}
 
       {/* The same 24-hour series as Overview, optionally scoped to one domain.
           Keep the remembered fold state for users who only need its total here. */}
-      {!showAnalyticsError && (
+      {(!showAnalyticsError || hasAnalytics) && (
         <CollapsibleCard
           title={m.trafficTitle}
           summary={trafficSummary}
@@ -360,10 +387,12 @@ export const MonitoringView: React.FC<MonitoringViewProps> = ({
       )}
 
       {/* Two short lists, side by side rather than two more full-width screens. */}
-      <div className="grid gap-5 lg:grid-cols-2">
-        {topPaths}
-        <ResponseMix statuses={geo?.statuses} />
-      </div>
+      {geo && (
+        <div className="grid gap-5 lg:grid-cols-2">
+          {topPaths}
+          <ResponseMix statuses={geo.statuses} />
+        </div>
+      )}
 
       {/* History LAST, and only when there is a workload to have a history of.
           It sits at the end rather than beside the live numbers because the two are read
@@ -372,7 +401,7 @@ export const MonitoringView: React.FC<MonitoringViewProps> = ({
           together at the top they competed, and the trend pushed the traffic blocks off
           the screen. The scope selector above still governs it — `scopeLabel` names the
           series so the two can't be read as describing different things. */}
-      {showResources && historySupported && (
+      {showResources && historySupported && (!historyError || history) && (
         <ResourceHistoryChart
           buckets={history?.buckets ?? []}
           granularityMinutes={history?.granularityMinutes ?? 5}

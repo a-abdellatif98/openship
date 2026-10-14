@@ -1,5 +1,5 @@
 import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
-import type { MailDeliveryHealth } from "@repo/contracts";
+import type { MailDeliveryHealth, MailWebmailRecoveryCandidate } from "@repo/contracts";
 import type { RelayProviderId } from "@repo/core";
 import { api, ApiError, getApiBaseUrl, getActiveOrganizationId, getApiErrorCode } from "./client";
 import { endpoints } from "./endpoints";
@@ -233,6 +233,8 @@ export interface MailSetupStatus {
   credentials?: MailCredentials;
   /** Webmail deploy record. Absent when no webmail is deployed yet. */
   webmail?: MailWebmailSummary;
+  /** Read-only suggestions; selecting and submitting grants the missing link explicitly. */
+  webmailRecoveryCandidates?: MailWebmailRecoveryCandidate[];
   /**
    * Live mail-engine topology, probed on the same connection that read the state
    * file. `container` = the openship-mail engine; `host` = a LEGACY systemd
@@ -709,6 +711,7 @@ export const mailApi = {
         | { kind: "self"; serverId: string }
         | { kind: "cloud"; serverId?: string };
       replaceLegacy?: boolean;
+      reconnectProjectId?: string;
     }) =>
       api.post<{ deploymentId: string; projectId: string }>(
         endpoints.mail.webmail.deployProject,

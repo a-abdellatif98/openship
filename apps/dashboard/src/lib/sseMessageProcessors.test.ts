@@ -903,3 +903,15 @@ describe("createGenericMessageProcessor", () => {
     });
   });
 });
+
+
+describe("queued build attachment", () => {
+  it("does not turn an absent in-memory session into a terminal failure", () => {
+    const onFailure = vi.fn();
+    const processor = createBuildMessageProcessor({ onFailure });
+    processor.handleMessage(processor.parseMessage({ type: "error", error: "Session not found" }), makeContext());
+    expect(onFailure).not.toHaveBeenCalled();
+    processor.handleMessage(processor.parseMessage({ type: "error", error: "Session not found", errorCode: "BUILD_FAILED" }), makeContext());
+    expect(onFailure).toHaveBeenCalledWith("Session not found", "BUILD_FAILED", undefined);
+  });
+});

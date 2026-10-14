@@ -6,6 +6,16 @@ import { ServiceStatusIndicator } from "@/components/services/ServiceStatusBadge
 
 export function ManagedServerStatus({ workspace }: { workspace: CloudWorkspaceSummary }) {
   const { t } = useI18n();
+  if (workspace.connectionIssue)
+    return (
+      <span
+        role="status"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-warning-bg px-2 py-1 text-xs font-medium text-warning"
+      >
+        <ServiceStatusIndicator status="unknown" />
+        {t.servers.managedControls.cloudConnection.labels[workspace.connectionIssue]}
+      </span>
+    );
   const operation = workspace.operation?.status;
   const state =
     operation === "failed"

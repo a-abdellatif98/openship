@@ -18,6 +18,7 @@ import { env } from '../env';
 import { getSession } from '../lib/session';
 import { bridgeImapIdle } from '../lib/imap-idle';
 import { createImapClient } from '../lib/imap';
+import { folderToMailbox, normalizeFolderSlug } from '../lib/imap-driver';
 
 export const idleRoute = new Hono();
 
@@ -27,8 +28,13 @@ idleRoute.get('/idle', async (c) => {
   const session = await getSession(sid);
   if (!session) return c.text('Unauthorized', 401);
 
-  const folder = c.req.query('folder') || 'INBOX';
+  const view = c.req.query('view');
+  const folder = view !== undefined
+    ? folderToMailbox(normalizeFolderSlug(view))
+    : c.req.query('folder') || 'INBOX';
 
+  // Nginx/OpenResty must forward each notification as it arrives.
+  c.header('X-Accel-Buffering', 'no');
   return streamSSE(c, async (stream) => {
     const client = createImapClient({
       host: session.imapHost,

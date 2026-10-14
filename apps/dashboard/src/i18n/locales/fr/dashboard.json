@@ -86,7 +86,8 @@
     },
     "apps": "Applications",
     "jobs": "Tâches",
-    "workspaces": "Espaces de travail"
+    "workspaces": "Espaces de travail",
+    "actions": "Actions"
   },
   "sidebar": {
     "expand": "Développer la barre latérale",
@@ -191,7 +192,15 @@
       "cancel": "Annuler",
       "nameLabel": "Nom",
       "configTitle": "Configurer {app}",
-      "comingSoon": "Bientôt disponible"
+      "comingSoon": "Bientôt disponible",
+      "addCustom": "Ajouter personnalisée",
+      "howToAddApp": "Comment ajouter une application",
+      "removeCustomApp": "Supprimer l'application personnalisée",
+      "needsUpdateDesc": "Mettez à jour votre instance Openship pour installer cette application.",
+      "needsUpdateBadge": "Mise à jour requise",
+      "needsVersionBadge": "Nécessite la v{version}",
+      "removedToast": "« {name} » a été supprimé.",
+      "removeFailedToast": "Impossible de supprimer l'application."
     }
   },
   "quickLinks": {

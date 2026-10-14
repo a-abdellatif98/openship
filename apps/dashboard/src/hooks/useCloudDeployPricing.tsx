@@ -27,16 +27,26 @@ export function useCloudDeployPricing(selectedWorkspaceId?: string | null) {
     const workspaceCapacity = workspaceId && body?.code === "CLOUD_WORKSPACE_BUILD_CAPACITY";
     if (!restriction && !capacity && !workspaceCapacity) return false;
     if (openModal.current) return true;
-    const retry = onRetry ? async () => {
-      const result = await onRetry();
-      openModal.current = null;
-      hideModal(id);
-      return result;
+    let retryInFlight: Promise<unknown> | null = null;
+    const retry = onRetry ? () => {
+      // Share one attempt even if two clicks arrive before React disables the
+      // button. A rejection keeps the same modal and configuration available.
+      retryInFlight ??= Promise.resolve()
+        .then(onRetry)
+        .then((result) => {
+          if (openModal.current === id) {
+            openModal.current = null;
+            hideModal(id);
+          }
+          return result;
+        })
+        .finally(() => { retryInFlight = null; });
+      return retryInFlight;
     } : undefined;
     const id = showModal({
       customContent: capacity || workspaceCapacity
         ? <ServerCapacityRecovery workspaceId={workspaceId} message={typeof body?.error === "string" ? body.error : undefined} onClose={() => hideModal(id)} onRetry={retry} />
-        : <CloudDeployPlanModal workspaceId={workspaceId} restriction={restriction!} onClose={() => hideModal(id)} />,
+        : <CloudDeployPlanModal workspaceId={workspaceId} restriction={restriction!} onRetry={retry} onClose={() => hideModal(id)} />,
       width: "100%",
       maxWidth: capacity ? "880px" : "1440px",
       maxHeight: "calc(100dvh - 2rem)",

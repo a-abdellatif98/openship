@@ -86,7 +86,8 @@
     },
     "apps": "アプリ",
     "jobs": "ジョブ",
-    "workspaces": "ワークスペース"
+    "workspaces": "ワークスペース",
+    "actions": "アクション"
   },
   "sidebar": {
     "expand": "サイドバーを展開",
@@ -131,7 +132,15 @@
         "automation": "自動化",
         "mail": "メール",
         "other": "ツール"
-      }
+      },
+      "addCustom": "カスタムを追加",
+      "howToAddApp": "アプリを追加する方法",
+      "removeCustomApp": "カスタムアプリを削除",
+      "needsUpdateDesc": "このアプリをインストールするにはOpenshipインスタンスを更新してください。",
+      "needsUpdateBadge": "要更新",
+      "needsVersionBadge": "v{version} が必要",
+      "removedToast": "「{name}」を削除しました。",
+      "removeFailedToast": "アプリを削除できませんでした。"
     },
     "projects": {
       "title": "プロジェクト",

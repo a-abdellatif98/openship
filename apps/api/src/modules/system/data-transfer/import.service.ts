@@ -26,6 +26,7 @@ import {
 
 import { env } from "@repo/platform/engine/config/env";
 import { reconcileRuntimeStateAfterImport } from "../../../lib/database-runtime-state";
+import { rebindLocalUserAfterInstanceRestore } from "../../../lib/local-user";
 import { reassertMigrationLockAfterRestore, withMigrationLock } from "../migration/migration-lock";
 import { CloudInstanceNotTransferableError } from "./errors";
 import { openTransferSecrets, transferSecretsRequirePassphrase } from "./passphrase-crypto";
@@ -408,6 +409,7 @@ export async function importPreparedInstance(opts: {
         writtenRows,
       });
       rowsRestored = writtenRows.count;
+      if (mode === "wipe" && !projectScope) await rebindLocalUserAfterInstanceRestore(tx);
       await removeReplacedProjectRows(tx, replacementRows);
       // Unlike an ordinary overwrite, a changed host invalidates even the
       // destination's previous frozen runtime snapshot. Its secrets must not

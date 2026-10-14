@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { dataTransferApi, type ExportPreview, type ExportSelection, type TransferManifest } from "@/lib/api/data-transfer";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { useToast } from "@/context/ToastContext";
+import { useI18n, interpolate } from "@/components/i18n-provider";
 import { TransferRequirements } from "./TransferRequirements";
 import {
   ALL_HISTORY,
@@ -26,6 +27,8 @@ export function ExportPanel({
   projectName?: string;
 }) {
   const { showToast } = useToast();
+  const { t } = useI18n();
+  const d = t.settings.dataTransfer;
   const [selection, setSelection] = useState<ExportSelection>({
     scope: projectId ? "projects" : "instance",
     projectIds: projectId ? [projectId] : undefined,
@@ -112,9 +115,9 @@ export function ExportPanel({
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       setDownloaded({ filename, manifest: file.manifest });
       showToast(
-        "Export downloaded. Import it from Settings → Instance on the destination control plane.",
+        d.exportCompleteToast,
         "success",
-        "Export complete",
+        d.exportDownloaded,
       );
     } catch (error) {
       setError(getApiErrorMessage(error, "Export failed."));
@@ -132,7 +135,7 @@ export function ExportPanel({
       onClick={() => void download()}
     >
       {busy ? <UiIcon name="spinner" className="size-4 animate-spin" /> : <UiIcon name="download" className="size-4" />}
-      {busy ? "Exporting…" : downloaded ? "Download again" : "Download export"}
+      {busy ? d.exporting : downloaded ? d.downloadAgain : d.downloadExport}
     </button>
   );
   const downloadResult = downloaded && (
@@ -140,7 +143,7 @@ export function ExportPanel({
       <div role="status" className="flex items-start gap-2.5 rounded-xl bg-success-bg p-3">
         <UiIcon name="check" className="mt-0.5 size-4 shrink-0 text-success" />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">Export downloaded</p>
+          <p className="text-sm font-medium text-foreground">{d.exportDownloaded}</p>
           <p className="mt-0.5 break-all text-xs text-muted-foreground">{downloaded.filename}</p>
         </div>
       </div>
@@ -158,17 +161,17 @@ export function ExportPanel({
         {downloadResult || (
           <>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Includes all environments, services, deployment history, analytics, connections,
-              domains, backup settings, environment values, and keys. The JSON file is unencrypted and
-              imports without a password.
+              {d.exportProjectIntro}
             </p>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              The destination needs the same servers or OpenShip Cloud account to reconnect to
-              existing workloads. Their details will be shown after download.
+              {d.exportProjectReconnection}
             </p>
             <p aria-live="polite" className="text-xs text-muted-foreground">
-              {loading ? "Checking export contents…" : preview
-                ? `${selectedRows?.toLocaleString()} records across ${preview.manifest?.projects.length ?? 1} environments included.`
+              {loading ? d.checkingExport : preview
+                ? interpolate(d.recordsAcrossEnvsIncluded, {
+                    count: selectedRows?.toLocaleString() ?? "0",
+                    envs: String(preview.manifest?.projects.length ?? 1),
+                  })
                 : ""}
             </p>
           </>
@@ -182,14 +185,12 @@ export function ExportPanel({
   return (
     <div className="space-y-4">
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Export the control plane, including stored environment values, server keys,
-        credentials, configuration, and history. The JSON file is unencrypted and needs no
-        password. Workloads on the same servers keep their existing target bindings.
+        {d.exportInstanceIntro}
       </p>
       <label className="block space-y-1 text-sm font-medium text-foreground">
-        Export scope
+        {d.scopeLabel}
         <select
-          aria-label="Export scope"
+          aria-label={d.scopeLabel}
           disabled={busy}
           value={selection.scope}
           className={transferInputClass}
@@ -204,8 +205,8 @@ export function ExportPanel({
             })
           }
         >
-          <option value="instance">Entire instance</option>
-          <option value="projects">Selected projects and environments</option>
+          <option value="instance">{d.scopeInstance}</option>
+          <option value="projects">{d.scopeProjects}</option>
         </select>
       </label>
       {selection.scope === "projects" && (
@@ -219,35 +220,35 @@ export function ExportPanel({
       {selection.scope === "projects" && (
         <div className="grid gap-2 sm:grid-cols-2">
           <TransferOption
-            label="Linked apps"
-            description="Include database and storage projects required by the selection."
+            label={d.optLinkedAppsLabel}
+            description={d.optLinkedAppsDesc}
             checked={selection.includeLinkedProjects !== false}
             onChange={(includeLinkedProjects) => patch({ includeLinkedProjects })}
             disabled={busy}
           />
           <TransferOption
-            label="Related self-hosted servers (recommended)"
-            description="Include server connections and their Git keys. Existing matching servers can be reused during import."
+            label={d.optServersLabel}
+            description={d.optServersDesc}
             checked={selection.includeServers !== false}
             onChange={(includeServers) => patch({ includeServers })}
             disabled={busy}
           />
           <TransferOption
-            label="Domains and routing"
+            label={d.optDomainsLabel}
             checked={selection.includeDomains !== false}
             onChange={(includeDomains) => patch({ includeDomains })}
             disabled={busy}
           />
           <TransferOption
-            label="Backup configuration"
-            description="Policies and destinations; backup payloads remain in their storage."
+            label={d.optBackupsLabel}
+            description={d.optBackupsDesc}
             checked={selection.includeBackups !== false}
             onChange={(includeBackups) => patch({ includeBackups })}
             disabled={busy}
           />
           <TransferOption
-            label="Shared integrations"
-            description="Git provider apps, registry logins, and workspace DNS credentials."
+            label={d.optIntegrationsLabel}
+            description={d.optIntegrationsDesc}
             checked={selection.includeIntegrations !== false}
             onChange={(includeIntegrations) => patch({ includeIntegrations })}
             disabled={busy}
@@ -255,15 +256,18 @@ export function ExportPanel({
         </div>
       )}
       <TransferOption
-        label="Environment values, keys, and credentials"
-        description="Included as readable JSON, with server keys, inline Compose configuration, and secret files stored in metadata."
+        label={d.optSecretsLabel}
+        description={d.optSecretsDesc}
         checked={selection.includeSecrets !== false}
         onChange={(includeSecrets) => patch({ includeSecrets })}
         disabled={busy}
       />
       <details className="rounded-lg border border-border p-3">
         <summary className="cursor-pointer text-sm font-medium text-foreground">
-          History options · {selection.history.length} of {ALL_HISTORY.length} included
+          {interpolate(d.historyOptionsSummary, {
+            count: String(selection.history.length),
+            total: String(ALL_HISTORY.length),
+          })}
         </summary>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {ALL_HISTORY.map((category) => (
@@ -288,10 +292,17 @@ export function ExportPanel({
       </details>
       <div aria-live="polite" className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
         {loading
-          ? "Checking export contents…"
+          ? d.checkingExport
           : !validSelection
-            ? "Select at least one project or environment."
-            : `${selectedRows?.toLocaleString() ?? "—"} records${preview?.manifest ? ` across ${preview.manifest.projects.length} environments` : ""} selected.`}
+            ? d.selectAtLeastOne
+            : preview?.manifest
+              ? interpolate(d.recordsAcrossEnvsSelected, {
+                  count: selectedRows?.toLocaleString() ?? "—",
+                  envs: String(preview.manifest.projects.length),
+                })
+              : interpolate(d.recordsSelected, {
+                  count: selectedRows?.toLocaleString() ?? "—",
+                })}
         {!!preview?.manifest && validSelection && (
           <p className="mt-1">
             {preview.manifest.projects
@@ -302,9 +313,7 @@ export function ExportPanel({
       </div>
       {cloudProjects.length > 0 && (
         <p className="rounded-lg border border-warning-border bg-warning-bg p-3 text-xs leading-relaxed text-warning">
-          Cloud projects will not work until the destination workspace is connected to the same
-          Openship Cloud account. This export preserves cloud workspace references; it cannot
-          transfer a cloud server between accounts.
+          {d.cloudNotice}
         </p>
       )}
       {validSelection && <TransferWarnings warnings={preview?.manifest?.warnings ?? []} />}

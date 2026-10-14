@@ -158,5 +158,21 @@
         "domain"
       ]
     }
-  ]
+  ],
+  "marketplace": {
+    "features": [
+      {
+        "title": "IMAP and SMTP",
+        "description": "Connect an existing mail provider."
+      },
+      {
+        "title": "Read and send",
+        "description": "Use a browser interface for everyday email."
+      },
+      {
+        "title": "Your domain",
+        "description": "Run the client on an address you control."
+      }
+    ]
+  }
 }

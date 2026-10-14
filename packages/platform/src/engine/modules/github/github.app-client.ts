@@ -4,6 +4,15 @@
  */
 
 import crypto from "node:crypto";
+import { GitHubApiError } from "./github.error";
+
+export class GitHubAppApiError extends GitHubApiError {
+  constructor(status: number, message: string, headers: Headers) {
+    super(status, message, headers);
+    this.name = "GitHubAppApiError";
+    this.message = `GitHub App API error (${status}): ${message}`;
+  }
+}
 
 export interface GitHubAppClientCredentials {
   appId: string | number;
@@ -77,7 +86,7 @@ export async function githubAppFetch<T = unknown>(
       typeof (data as { message?: unknown }).message === "string"
         ? (data as { message: string }).message.slice(0, 300)
         : "GitHub rejected the request";
-    throw new Error(`GitHub App API error (${response.status}): ${message}`);
+    throw new GitHubAppApiError(response.status, message, response.headers);
   }
   return data as T;
 }

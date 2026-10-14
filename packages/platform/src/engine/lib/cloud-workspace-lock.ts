@@ -6,8 +6,18 @@ import { repos, type CloudWorkspace, type CloudWorkspaceActivity } from "@repo/d
 import { withManagedCommandTracking } from "@repo/adapters";
 import { createProvisionLock, tryWithProvisionLock } from "./provision-lock";
 import { remoteCloudRequest, requireLinkedCloudServer } from "./cloud/server-link";
+import { sharesCloudBuildAdmission } from "./cloud-build-activity-context";
 
 const held = new AsyncLocalStorage<ReadonlyMap<string, { active: boolean; owner: CloudWorkspace; activity: CloudWorkspaceActivity }>>();
+
+/** Clear inherited admission for detached work without releasing its parent. */
+export function runOutsideCloudWorkspaceActivity<T>(work: () => T): T {
+  return held.exit(work);
+}
+
+export function isCloudWorkspaceActivityHeld(workspaceId: string): boolean {
+  return held.getStore()?.get(workspaceId)?.active === true;
+}
 
 async function recoverCommands(row: CloudWorkspace) {
   if (!row.activity?.commands?.length) return;
@@ -70,6 +80,7 @@ export async function withCloudWorkspaceActivity<T>(
   signal?: AbortSignal,
   options: { scope?: string; lifecycle?: boolean } = {},
 ): Promise<T> {
+  if (sharesCloudBuildAdmission(workspaceId, options)) return work();
   if (!workspaceId || held.getStore()?.get(workspaceId)?.active) return work();
   return createProvisionLock(`cloud:workspace-activity:${workspaceId}`).run(
     () => runCloudWorkspaceActivity(workspaceId, work, signal, options), signal,
@@ -83,6 +94,8 @@ export async function tryWithCloudWorkspaceActivity<T>(
   work: () => Promise<T>,
   scope: string,
 ): Promise<T | undefined> {
+  // Recovery must not interpret its own shared activity as an idle workspace.
+  if (sharesCloudBuildAdmission(workspaceId, { scope })) return undefined;
   if (held.getStore()?.get(workspaceId)?.active) return undefined;
   return tryWithProvisionLock(`cloud:workspace-activity:${workspaceId}`,
     () => runCloudWorkspaceActivity(workspaceId, work, undefined, { scope }));

@@ -62,19 +62,22 @@ describe("getNavSections (the platform rail)", () => {
       "home",
       "projects",
       "apps",
-      "deployments",
+      "actions",
       "issues",
     ]);
     expect(keysOf(find(s, "infrastructure"))).toEqual(["servers", "emails", "jobs"]);
     expect(keysOf(find(s, "settings"))).toEqual(["backups", "settings", "audit"]);
   });
 
-  it("includes Billing before Cloud infrastructure without exposing self-hosted mail", () => {
+  it("includes Billing before Cloud infrastructure and links the generic email client", () => {
     const s = getNavSections(true, false);
     expect(sectionsOf(s)).toEqual(["main", "settings", "infrastructure", "help"]);
+    expect(find(s, "main")?.items.find((item) => item.key === "actions")).toMatchObject({
+      href: "/actions",
+    });
     expect(s.at(-1)?.items.at(-1)).toMatchObject({ key: "support", href: "/support" });
     expect(keysOf(find(s, "settings"))).toEqual(["backups", "settings", "billing", "audit"]);
-    expect(keysOf(find(s, "infrastructure"))).toEqual(["servers", "jobs"]);
+    expect(keysOf(find(s, "infrastructure"))).toEqual(["servers", "emails", "jobs"]);
   });
 
   it("keeps Infrastructure before Settings on a cloud-linked self-hosted box", () => {

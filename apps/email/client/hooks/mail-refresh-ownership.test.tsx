@@ -47,15 +47,17 @@ mock.module("next-themes", () => ({ useTheme: () => ({ theme: "light" }) }));
 const { useThreads } = await import("./use-threads");
 const { useMailRefresh } = await import("./use-mail-refresh");
 
-class MailStream {
+class MailStream extends EventTarget {
   static instances: MailStream[] = [];
   closed = false;
-  constructor() {
+  readyState = 0;
+  constructor(readonly url: string) {
+    super();
     MailStream.instances.push(this);
   }
-  addEventListener() {}
   close() {
     this.closed = true;
+    this.readyState = 2;
   }
 }
 
@@ -118,13 +120,30 @@ function ThreadConsumer() {
   return <output>{threads.map((thread) => thread.id).join(",")}</output>;
 }
 
-function Mailbox() {
-  useMailRefresh(true);
+function Mailbox({ folder = "inbox" }: { folder?: string }) {
+  useMailRefresh(true, folder);
   return Array.from({ length: 5 }, (_, index) => <ThreadConsumer key={index} />);
 }
 
 describe("mailbox refresh ownership", () => {
-  it("shares one refresh across mounted thread consumers without opening per-row mail streams", async () => {
+  it("closes the previous folder stream on navigation and every stream on unmount", async () => {
+    const store = createStore();
+    const render = (folder: string) => root.render(
+      <Provider store={store}>
+        <QueryClientProvider client={client}><Mailbox folder={folder} /></QueryClientProvider>
+      </Provider>,
+    );
+    await act(async () => render("inbox"));
+    const first = MailStream.instances[0]!;
+    await act(async () => render("sent"));
+    expect(first.closed).toBe(true);
+    expect(MailStream.instances.filter(stream => !stream.closed)).toHaveLength(1);
+    expect(MailStream.instances[1]!.url).toBe("https://mail.openship.test/mail/idle?view=sent");
+    await act(async () => root.unmount());
+    expect(MailStream.instances.every(stream => stream.closed)).toBe(true);
+  });
+
+  it("shares one live stream across mounted thread consumers and renders delivery immediately", async () => {
     await act(async () =>
       root.render(
         <Provider store={createStore()}>
@@ -136,7 +155,7 @@ describe("mailbox refresh ownership", () => {
     );
     messages = [{ id: "arrived-while-open", hasUnread: true }];
     await act(async () => {
-      jest.advanceTimersByTime(30_000);
+      MailStream.instances[0]!.dispatchEvent(new Event("mailbox"));
       for (let i = 0; i < 30; i++) await Promise.resolve();
       // Flush the query observer's scheduled React notification too.
       jest.advanceTimersByTime(1);
@@ -146,6 +165,7 @@ describe("mailbox refresh ownership", () => {
     expect([...container.querySelectorAll("output")].map((node) => node.textContent)).toEqual(
       Array(5).fill("arrived-while-open"),
     );
-    expect(MailStream.instances.filter((stream) => !stream.closed)).toHaveLength(0);
+    expect(MailStream.instances.filter((stream) => !stream.closed)).toHaveLength(1);
+    expect(MailStream.instances[0]!.url).toBe("https://mail.openship.test/mail/idle?view=inbox");
   });
 });

@@ -4,7 +4,10 @@ import { withErrorContext } from "@repo/core/diagnostics/node";
 import { reportError, reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import { findActiveDeployment } from "@repo/platform/engine/lib/active-deployment";
 import { posix as pathPosix } from "node:path";
-import { repos, type Project, type Deployment, type Domain } from "@repo/db";
+import { repos, runOutsideAdvisoryLock, type Project, type Deployment, type Domain } from "@repo/db";
+import { CloudBuildAdmissionDeferredError, withCloudBuildActivity, withCloudBuildExecutionOwnership, releaseCloudBuildSlot, runOutsideCloudBuildActivity } from "../../lib/cloud-build-activity";
+import { withCloudWorkspaceActivity, runOutsideCloudWorkspaceActivity } from "../../lib/cloud-workspace-lock";
+import { runOutsideProjectRuntimeLock } from "../../lib/project-runtime-lock";
 import { resolveDeploymentEnvironment } from "./deployment-environment";
 import {
   BUILD_ENV_VARS,
@@ -36,6 +39,7 @@ import {
   sharedMountExecutor,
   resolveStaticOutputPath,
   ensurePortAvailable,
+  isDockerHostPortAvailable,
   allocateHostPort,
   runDeployPipeline,
   isMultiServiceRuntime,
@@ -93,11 +97,9 @@ import { resolveEdgeProviderOptions } from "../../lib/edge-provider-options";
 import { pinnedEdgeImage } from "../../lib/edge-image";
 import {
   preCreateServiceDeployments,
-  emitServiceCheckRun,
-  emitInitialServiceChecks,
   rollupDeploymentStatus,
 } from "./service-checks";
-import { firePreDeployBackups } from "../backups/triggers/pre-deploy";
+import { firePreDeployBackups, type PreDeployBackupPolicy } from "../backups/triggers/pre-deploy";
 import { buildBackgroundContext } from "../../lib/background-context";
 import * as sessionManager from "./session-manager";
 import {
@@ -112,6 +114,7 @@ import {
 import { auditPorts } from "./port-audit.service";
 import {
   allocateAndReservePinnedHostPort,
+  suggestAlternativePinnedHostPort,
   convergeTargetHostPortClaims,
   convergeTargetHostPortClaimsUnlocked,
   findOwnedPinnedHostPort,
@@ -156,9 +159,11 @@ import {
 import { serviceKind, type DeployableService } from "../../lib/deployable-service";
 import { resolveProjectRouteState } from "../domains/project-route.service";
 import { type DeploymentConfigSnapshot } from "./build.service";
+import { deploymentImagePullPolicy } from "./image-pull-policy";
 import * as settingsService from "../settings/settings.service";
 import {
   registerDeploymentExecution,
+  releaseDeploymentExecution,
   bindDeploymentBuildCancellation,
   raceDeploymentCancellation,
   deploymentCancellationKeepsProvisioned,
@@ -215,18 +220,6 @@ export async function resolveServicePipelineMode(
     return { useSingleAppPipeline: true, useServicePipeline: false, servicePreflightServices: [] };
   }
 
-  // A failed catalog install can reach this path directly from Retry. Seed only
-  // missing draft profiles before reading/finalizing the next snapshot; an
-  // explicit or restored service snapshot must keep its original allocation.
-  if (
-    project.appTemplateId &&
-    !project.activeDeploymentId &&
-    !snapshot.composeServices?.length &&
-    (env.CLOUD_MODE || snapshot.deployTarget === "cloud")
-  ) {
-    const { ensureDraftAppResourceDefaults } = await import("../apps/app-resource-defaults");
-    await ensureDraftAppResourceDefaults(project);
-  }
   const [servicePreflightServices, useServicePipeline] = await Promise.all([
     resolveProjectServicePreflightServices(project.id, snapshot.composeServices),
     shouldUseProjectServicePipeline(project, snapshot.composeServices),
@@ -248,7 +241,31 @@ export async function resolveServicePipelineMode(
  * row is missing. The caller decides whether to throw or carry on - for
  * `redeploy` we want to skip silently; for `triggerDeployment` we throw.
  */
+function detachedDeploymentContext<T>(work: () => T): T {
+  return runOutsideAdvisoryLock(() => runOutsideProjectRuntimeLock(() =>
+    runOutsideCloudWorkspaceActivity(() => runOutsideCloudBuildActivity(work))));
+}
+
+function ownedDeploymentExecution<T>(project: Project, dep: Deployment, work: () => Promise<T>): Promise<T> {
+  return env.CLOUD_MODE && project.workspaceId ? withCloudBuildExecutionOwnership(dep.id, work) : work();
+}
+
+async function finishCloudBuildPhase(workspaceId: string | null) {
+  if (!env.CLOUD_MODE || !workspaceId) return;
+  await releaseCloudBuildSlot();
+  void detachedDeploymentContext(() => import("./cloud-build-queue")
+    .then(({ drainCloudBuildQueue }) => drainCloudBuildQueue(workspaceId)))
+    .catch(error => errorDiagnostics.error("platform/engine/modules/deployments/build-pipeline", "Build-slot dispatch deferred to sweep", error));
+}
+
 export async function kickoffBuild(project: Project, dep: Deployment): Promise<string | null> {
+  if (!env.CLOUD_MODE || !project.workspaceId) return kickoffBuildNow(project, dep);
+  const { admitCloudBuild } = await import("./cloud-build-queue");
+  return admitCloudBuild(project, dep, (resources, backupPolicies) => kickoffBuildNow(project, dep, resources, backupPolicies));
+}
+
+async function kickoffBuildNow(project: Project, dep: Deployment, reservedBuildResources?: ResourceConfig | null,
+  backupPolicies?: readonly PreDeployBackupPolicy[]): Promise<string | null> {
   // Covers a legacy queued row submitted before the entry-point guard existed.
   resolveDeploymentEnvironment(project, dep.environment);
   const buildSession = await repos.deployment.findBuildSessionByDeploymentId(dep.id);
@@ -282,6 +299,10 @@ export async function kickoffBuild(project: Project, dep: Deployment): Promise<s
     buildSessionId: buildSession.id,
     projectId: project.id,
     organizationId: dep.organizationId,
+    ...(env.CLOUD_MODE && project.workspaceId ? { cloudBuildReservation: {
+      workspaceId: project.workspaceId, resources: reservedBuildResources ?? null,
+      exclusivePreparation: (backupPolicies?.length ?? 0) > 0,
+    } } : {}),
   });
   if (claimed === "state_changed") return buildSession.id;
   if (claimed === "project_unavailable") {
@@ -294,14 +315,25 @@ export async function kickoffBuild(project: Project, dep: Deployment): Promise<s
   }
   dep.status = "building";
 
-  const cancellationSignal = registerDeploymentExecution(dep.id);
-
-  void withErrorContext({ kind: "deployment", component: "build-pipeline", projectId: project.id,
+  void detachedDeploymentContext(() => ownedDeploymentExecution(project, dep, () => withErrorContext({ kind: "deployment", component: "build-pipeline", projectId: project.id,
     deploymentId: dep.id, organizationId: dep.organizationId, serverId: project.serverId ?? undefined }, async () => {
+    // A deferred row can be claimed again before this worker unwinds. Register
+    // only after exact execution ownership, so it cannot reuse the old signal.
+    const cancellationSignal = registerDeploymentExecution(dep.id);
+    let deferred = false;
     try {
+      if (env.CLOUD_MODE && project.workspaceId) {
+        const current = await repos.deployment.findById(dep.id);
+        if (!current || !["building", "deploying"].includes(current.status)) return;
+      }
       // Session admission can fail at capacity. It belongs inside the worker's
       // failure/lease cleanup so the claimed deployment cannot remain stuck.
-      sessionManager.createSession(dep.id, project.id);
+      if (env.CLOUD_MODE && project.workspaceId && sessionManager.getSession(dep.id)) {
+        // Deferred attempts keep their SSE subscribers, logs and sequence IDs.
+        sessionManager.updateStatus(dep.id, "building");
+      } else {
+        sessionManager.createSession(dep.id, project.id);
+      }
       const preDeployLogs: LogEntry[] = [];
       const persistPreDeployLogs = async () => {
         if (preDeployLogs.length === 0) return;
@@ -320,6 +352,7 @@ export async function kickoffBuild(project: Project, dep: Deployment): Promise<s
         await firePreDeployBackups({
           projectId: project.id,
           organizationId: dep.organizationId,
+          policies: backupPolicies,
           signal: cancellationSignal,
           log: (message, level = "info") => {
             const entry: LogEntry = { timestamp: new Date().toISOString(), level, message };
@@ -338,8 +371,7 @@ export async function kickoffBuild(project: Project, dep: Deployment): Promise<s
         sessionManager.cancelPendingPrompt(dep.id);
         await persistPreDeployLogs();
       }
-      const { withCloudWorkspaceActivity } = await import("../../lib/cloud-workspace-lock");
-      await withCloudWorkspaceActivity(project.workspaceId, async () => {
+      const execute = async () => {
         // Cancellation/recovery can win while this worker waits for the server.
         // Re-read after admission so a recovered lease cannot start late work.
         if (project.workspaceId) {
@@ -352,9 +384,42 @@ export async function kickoffBuild(project: Project, dep: Deployment): Promise<s
           buildSession.id,
           cancellationSignal,
           preDeployLogs,
+          reservedBuildResources,
         );
-      }, cancellationSignal, { scope: `project:${project.id}` });
+      };
+      if (env.CLOUD_MODE && project.workspaceId) {
+        let activityStarted = false;
+        try {
+          await withCloudBuildActivity({ workspaceId: project.workspaceId, organizationId: dep.organizationId,
+            projectId: project.id, deploymentId: dep.id }, async () => {
+            activityStarted = true;
+            await execute();
+          }, cancellationSignal);
+        } catch (error) {
+          // Only an activation refusal is retryable. Never replay work or
+          // cleanup that threw after the activity callback began.
+          if (activityStarted || !(error instanceof CloudBuildAdmissionDeferredError)) throw error;
+          deferred = await repos.deployment.deferUnactivatedCloudBuild({
+            deploymentId: dep.id, buildSessionId: buildSession.id, projectId: project.id,
+            organizationId: dep.organizationId, workspaceId: project.workspaceId,
+          });
+          if (deferred) {
+            dep.status = "queued";
+            sessionManager.updateStatus(dep.id, "queued");
+          }
+          // false means cancellation/state change won; retain normal final
+          // acknowledgement rather than failing a deployment for temporary load.
+        }
+      } else {
+        await withCloudWorkspaceActivity(project.workspaceId, execute, cancellationSignal, { scope: `project:${project.id}` });
+      }
     } catch (err) {
+      // Once reset succeeds, presentation errors must not terminalize the newly
+      // queued job (or another replica's next claim).
+      if (deferred) {
+        errorDiagnostics.error("platform/engine/modules/deployments/build-pipeline", `Queued session update failed for ${dep.id}`, err);
+        return;
+      }
       errorDiagnostics.error("platform/engine/modules/deployments/build-pipeline", `[DEPLOY] Fatal error for ${dep.id}:`, err);
       // executeBuildAndDeploy's inner try/catch only arms onFailure() after
       // snapshot + route state resolve. Anything that throws before that
@@ -364,19 +429,35 @@ export async function kickoffBuild(project: Project, dep: Deployment): Promise<s
       // message.
       await markDeploymentFailedFromOutside(dep.id, err);
     } finally {
-      // This is the quiescence acknowledgement used by project teardown. It is
-      // deliberately later than every lifecycle hook, cleanup, transport
-      // disposal, and fallback error write. A `cancelled` status by itself does
-      // not prove the deploy-phase worker stopped touching the host.
-      await completeDeploymentExecution(dep.id, buildSession.id, cancellationSignal);
-      // A limit can change while this worker is finishing, or after it fails.
-      // Reclamation starts only after acknowledgement, under the same lock as
-      // new deployment admission and teardown; either may win and defer it.
-      await import("./rollback/rollback-orchestrator")
-        .then(({ reconcileProjectRetentionSafe }) => reconcileProjectRetentionSafe(project.id))
-        .catch((err) => errorDiagnostics.error("platform/engine/modules/deployments/build-pipeline", `[DEPLOY] Retention cleanup unavailable for ${project.id}:`, err));
+      if (deferred) {
+        // The transaction reset the durable lease. Keep execution ownership
+        // through unregistering, and let the scheduled sweep retry without a
+        // hot loop, completion acknowledgement, or retention work.
+        releaseDeploymentExecution(dep.id, cancellationSignal);
+      } else {
+        // This is the quiescence acknowledgement used by project teardown. It is
+        // deliberately later than every lifecycle hook, cleanup, transport
+        // disposal, and fallback error write. A `cancelled` status by itself does
+        // not prove the deploy-phase worker stopped touching the host.
+        await completeDeploymentExecution(dep.id, buildSession.id, cancellationSignal);
+        if (env.CLOUD_MODE && project.workspaceId) {
+          // Setup can fail before shared host admission. Active commands never
+          // lose their reservation through this unactivated-only cleanup.
+          await repos.cloudBuildActivity.cancelReservation({ workspaceId: project.workspaceId,
+            organizationId: dep.organizationId, projectId: project.id, deploymentId: dep.id });
+          void detachedDeploymentContext(() => import("./cloud-build-queue")
+            .then(({ drainCloudBuildQueue }) => drainCloudBuildQueue(project.workspaceId!)))
+            .catch(error => errorDiagnostics.error("platform/engine/modules/deployments/build-pipeline", "Cloud build queue retry deferred to sweep", error));
+        }
+        // A limit can change while this worker is finishing, or after it fails.
+        // Reclamation starts only after acknowledgement, under the same lock as
+        // new deployment admission and teardown; either may win and defer it.
+        await import("./rollback/rollback-orchestrator")
+          .then(({ reconcileProjectRetentionSafe }) => reconcileProjectRetentionSafe(project.id))
+          .catch((err) => errorDiagnostics.error("platform/engine/modules/deployments/build-pipeline", `[DEPLOY] Retention cleanup unavailable for ${project.id}:`, err));
+      }
     }
-  });
+  }))).catch(error => errorDiagnostics.error("platform/engine/modules/deployments/build-pipeline", `Execution cleanup remains pending for ${dep.id}`, error));
 
   return buildSession.id;
 }
@@ -593,7 +674,7 @@ export async function finalizeComposeDeploy(opts: {
 }): Promise<void> {
   const { project, dep, logger } = opts;
 
-  // Rollup + per-service Checks. Failures here must not roll back the deploy.
+  // Roll up the runtime outcome; the durable GitHub reporter observes it later.
   try {
     const finalDep = await repos.deployment.findById(dep.id);
     if (finalDep && finalDep.status === "ready") {
@@ -638,35 +719,10 @@ export async function finalizeComposeDeploy(opts: {
         // at-least-one success — but guard defensively.
         await setDeploymentStatus(dep.id, "failed");
       }
-
-      // Per-service Checks API events.
-      for (const sd of perService) {
-        if (!sd.serviceName) continue;
-        if (sd.status === "skipped") continue; // already emitted up front
-        const conclusion =
-          sd.status === "success" || sd.status === "running"
-            ? "success"
-            : sd.status === "cancelled"
-              ? "cancelled"
-              : "failure";
-        await emitServiceCheckRun({
-          project,
-          dep,
-          serviceDeploymentId: sd.id,
-          serviceName: sd.serviceName,
-          conclusion,
-          output: {
-            title: `${sd.serviceName} ${conclusion}`,
-            summary: sd.errorMessage ?? sd.error ?? "",
-          },
-        }).catch((diagnosticFailure) => {
-          observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/build-pipeline");
-        });
-      }
     }
   } catch (err) {
     // Rollup failures must not roll back the deploy.
-    errorDiagnostics.warn("platform/engine/modules/deployments/build-pipeline", `[build] rollup/Checks emission failed for ${dep.id}:`, err);
+    errorDiagnostics.warn("platform/engine/modules/deployments/build-pipeline", `[build] service rollup failed for ${dep.id}:`, err);
   }
 
   // Archive the predecessor only after this deployment reaches a success state.
@@ -683,6 +739,7 @@ async function executeBuildAndDeploy(
   buildSessionId: string,
   cancellationSignal?: AbortSignal,
   initialLogs: LogEntry[] = [],
+  reservedBuildResources?: ResourceConfig | null,
 ) {
   const plat = platform();
   throwIfDeploymentCancelled(cancellationSignal);
@@ -877,43 +934,34 @@ async function executeBuildAndDeploy(
     });
     await setDeploymentStatus(dep.id, "building");
 
-    // Pre-create service_deployment rows so the dashboard sees a
-    // complete fan-out even before any service starts building. Rows
-    // for targeted services start as `pending`; everyone else is
-    // marked `skipped` up front. The composeBuild pipeline patches
-    // status as it goes; we roll up at the end.
-    //
-    // Done UP FRONT so a downstream crash still leaves a coherent
-    // (deployment, services[]) shape behind.
-    const serviceFanOut = await preCreateServiceDeployments(dep.id, project.id, {
+    // Record unchanged services up front. The service pipeline owns progress
+    // rows for targeted services; GitHub observes the persisted attempt.
+    await preCreateServiceDeployments(dep.id, project.id, {
       targetServiceIds: snapshot.targetServiceIds,
       forceAll: dep.forceAll ?? false,
     }).catch((err) => {
       // Best-effort: fan-out is a dashboard concern. A crash here must
       // not block the main build.
       errorDiagnostics.warn("platform/engine/modules/deployments/build-pipeline", `[build] preCreateServiceDeployments crashed for ${dep.id}:`, err);
-      return new Map<
-        string,
-        { id: string; serviceId: string; serviceName: string; targeted: boolean }
-      >();
     });
 
-    await emitInitialServiceChecks(serviceFanOut, project, dep);
-
-    // Both server types use the host's available capacity unless the project
-    // sets a limit. Managed builds get measured headroom below.
+    // Only the saved build configuration becomes Docker limits. Cloud admission
+    // reservations coordinate host activity; they must not replace those limits.
     const prodResources = resolveRuntimeResources(snapshot.resources);
-    let buildResources = resolveBuildResources(snapshot.buildResources);
+    const buildResources = resolveBuildResources(snapshot.buildResources);
     const needsBuild = !snapshot.releaseImageRef && !snapshot.refreshAppDeploymentId &&
-      (willRunServices ? cloudDockerNeedsBuild(serviceMode.servicePreflightServices, strictRefreshImages(snapshot)) : !snapshot.handoverAppImage);
-    if (snapshot.managedServer?.ownerWorkspaceId && needsBuild) {
+      (willRunServices ? cloudDockerNeedsBuild(serviceMode.servicePreflightServices, strictRefreshImages(snapshot)) : true);
+    if (reservedBuildResources !== undefined && needsBuild) {
+      if (!reservedBuildResources) throw new AppError("The build has no resource reservation. Submit a new deployment.", 409, "CLOUD_BUILD_RESERVATION_MISSING");
+      buildResourcesForRecovery = buildResources;
+      logger.log("→ Cloud build admitted on the selected server.\n");
+    } else if (snapshot.managedServer?.ownerWorkspaceId && needsBuild) {
       const { sampleCloudWorkspaceResources, workspaceBuildResources } = await import("../../lib/cloud-workspace-host");
       const id = snapshot.managedServer.ownerWorkspaceId;
-      const { usage, capacity } = await sampleCloudWorkspaceResources(dep.organizationId, id);
-      buildResources = workspaceBuildResources(capacity, usage, snapshot.buildResources ?? undefined);
+      const { usage, capacity } = await sampleCloudWorkspaceResources(dep.organizationId, id, buildResources.cpuCores > 0 || buildResources.memoryMb > 0);
+      workspaceBuildResources(capacity, usage, buildResources);
       buildResourcesForRecovery = buildResources;
-      snapshot.buildResources = buildResources;
-      logger.log(`→ Building inside the workspace using available capacity: ${buildResources.cpuCores} vCPU · ${buildResources.memoryMb} MB.\n`);
+      logger.log("→ Building inside the selected workspace.\n");
     }
 
     // Decrypt env vars from deployment (self-contained). decryptEnvMap
@@ -1229,6 +1277,7 @@ async function executeBuildAndDeploy(
           gitAmbient: effectiveCloneOnTarget ? gitCred.ambient : undefined,
           cloneOnServer: effectiveCloneOnTarget,
           signal: cancellationSignal,
+          onBuildFinished: () => finishCloudBuildPhase(project.workspaceId),
         });
       } finally {
         if (composeRelay) await composeRelay.close().catch((diagnosticFailure) => {
@@ -1321,10 +1370,11 @@ async function executeBuildAndDeploy(
             ...(workload === "web" ? { PORT: String(snapshot.port) } : {}),
           },
           resources: prodResources,
-          // An explicit update is the one operation that promises to refresh a
-          // mutable upstream ref. Versioned release refs are otherwise reused
-          // when already present on the target.
-          forcePull: dep.trigger === "update" || snapshot.forcePullImages === true,
+          // Updates, deploy hooks and manual deploys of a mutable ref refresh the
+          // image; digest-pinned refs are reused when already present. Shared with
+          // the Compose path so Docker and the cluster builder behave the same.
+          forcePull: deploymentImagePullPolicy(dep, snapshot.forcePullImages, releaseImageRef).force,
+          refreshMutableTag: deploymentImagePullPolicy(dep, snapshot.forcePullImages, releaseImageRef).refreshMutableTag,
         },
         logger,
       );
@@ -1345,6 +1395,7 @@ async function executeBuildAndDeploy(
     if (!reusedArtifact && buildResult.artifactOwned !== false) {
       provisioned.imageRef = buildResult.imageRef;
     }
+    await finishCloudBuildPhase(project.workspaceId);
 
     // The adapter's build abort controller ends when it returns an image. The
     // outer deployment signal remains live through preflight/activate/routing,
@@ -2028,7 +2079,30 @@ async function executeServerDeploy(phase: DeployPhaseInputs, deployConfig: Deplo
                   .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/deployments/build-pipeline"); return undefined; })
               : undefined;
             if (previousHostPort !== cfg.hostPort) {
-              await ensurePortAvailable(executor, cfg.hostPort, logger, promptUser);
+              const allocation = initialHostPortAllocation;
+              const target = phase.hostPortTarget;
+              await ensurePortAvailable(executor, cfg.hostPort, logger, promptUser, {
+                suggestAlternative:
+                  allocation && target && phase.hostPortTargetLockHeld
+                    ? (excluded) =>
+                        suggestAlternativePinnedHostPort({
+                          target,
+                          allocation,
+                          excluded,
+                          readClaims: () =>
+                            prepareTargetPinnedHostPorts({
+                              target,
+                              edgeProxy: edgeProxyFor(executor, "openresty", { ours: true }),
+                            }),
+                          allocate: (options) => allocateHostPort(executor, options),
+                          isAvailable: (port) => isDockerHostPortAvailable(executor, port),
+                          onSelected: (allocation) => {
+                            attemptedHostPortAllocations.push(allocation);
+                            pinnedHostPort = cfg.hostPort = allocation.port;
+                          },
+                        })
+                    : undefined,
+              });
             }
             return;
           }
@@ -2048,8 +2122,13 @@ async function executeServerDeploy(phase: DeployPhaseInputs, deployConfig: Deplo
                 .filter((port): port is number => Number.isFinite(port)),
             ),
           );
+          // As with the loopback pin above: the outgoing release still holds its
+          // ports at preflight, and bare can't overlap, so the pipeline stops it
+          // in the very next step. Prompting about it would stall every redeploy.
           for (const port of ports) {
-            await ensurePortAvailable(executor, port, logger, promptUser);
+            await ensurePortAvailable(executor, port, logger, promptUser, {
+              outgoingDeploymentId: prevDep?.id,
+            });
           }
         },
         activate: async (cfg, onLog) => {
@@ -2109,6 +2188,7 @@ async function executeServerDeploy(phase: DeployPhaseInputs, deployConfig: Deplo
     : baseServe;
 
   let pinnedHostPort: number | undefined;
+  let initialHostPortAllocation: AllocatedPinnedHostPort | undefined;
   const attemptedHostPortAllocations: Array<
     Pick<AllocatedPinnedHostPort, "claim" | "previousClaim" | "claimWasCreated">
   > = [];
@@ -2155,6 +2235,7 @@ async function executeServerDeploy(phase: DeployPhaseInputs, deployConfig: Deplo
               allocate: (allocationOptions) => allocateHostPort(executor, allocationOptions),
             });
             attemptedHostPortAllocations.push(allocation);
+            initialHostPortAllocation = allocation;
             pinnedHostPort = allocation.port;
             // A scan that couldn't RUN is not "nothing is listening". Say so
             // here or the bind failure blames Docker for a host we couldn't read.

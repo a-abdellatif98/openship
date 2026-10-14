@@ -4,6 +4,7 @@ import type { MigrationServiceRoutes } from "@repo/contracts";
 import {
   planMigrationRoutes,
   remapMigrationRoutes,
+  findOmittedMigrationRootRoutes,
 } from "@repo/platform/engine/modules/migration/migration-routes";
 import type { DiscoveredService } from "@repo/platform/engine/modules/migration/docker-reconcile";
 import { buildDomainFanoutRegistrations } from "@repo/platform/engine/modules/deployments/compose/composite-route";
@@ -17,6 +18,19 @@ const route = (hostname: string, exposedPort = "3000") => ({
 });
 
 describe("reviewed migration routes", () => {
+  it("asks for a decision only when a real source catch-all was omitted", () => {
+    const selected = {
+      api: { ...route("api.onvo.me"), targetPath: "/v3" },
+    };
+    expect(findOmittedMigrationRootRoutes(selected, [
+      { domains: ["api.onvo.me"], path: "/v3" },
+      { domains: ["api.onvo.me"], path: "/", exact: true },
+    ])).toEqual([]);
+    const source = [{ domains: ["API.ONVO.ME"], path: "/" }];
+    expect(findOmittedMigrationRootRoutes(selected, source)).toEqual(["api.onvo.me"]);
+    expect(findOmittedMigrationRootRoutes({ ...selected, web: route("api.onvo.me") }, source)).toEqual([]);
+    expect(findOmittedMigrationRootRoutes(undefined, source)).toEqual([]);
+  });
   it("maps UID-keyed wizard input onto renamed rows without mixing same-named containers", () => {
     const chosen = [
       { name: "web", containerId: "container-shop" },
@@ -95,11 +109,43 @@ describe("reviewed migration routes", () => {
     ).toThrow(/more than one service/);
   });
 
-  it("does not widen a path-only source route into a catch-all domain", () => {
-    expect(() =>
-      planMigrationRoutes([service("api")], {
-        api: { ...route("shop.example.com"), targetPath: "/private" },
-      }),
-    ).toThrow(/Include its root service/);
+  it("migrates path-only domains without creating a catch-all service endpoint", () => {
+    const plan = planMigrationRoutes([service("api"), service("llmproxy")], {
+      api: [{ ...route("api.onvo.me", "9000"), targetPath: "/v3" }],
+      llmproxy: [{ ...route("api.onvo.me", "4000"), targetPath: "/mcp", exact: true }],
+    });
+    expect(plan.endpointsByService.size).toBe(0);
+    expect(plan.domains.map((entry) => entry.hostname)).toEqual(["api.onvo.me"]);
+    expect(plan.composites).toEqual([{
+      hostname: "api.onvo.me",
+      isCustomDomain: true,
+      locations: [
+        { pathPrefix: "/v3", serviceId: "svc-api", port: 9000 },
+        { pathPrefix: "/mcp", serviceId: "svc-llmproxy", port: 4000, exact: true },
+      ],
+    }]);
+    expect(buildDomainFanoutRegistrations({
+      routes: plan.composites,
+      resolveTargetUrl: (id, port) => `http://${id}:${port}`,
+    })).toEqual([{
+      hostname: "api.onvo.me",
+      isCustomDomain: true,
+      notFound: true,
+      proxyLocations: [
+        { pathPrefix: "/v3", targetUrl: "http://svc-api:9000" },
+        { pathPrefix: "/mcp", targetUrl: "http://svc-llmproxy:4000", exact: true },
+      ],
+    }]);
+  });
+
+  it("keeps an exact root match from becoming a prefix catch-all", () => {
+    const plan = planMigrationRoutes([service("api")], {
+      api: { ...route("api.onvo.me"), targetPath: "/", exact: true },
+    });
+    expect(plan.endpointsByService.size).toBe(0);
+    expect(plan.composites[0].rootServiceId).toBeUndefined();
+    expect(plan.composites[0].locations).toEqual([
+      { pathPrefix: "/", serviceId: "svc-api", port: 3000, exact: true },
+    ]);
   });
 });

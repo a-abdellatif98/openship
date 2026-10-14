@@ -97,33 +97,80 @@ export function ManagedServerSsh({ serverId }: { serverId: string }) {
               {notice}
             </p>
           )}
-          {enabled && (
-            <>
-              {status.connection && (
-                <ConnectionValue label={copy.command} value={status.connection.command} />
-              )}
-              {status.requiresIdentityAccess && (
-                <p className="text-sm text-muted-foreground">{copy.identityHint}</p>
-              )}
-              <div className="space-y-3">
-                <Button
-                  variant="secondary"
-                  disabled={resource.busy}
-                  onClick={() => {
-                    secret.clear();
-                    setNotice(null);
-                    void resource.run(
-                      () => systemApi.managedSshConnection(serverId, { confirm: true }),
-                      (connection) => secret.reveal({ connection }),
-                    );
-                  }}
-                >
-                  {copy.temporary}
-                </Button>
-                <p className="text-xs text-muted-foreground">{copy.temporaryHint}</p>
+          <div
+            className={`grid min-w-0 gap-5 ${enabled ? "@min-[38rem]/server-detail:grid-cols-2" : ""}`}
+          >
+            {enabled && (
+              <div className="space-y-4 rounded-xl bg-muted/20 p-4">
+                {status.connection && (
+                  <ConnectionValue label={copy.command} value={status.connection.command} />
+                )}
+                {status.requiresIdentityAccess && (
+                  <p className="text-sm text-muted-foreground">{copy.identityHint}</p>
+                )}
+                <div className="space-y-3">
+                  <Button
+                    variant="secondary"
+                    disabled={resource.busy}
+                    onClick={() => {
+                      secret.clear();
+                      setNotice(null);
+                      void resource.run(
+                        () => systemApi.managedSshConnection(serverId, { confirm: true }),
+                        (connection) => secret.reveal({ connection }),
+                      );
+                    }}
+                  >
+                    {copy.temporary}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">{copy.temporaryHint}</p>
+                </div>
               </div>
-            </>
-          )}
+            )}
+            <form
+              className="space-y-3 rounded-xl bg-muted/20 p-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setNotice(null);
+                void resource.run(
+                  () => systemApi.setManagedSshKey(serverId, { publicKey, confirm: true }),
+                  (result) => {
+                    resource.replace(result);
+                    setPublicKey("");
+                    setNotice(copy.keySaved);
+                  },
+                );
+              }}
+            >
+              <label className="block text-sm font-medium" htmlFor={keyId}>
+                {copy.publicKey}
+              </label>
+              <p className="text-xs text-muted-foreground">{copy.keyHint}</p>
+              <Textarea
+                id={keyId}
+                variant="filled"
+                className="font-mono text-sm"
+                dir="ltr"
+                rows={3}
+                value={publicKey}
+                onChange={(event) => setPublicKey(event.target.value)}
+                maxLength={16384}
+                placeholder="ssh-ed25519 AAAA…"
+                required
+                disabled={resource.busy || !enabled}
+              />
+              <p className="text-xs text-muted-foreground">
+                {status.keyConfigured ? copy.keyConfigured : copy.keyMissing}
+              </p>
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={resource.busy || !enabled || !publicKey.trim()}
+              >
+                {copy.saveKey}
+              </Button>
+            </form>
+          </div>
           {secret.value && (
             <div className="space-y-4 rounded-xl bg-muted/30 p-4">
               <p className="text-sm text-muted-foreground">{common.secretHint}</p>
@@ -159,49 +206,6 @@ export function ManagedServerSsh({ serverId }: { serverId: string }) {
               </Button>
             </div>
           )}
-          <form
-            className="space-y-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setNotice(null);
-              void resource.run(
-                () => systemApi.setManagedSshKey(serverId, { publicKey, confirm: true }),
-                (result) => {
-                  resource.replace(result);
-                  setPublicKey("");
-                  setNotice(copy.keySaved);
-                },
-              );
-            }}
-          >
-            <label className="block text-sm font-medium" htmlFor={keyId}>
-              {copy.publicKey}
-            </label>
-            <p className="text-xs text-muted-foreground">{copy.keyHint}</p>
-            <Textarea
-              id={keyId}
-              variant="filled"
-              className="bg-muted/40 font-mono text-xs"
-              dir="ltr"
-              rows={3}
-              value={publicKey}
-              onChange={(event) => setPublicKey(event.target.value)}
-              maxLength={16384}
-              placeholder="ssh-ed25519 AAAA…"
-              required
-              disabled={resource.busy || !enabled}
-            />
-            <p className="text-xs text-muted-foreground">
-              {status.keyConfigured ? copy.keyConfigured : copy.keyMissing}
-            </p>
-            <Button
-              type="submit"
-              variant="secondary"
-              disabled={resource.busy || !enabled || !publicKey.trim()}
-            >
-              {copy.saveKey}
-            </Button>
-          </form>
           <details className="rounded-xl bg-muted/20 p-4">
             <summary className="cursor-pointer text-sm font-medium">{copy.passwordTitle}</summary>
             <form

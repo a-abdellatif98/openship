@@ -93,3 +93,35 @@ describe("deployment history through the shared engine and real database", () =>
     expect(() => parseInput(ListDeploymentsSchema, { status: "bogus" })).toThrow();
   });
 });
+
+describe("deployment monitoring aggregates", () => {
+  it("summarizes the full UTC window across pages without counting cancellations as failures", async () => {
+    const org = await seedOrg();
+    const project = await seedProject(org.organizationId);
+    const other = await seedOrg();
+    const otherProject = await seedProject(other.organizationId);
+    const now = new Date();
+    for (let i = 0; i < 23; i++) await seedDeployment(project, { status: "ready", createdAt: now, buildDurationMs: i === 0 ? 1000 : 3000 });
+    const buildingProject = await seedProject(org.organizationId);
+    for (const status of ["no_changes", "failed", "partial_failure", "action_required", "rejected", "cancelled", "queued", "building"]) {
+      await seedDeployment(status === "building" ? buildingProject : project, { status, createdAt: now });
+    }
+    await seedDeployment(project, { status: "failed", createdAt: new Date(now.getTime() - 40 * 86400000) });
+    await seedDeployment(otherProject, { status: "failed", createdAt: now });
+    const result = await listDeployments(org.organizationId, { days: 7, status: "failed", perPage: 1 });
+    expect(result.rows).toHaveLength(1);
+    expect(result.total).toBe(4);
+    expect(result.summary).toMatchObject({ total: 31, success: 24, failed: 4, active: 2, canceled: 1, avgBuildDurationMs: Math.round(67000 / 23) });
+    expect(result.summary?.daily).toHaveLength(7);
+    expect(result.summary?.daily.reduce((n, d) => n + d.total, 0)).toBe(31);
+    expect(result.summary?.projects).toEqual([expect.objectContaining({ projectId: project.id, total: 30, failed: 4 }), expect.objectContaining({ projectId: buildingProject.id, total: 1, active: 1 })]);
+    const active = await listDeployments(org.organizationId, { days: 7, status: "active" });
+    expect(active.rows.map(d => d.status).sort()).toEqual(["building", "queued"]);
+    const empty = await listDeployments(org.organizationId, { days: 7, search: "no-matching-release" });
+    expect(empty.summary).toMatchObject({ total: 0, avgBuildDurationMs: null, projects: [] });
+    expect(empty.summary?.daily.every(d => d.total === 0)).toBe(true);
+    expect((await listDeployments(org.organizationId, {})).summary).toBeUndefined();
+    expect(() => parseInput(ListDeploymentsSchema, { days: 91 })).toThrow();
+    expect(() => parseInput(ListDeploymentsSchema, { days: 0 })).toThrow();
+  });
+});

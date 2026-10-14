@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { useI18n, interpolate } from "@/components/i18n-provider";
 
 import { ServiceDetailPanel } from "./services/ServiceDetailPanel";
+import { useCloudDeployPricing } from "@/hooks/useCloudDeployPricing";
 import { AddServiceModal } from "./services/AddServiceModal";
 import { LinkedAppsCard } from "./services/LinkedAppsCard";
 import { ServiceListItem } from "./services/ServiceListItem";
@@ -43,6 +44,7 @@ export const ServicesTab = () => {
   const { showToast } = useToast();
   const { t } = useI18n();
   const router = useRouter();
+  const showCloudPricing = useCloudDeployPricing(projectData.workspaceId);
 
   const [runtime, setRuntime] = useState<{
     projectId: string;
@@ -152,7 +154,10 @@ export const ServicesTab = () => {
   const handleCreateService = async (data: ServiceInput) => {
     if (!hasProjectId) return;
 
-    const result = await servicesApi.create(id, data);
+    const result = await servicesApi.create(id, data).catch(error => {
+      showCloudPricing(error);
+      throw error;
+    });
     if (!result.success) {
       throw new Error(t.projects.services.failedCreateService);
     }
@@ -197,6 +202,12 @@ export const ServicesTab = () => {
         router.push(`/projects/${id}/services/${newServiceId}`);
       })
       .catch(async (err) => {
+        if (showCloudPricing(err, async () => {
+          const result = await servicesApi.start(id, newServiceId);
+          if (result?.success === false) throw new Error(t.projects.services.toastDeployFailed);
+          await fetchData();
+          router.push(`/projects/${id}/services/${newServiceId}`);
+        })) { await fetchData(); return; }
         await showStartFailure(getApiErrorMessage(err, t.projects.services.toastDeployFailed));
       });
   };

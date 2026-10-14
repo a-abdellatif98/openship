@@ -811,6 +811,10 @@ export interface DockerContainerDetail {
    *  limits it was actually running with — including one set by hand with
    *  `docker update --memory`. Omitted fields mean the container had no cap. */
   resources?: { cpuCores?: number; memoryMb?: number };
+  /** Live GPU configuration, including an empty object when no GPU was requested. */
+  gpu?: import("@repo/core").ComposeGpuConfig;
+  /** Inspection still succeeds; adoption refuses a GPU configuration it cannot replay. */
+  gpuImportError?: string;
   composeProject?: string;
   composeService?: string;
   /** com.docker.compose.project.config_files — absolute compose paths on the host. */

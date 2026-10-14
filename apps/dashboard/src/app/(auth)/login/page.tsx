@@ -308,7 +308,7 @@ function LoginPageInner() {
           <div className="flex items-center justify-between">
             <Label htmlFor="login-password">{t.auth.login.passwordLabel}</Label>
             <Link
-              href="/forgot-password"
+              href={buildAuthPageHref("/forgot-password", searchParams)}
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               {t.auth.login.forgot}

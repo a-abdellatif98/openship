@@ -101,6 +101,37 @@ describe("deployment TLS observations and persisted certificate state", () => {
     });
   }
 
+  it.each(["edge_invalid", "invalid", "missing"] as const)("invalidates active Cloud metadata after a confirmed %s observation", async (reason) => {
+    const stored = await domain();
+    vi.mocked(ssl.verifyCert).mockResolvedValue({ ...activeCert, verified: false, reason, detail: "The certificate is not usable for this hostname" });
+    const warnings = await auditRoutedDomainTls({ projectId, routes: [{ ...route, isCloud: true, terminatesTlsLocally: false }], routeWarnings: [], ssl, log: () => {} });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("not usable");
+    expect(await repos.domain.findById(stored.id)).toMatchObject({ sslStatus: "error", verified: true });
+    expect(ssl.provisionCert).not.toHaveBeenCalled();
+    expect(ssl.renewCert).not.toHaveBeenCalled();
+  });
+
+  it("keeps an accepted deploy-time certificate request pending without claiming failure", async () => {
+    const stored = await domain("error");
+    vi.mocked(ssl.provisionCert).mockResolvedValue({ ...activeCert, verified: false, reason: "pending" });
+    const tracked = createTrackedSslProvider(ssl, new Map([[hostname, stored]]));
+    expect(await tracked.provisionCert(hostname)).toMatchObject({ reason: "pending" });
+    expect(await repos.domain.findById(stored.id)).toMatchObject({
+      sslStatus: "provisioning", verified: true, verifyAttempts: 0, lastVerifyError: null,
+    });
+    expect(ssl.renewCert).not.toHaveBeenCalled();
+  });
+
+  it("preserves active Cloud TLS when the observer cannot connect", async () => {
+    const stored = await domain();
+    vi.mocked(ssl.verifyCert).mockResolvedValue({ ...activeCert, verified: false, reason: "read_error" });
+    const warnings = await auditRoutedDomainTls({ projectId, routes: [{ ...route, isCloud: true, terminatesTlsLocally: false }], routeWarnings: [], ssl, log: () => {} });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("could not be checked");
+    expect(await repos.domain.findById(stored.id)).toMatchObject({ sslStatus: "active", sslExpiresAt: stored.sslExpiresAt });
+  });
+
   it("keeps an active certificate when SSH fails during the deploy-time check", async () => {
     const stored = await domain();
     vi.mocked(ssl.provisionCert).mockRejectedValue(new Error("connect ENETUNREACH 192.0.2.20:22"));

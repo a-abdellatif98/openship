@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, isNotNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, isNotNull, lt, lte, sql } from "drizzle-orm";
 import { generateId } from "@repo/core";
 import type { Database } from "../client";
 import { serviceIncident, type IncidentKind } from "../schema";
@@ -203,6 +203,19 @@ export function createServiceIncidentRepo(db: Database) {
           updatedAt: new Date(),
         })
         .where(eq(serviceIncident.id, id));
+    },
+
+    /** Clear only this organization's resolved history observed before the cutoff. */
+    async clearResolvedByOrg(organizationId: string, cutoff: Date): Promise<number> {
+      const rows = await db
+        .delete(serviceIncident)
+        .where(and(
+          eq(serviceIncident.organizationId, organizationId),
+          eq(serviceIncident.status, "resolved"),
+          lte(serviceIncident.resolvedAt, cutoff),
+        ))
+        .returning();
+      return rows.length;
     },
 
     /** Retention: drop resolved history past the cutoff. Open rows are never pruned. */

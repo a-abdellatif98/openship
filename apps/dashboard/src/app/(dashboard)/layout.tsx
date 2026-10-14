@@ -1,5 +1,7 @@
 import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { authContinuationHref } from "@/lib/cloud-auth";
 import { getSession, getDeploymentInfoOrNull } from "@/lib/server/session";
 import { resolveRequestProductView } from "@/lib/server/product-view";
 import { ApiUnavailable } from "@/components/api-unavailable";
@@ -93,11 +95,12 @@ async function resolveOrgChooserGate(
  * migrated-instance URL.
  */
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const destination = (await headers()).get("x-pathname-with-search");
   const session = await getSession();
   if (!session) {
     const controller = await serverApi.get<InstanceStatus>("system/instance", { cache: "no-store" }).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/layout"); return null; });
     if (controller && controller.role !== "active") return <InstanceRecovery initial={controller} />;
-    redirect("/login");
+    redirect(authContinuationHref("/login", destination));
   }
 
   // Org chooser gate. If the session has no explicit activeOrganizationId
@@ -106,7 +109,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // the migration / teamMode gates because those are configured per-org
   // and reading them with the wrong active org would mis-route.
   const { redirectTo } = await resolveOrgChooserGate(session.session.activeOrganizationId);
-  if (redirectTo) redirect(redirectTo);
+  if (redirectTo) redirect(authContinuationHref("/select-organization", destination));
 
   // Layout MUST see fresh `migrationInProgress` to route correctly during
   // the cutover window — the lock flips faster than the deploy-info cache
@@ -147,10 +150,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     );
   }
 
-  const initialGithubData = await serverApi
-    .get("github/home", { cache: "no-store" })
-    .catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "dashboard/app/(dashboard)/layout"); return null; });
-
   // Resolve the rail HERE, on the server, so the first painted sidebar is already
   // the right one. Doing it client-side from document.cookie would render the
   // platform rail and then flip the entire nav after hydration. Passing the
@@ -159,7 +158,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <DashboardProviders
-      initialGithubData={initialGithubData}
       initialUser={session.user}
       selfHosted={deploymentInfo.selfHosted}
       deployMode={deploymentInfo.deployMode}

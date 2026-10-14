@@ -45,7 +45,7 @@ function Harness() {
   const showPricing = useCloudDeployPricing();
   const [name, setName] = useState("My configured project");
   const deploy = async () => {
-    try { await mocks.deploy(); } catch (error) { if (!showPricing(error)) mocks.toast(error); }
+    try { await mocks.deploy(); } catch (error) { if (!showPricing(error, () => mocks.deploy())) mocks.toast(error); }
   };
   return <>
     <input aria-label="Project name" value={name} onChange={(event) => setName(event.target.value)} />
@@ -90,6 +90,22 @@ afterEach(async () => {
 });
 
 describe("deployment plan selection", () => {
+  it("retries after an entitlement refresh and keeps configuration when the retry fails", async () => {
+    await render();
+    await click("Deploy");
+    mocks.state.mockResolvedValue(paid);
+    await click(copy.deployGate.checkPlan);
+    mocks.deploy.mockRejectedValueOnce(new Error("Server is still provisioning"));
+    await click(copy.workspaces.retryDeployment);
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("Server is still provisioning");
+    expect(container.querySelector("input")?.value).toBe("My configured project");
+    mocks.deploy.mockResolvedValueOnce({ deploymentId: "retry-deploy" });
+    await click(copy.workspaces.retryDeployment);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(mocks.deploy).toHaveBeenCalledTimes(3);
+  });
+
   it("waits for Deploy, preserves project settings on dismissal, and allows a later retry", async () => {
     await render();
     await click("Save configuration");
@@ -127,11 +143,28 @@ describe("deployment plan selection", () => {
     mocks.state.mockResolvedValue(paid);
     await click(copy.deployGate.checkPlan);
     expect(document.body.textContent).toContain(copy.deployGate.ready);
-    await click(copy.deployGate.close);
     mocks.deploy.mockResolvedValueOnce({ deploymentId: "paid-deploy" });
-    await click("Deploy");
+    await click(copy.workspaces.retryDeployment);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(mocks.deploy).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps recovery open during one continuation when Retry is clicked twice", async () => {
+    await render();
+    await click("Deploy");
+    mocks.state.mockResolvedValue(paid);
+    await click(copy.deployGate.checkPlan);
+    let complete!: (value: unknown) => void;
+    mocks.deploy.mockReturnValueOnce(new Promise((resolve) => { complete = resolve; }));
+    await act(async () => {
+      button(copy.workspaces.retryDeployment).click();
+      button(copy.workspaces.retryDeployment).click();
+    });
+    expect(mocks.deploy).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    await act(async () => complete({ deploymentId: "paid-deploy" }));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector("input")?.value).toBe("My configured project");
   });
 
   it("offers a secure checkout link when popups are blocked, without navigating the project", async () => {

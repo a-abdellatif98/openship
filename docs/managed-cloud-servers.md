@@ -43,7 +43,16 @@ server; the provider namespace permits one VM. Saved paid contracts keep their
 own limits. Disk usage is measured from the filesystem and Docker inventory. Shared
 images, caches and system files are reported separately from project data.
 
-A source build uses measured free CPU and memory, with operating-system headroom.
+Source builds receive only the user's saved CPU and memory caps. Missing or zero
+values impose no additional Docker limits, including on managed servers. Catalog
+sizing recommendations never become service settings during install or Retry.
+
+Admission reserves a full host dimension for an uncapped build dimension, so an
+uncapped build cannot overlap another build on the same server. These reservations
+remain independent of the limits sent to Docker. Automatic builds read verified
+VM allocation without sampling idle CPU or free RAM; explicitly capped builds
+retain live admission checks. Plan concurrency is still a ceiling, not a request
+to subdivide a build or provision another VM.
 Builds and host changes coordinate through the existing server activity lock.
 A resize stores the prior host state and running container/process identities
 before asking Oblien to change resources. Recovery continues after a lost response

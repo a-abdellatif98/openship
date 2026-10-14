@@ -20,7 +20,7 @@ export function DeploymentStepper() {
         {steps.map((step, index) => {
           const atCurrent = index === state.currentStepIndex;
           const completed = deploymentStatus === "ready" || index < state.currentStepIndex;
-          const active = atCurrent && !finished;
+          const active = atCurrent && !finished && !state.queue;
           const failed = atCurrent && deploymentStatus === "failed";
           const cancelled = atCurrent && deploymentStatus === "cancelled";
           const tone = completed
@@ -75,7 +75,7 @@ export function DeploymentStepper() {
           );
         })}
       </ol>
-      {steps[currentIndex] && (
+      {!state.queue && steps[currentIndex] && (
         <p aria-hidden="true" className="mt-3 flex items-center justify-between gap-3 text-sm">
           <span className={deploymentStatus === "failed" ? "text-danger" : "text-foreground"}>
             {steps[currentIndex].label}

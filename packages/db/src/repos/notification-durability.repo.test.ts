@@ -130,3 +130,78 @@ describe("durable credit notifications with real Postgres semantics", () => {
     expect((await delivery.findById(second.id))?.status).toBe("sent");
   });
 });
+
+
+describe("inbox acknowledgement preserves delivery progress", () => {
+  it.each(["email", "in_app"])("keeps viewed queued %s notifications claimable", async channelKind => {
+    const row = await delivery.create({ ...data, channelKind });
+    await delivery.markSeen(row.id, data.userId, data.organizationId);
+    expect(await delivery.findById(row.id)).toMatchObject({ status: "queued", seenAt: expect.any(Date), attempts: 0 });
+    expect(await delivery.unseenCount(data.userId, data.organizationId)).toBe(0);
+    expect(await delivery.listForUser(data.userId, data.organizationId, { unseenOnly: true })).toEqual([]);
+    expect((await delivery.claimQueued()).map(item => item.id)).toEqual([row.id]);
+    expect((await delivery.findById(row.id))?.status).toBe("sending");
+  });
+
+  it("preserves a sending worker's lease and successful acknowledgement after inbox viewing", async () => {
+    const row = await delivery.create(data);
+    const [claimed] = await delivery.claimQueued();
+    const before = (await delivery.findById(row.id))!;
+    await delivery.markSeen(row.id, data.userId, data.organizationId);
+    const viewed = (await delivery.findById(row.id))!;
+    expect(viewed).toMatchObject({ status: "sending", attempts: before.attempts, leaseUntil: before.leaseUntil, seenAt: expect.any(Date) });
+    expect(await delivery.renewLease(row.id, claimed.attempts + 1)).toBe(true);
+    await delivery.markSent(row.id, claimed.attempts + 1);
+    expect(await delivery.findById(row.id)).toMatchObject({ status: "sent", sentAt: expect.any(Date), leaseUntil: null, seenAt: viewed.seenAt });
+    expect(await delivery.unseenCount(data.userId, data.organizationId)).toBe(0);
+  });
+
+  it("allows a sending worker to record failure after inbox viewing", async () => {
+    const row = await delivery.create(data);
+    const [claimed] = await delivery.claimQueued();
+    await delivery.markSeen(row.id, data.userId, data.organizationId);
+    await delivery.markFailed(row.id, "SMTP rejected delivery", false, claimed.attempts + 1);
+    expect(await delivery.findById(row.id)).toMatchObject({ status: "failed", lastError: "SMTP rejected delivery", leaseUntil: null, seenAt: expect.any(Date) });
+  });
+
+  it("retains a failed delivery's outcome and error when viewed", async () => {
+    const row = await delivery.create({ ...data, status: "failed", lastError: "Destination unavailable", attempts: 3 });
+    await delivery.markSeen(row.id, data.userId, data.organizationId);
+    expect(await delivery.findById(row.id)).toMatchObject({ status: "failed", lastError: "Destination unavailable", attempts: 3, seenAt: expect.any(Date) });
+    expect(await delivery.claimQueued()).toEqual([]);
+    expect(await delivery.listForUser(data.userId, data.organizationId, { excludeFailed: true })).toEqual([]);
+  });
+
+  it.each(["email", "in_app"])("retains sent-to-seen compatibility for %s and is idempotent", async channelKind => {
+    const sentAt = new Date("2026-01-01T00:00:00Z");
+    const row = await delivery.create({ ...data, channelKind, status: "sent", sentAt });
+    await delivery.markSeen(row.id, data.userId, data.organizationId);
+    const seen = (await delivery.findById(row.id))!;
+    expect(seen).toMatchObject({ status: "seen", sentAt, seenAt: expect.any(Date) });
+    // Fix the first-view clock well in the past so resetting it cannot pass by
+    // coincidence when two calls happen during the same millisecond.
+    const historical = await delivery.create({ ...data, status: "seen", seenAt: sentAt });
+    await delivery.markSeen(historical.id, data.userId, data.organizationId);
+    expect(await delivery.findById(historical.id)).toEqual(historical);
+    await delivery.markSeen(row.id, data.userId, data.organizationId);
+    expect(await delivery.findById(row.id)).toEqual(seen);
+  });
+
+  it("retains both recipient and organization boundaries", async () => {
+    const own = await delivery.create(data);
+    const otherUser = await delivery.create({ ...data, userId: "u2" });
+    const otherOrg = await delivery.create({ ...data, organizationId: "org2" });
+    await delivery.markSeen(otherUser.id, data.userId, data.organizationId);
+    await delivery.markSeen(otherOrg.id, data.userId, data.organizationId);
+    await delivery.markSeen(own.id, "u2", data.organizationId);
+    await delivery.markSeen(own.id, data.userId, "org2");
+    await delivery.markSeen("missing", data.userId, data.organizationId);
+    expect(await delivery.findById(own.id)).toEqual(own);
+    expect(await delivery.findById(otherUser.id)).toEqual(otherUser);
+    expect(await delivery.findById(otherOrg.id)).toEqual(otherOrg);
+    await delivery.markSeen(own.id, data.userId, data.organizationId);
+    expect(await delivery.unseenCount(data.userId, data.organizationId)).toBe(0);
+    expect(await delivery.unseenCount("u2", data.organizationId)).toBe(1);
+    expect(await delivery.unseenCount(data.userId, "org2")).toBe(1);
+  });
+});

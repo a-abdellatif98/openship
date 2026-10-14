@@ -14,6 +14,8 @@ import {
 } from "@repo/db";
 import {
   slugify,
+  runtimeProjectUpdate,
+  assertRuntimeVersionTarget,
   AppError,
   NotFoundError,
   ConflictError,
@@ -36,6 +38,7 @@ import {
   normalizeFramework,
   isServicesFramework,
   resolveWorkload,
+  resolveGitHubDeploymentChecks,
   toWorkloadType,
   type ReleaseSource,
   type UpdatableIdentity,
@@ -95,6 +98,7 @@ import type {
 } from "@repo/contracts";
 import { UpdateProjectBody } from "@repo/contracts";
 import { readDeployMeta, resolveProjectDeployTarget } from "./project-deploy-target";
+import { assertCloudRoutingCapabilities, assertProjectRoutingCapabilities } from "./project-routing-capabilities";
 import { withLiveProjectRuntimeMutation, withProjectRuntimeLock } from "../../lib/project-runtime-lock";
 import { requireOrgServer } from "../../lib/server-target";
 import { resolveCloudProjectServer, requireCloudWorkspace } from "../../lib/cloud-workspace-scope";
@@ -710,6 +714,7 @@ function buildProductionProjectInput(
     releaseSource: source.releaseSource,
     installationId: data.installationId,
     autoDeploy: !!(env.CLOUD_MODE && source.gitOwner && source.gitRepo),
+    githubChecks: data.githubChecks,
     framework: normalizeFramework(data.framework),
     packageManager: data.packageManager ?? "npm",
     installCommand: data.installCommand,
@@ -726,6 +731,8 @@ function buildProductionProjectInput(
     // is what every project did before the phase existed.
     releaseCommands: data.releaseCommands ?? null,
     buildImage: data.buildImage,
+    runtimeVersion: data.runtimeVersion,
+    runtimeImage: data.runtimeImage,
     productionMode: workload.productionMode,
     port: data.port ?? 3000,
     hasServer: workload.hasServer,
@@ -894,6 +901,9 @@ async function createProductionProject(
   ctx?: RequestContext,
   columns?: ProjectColumnOverrides,
 ) {
+  // Reject incompatible runtime settings before any group/project insert.
+  assertRuntimeVersionTarget(data);
+  data = { ...data, ...runtimeProjectUpdate(null, data) };
   // The project type is derived from persisted service rows. Accepting an
   // explicit monorepo without app metadata creates a different project from
   // the one requested (including CLI --type monorepo). Reject before writes.
@@ -907,6 +917,7 @@ async function createProductionProject(
   // and do it before ensureProjectApp writes anything so a rejected binding is
   // atomic (no orphan project-group row).
   const selectedServer = data.serverId ? await requireOrgServer(data.serverId, organizationId) : null;
+  assertCloudRoutingCapabilities(data.routingConfig, !!selectedServer?.workspaceId);
   if (selectedServer && !env.CLOUD_MODE) {
     if (selectedServer.workspaceId) {
       const { requireLinkedCloudServer } = await import("../../lib/cloud/server-link");
@@ -925,6 +936,8 @@ async function createProductionProject(
       data = { ...data, workspaceId: workspace.id, serverId: server!.id };
     }
   }
+
+  assertCloudRoutingCapabilities(data.routingConfig, !!data.workspaceId);
 
   // Multi-tenant SaaS: never trust a client-supplied installationId. It binds the
   // project to a GitHub App installation, and the push-webhook fan-out deploys by
@@ -1459,6 +1472,7 @@ export async function assertProjectQuota(organizationId: string, workspaceId?: s
         : `Your plan includes ${cap} projects and you're using ${total}. Upgrade to add more.`,
       "project-limit",
       await currentPlanTier(organizationId, workspaceId),
+      workspaceId,
     );
   }
 }
@@ -1506,6 +1520,8 @@ export async function ensureProject(data: EnsureProjectBody, organizationId: str
   }
   let created = false;
 
+  if (project) await assertProjectRoutingCapabilities(project, data.routingConfig);
+
   if (!project) {
     // No existing match → this ensure will create. Enforce the cap here too
     // (the folder-upload deploy flow reaches creation only through ensure).
@@ -1525,6 +1541,8 @@ export async function ensureProject(data: EnsureProjectBody, organizationId: str
     if (data.startCommand !== undefined) update.startCommand = data.startCommand;
     if (data.releaseCommands !== undefined) update.releaseCommands = data.releaseCommands;
     if (data.buildImage !== undefined) update.buildImage = data.buildImage;
+    Object.assign(update, runtimeProjectUpdate(project, data));
+    assertRuntimeVersionTarget({ ...project, ...data, ...update });
     if (data.port !== undefined) update.port = data.port;
     // Workload axis (workloadType / hasServer / productionMode) — one choke
     // point keeps the three columns in lockstep (issue #538). Only written when
@@ -1761,6 +1779,7 @@ export async function updateProject(
 
   // Shared route validation covers custom hostnames and scoped free-domain
   // allowances before any accompanying project fields are written.
+  await assertProjectRoutingCapabilities(p, data.routingConfig);
   const nextRoutes = data.publicEndpoints !== undefined
     ? await prepareProjectRouteState(p, { nextPublicEndpoints: data.publicEndpoints })
     : null;
@@ -1782,6 +1801,8 @@ export async function updateProject(
     if (PROJECT_IDENTITY_KEYS.has(key)) continue;
     if (raw[key] !== undefined) update[key] = raw[key];
   }
+  Object.assign(update, runtimeProjectUpdate(p, update));
+  assertRuntimeVersionTarget({ ...p, ...update });
   // A rename changes the DISPLAY NAME only — `slug` is deliberately NOT
   // recomputed. The slug is this project's infrastructure identity, not a label:
   // it names the `openship-<slug>` docker network, the `openship-<slug>-<svc>`
@@ -2093,6 +2114,7 @@ export async function createProjectEnvironment(
     gitBranch,
     gitUrl: app?.gitUrl ?? base.gitUrl,
     installationId: app?.installationId ?? base.installationId,
+    githubChecks: base.githubChecks,
     releaseSource: base.releaseSource,
     framework: base.framework,
     packageManager: base.packageManager,
@@ -2106,6 +2128,8 @@ export async function createProjectEnvironment(
     startCommand: base.startCommand,
     releaseCommands: base.releaseCommands,
     buildImage: base.buildImage,
+    runtimeVersion: base.runtimeVersion,
+    runtimeImage: base.runtimeImage,
     productionMode: base.productionMode,
     port: base.port,
     hasServer: base.hasServer,
@@ -2585,6 +2609,8 @@ export async function getGitInfo(projectId: string, organizationId: string) {
     webhookDomain: p.webhookDomain,
     autoDeploy: p.autoDeploy,
     defaultRollbackStrategy: p.defaultRollbackStrategy,
+    githubChecks: resolveGitHubDeploymentChecks(p.githubChecks),
+    githubChecksDelivery: await repos.deploymentCheck.latestForProject(projectId, organizationId),
     deployTarget,
   };
 }
@@ -2674,6 +2700,7 @@ export async function updateOptions(
     }
     update.gitBranch = options.gitBranch.trim();
   }
+  if (options.githubChecks !== undefined) update.githubChecks = options.githubChecks;
   if (options.buildCommand !== undefined) update.buildCommand = options.buildCommand;
   if (options.installCommand !== undefined) update.installCommand = options.installCommand;
   if (options.outputDirectory !== undefined) update.outputDirectory = options.outputDirectory;
@@ -2731,6 +2758,9 @@ export async function updateOptions(
   if (options.runtimeMode === "bare" || options.runtimeMode === "docker") {
     update.runtimeMode = options.runtimeMode;
   }
+
+  Object.assign(update, runtimeProjectUpdate(p, options));
+  assertRuntimeVersionTarget({ ...p, ...update });
 
   // Persist the canonical config FIRST, then reconcile routes (best-effort) on a
   // port change. Ordering the project write before route-sync means a route-sync

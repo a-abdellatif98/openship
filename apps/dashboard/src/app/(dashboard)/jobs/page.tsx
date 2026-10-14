@@ -135,14 +135,26 @@ export default function JobsPage() {
     }
   };
 
+  const getJobLabel = (job: JobView) => {
+    if (job.kind !== "custom" && j.systemJobLabels) {
+      const labels = j.systemJobLabels as Record<string, string>;
+      if (labels[job.key]) return labels[job.key]!;
+      if (labels[job.label]) return labels[job.label]!;
+    }
+    return job.label;
+  };
+
   const systemJobs = jobs.filter((job) => job.kind !== "custom");
   const customJobs = jobs.filter((job) => job.kind === "custom");
 
   // Search (by label) + status facet. Counts are over ALL jobs so the overview
   // is stable while a filter narrows the list.
   const q = query.trim().toLowerCase();
-  const jobMatches = (job: JobView) =>
-    (!q || job.label.toLowerCase().includes(q)) && matchesJobStatus(job, statusFilter);
+  const jobMatches = (job: JobView) => {
+    const localized = getJobLabel(job).toLowerCase();
+    const raw = job.label.toLowerCase();
+    return (!q || localized.includes(q) || raw.includes(q)) && matchesJobStatus(job, statusFilter);
+  };
   const filteredCustom = customJobs.filter(jobMatches);
   const filteredSystem = systemJobs.filter(jobMatches);
   const counts: Record<JobStatusFilter, number> = {
@@ -187,7 +199,7 @@ export default function JobsPage() {
             <div className="flex items-center gap-2">
               <UiIcon name="clock" className="size-4 text-muted-foreground/70" />
               <Link href={`/jobs/${encodeURIComponent(job.key)}`} className="text-[14px] font-medium text-foreground hover:text-primary">
-                {job.label}
+                {getJobLabel(job)}
               </Link>
               <span className="rounded-md bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 {isCustom ? j.kind.custom : j.kind.system}

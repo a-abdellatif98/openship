@@ -75,6 +75,9 @@
       "onFailureWarn": "Dağıtımı yayında tut ve incelenmek üzere işaretle",
       "onFailureFail": "Dağıtımı başarısız kıl ve önceki sürümü yayında tut"
     },
+    "runtimeVersionLabel": "Çalışma zamanı sürümü",
+    "runtimeVersionDefault": "Varsayılan",
+    "runtimeVersionDesc": "Seçilen sürüme uygun derleme ve çalışma imajlarını kullanır. Openship tarafından oluşturulan bir Docker derlemesi gerektirir.",
     "buildImageLabel": "Derleme İmajı",
     "buildImageDesc": "Bulut veya sunucu derlemeleri için derleyici konteyner imajı. Tespit edilen taban imajı yanlışsa değiştirin.",
     "productionPathsLabel": "Canlı ortam yolları",
@@ -111,7 +114,9 @@
     "releaseDescription": "Derleme sonrası isteğe bağlı komutlar. Hata dağıtımı durdurur. Yalnızca Docker ve Bare uygulamaları.",
     "releaseCommand": "Komut {number}",
     "addReleaseCommand": "Komut ekle",
-    "removeReleaseCommand": "{number}. komutu kaldır"
+    "removeReleaseCommand": "{number}. komutu kaldır",
+    "runtimeImageLabel": "Çalışma zamanı imajı",
+    "runtimeImageDesc": "Docker için isteğe bağlı üretim temel imajı. Çalışma zamanı ve oluşturulan tarifle uyumlu olmalıdır; varsayılan için boş bırakın."
   },
   "projectSettings": {
     "framework": "Framework",
@@ -329,7 +334,14 @@
       "changePort": "Portu değiştir",
       "skip": "Atla",
       "applied": "Yönlendirme port {port} olarak güncellendi.",
-      "changeError": "Port güncellenemedi. Lütfen tekrar deneyin."
+      "changeError": "Port güncellenemedi. Lütfen tekrar deneyin.",
+      "loopbackTitle": "Uygulama yönlendirilen trafiği alamıyor",
+      "loopbackNote": "Dağıtım çalışıyor ancak yönlendirilen bir bağlantı noktası ilgilenmenizi gerektiriyor.",
+      "loopbackBody": "{port} bağlantı noktası yalnızca konteyner içinden gelen bağlantıları dinliyor.",
+      "loopbackBodyService": "\"{service}\" servisi {port} bağlantı noktasında yalnızca konteyner içinden gelen bağlantıları dinliyor.",
+      "loopbackHelp": "Yönlendirilen trafik alan bir uygulama için 0.0.0.0 üzerinde dinleyip yeniden dağıtın veya trafiği amaçlanan proxy’ye yönlendirin.",
+      "openSettings": "Ayarları aç",
+      "skipError": "Bu uyarı kapatılamadı. Lütfen tekrar deneyin."
     },
     "title": {
       "cancelled": "Dağıtım İptal Edildi",
@@ -366,6 +378,17 @@
     "detailBranch": "Dal",
     "detailDomains": "Alan Adları",
     "detailDomain": "Alan Adı"
+  },
+  "deploymentHealth": {
+    "recheck": "Sağlığı yeniden denetle",
+    "checking": "Denetleniyor…",
+    "healthy": "Servisler sağlıklı",
+    "atDeployment": "Dağıtım sırasında kaydedilen uyarı",
+    "currentHealth": "Güncel servis durumu",
+    "startupHint": "Uygulama başlıyorsa bekleyip yeniden denetleyin. Yeniden başlıyorsa veya hata bildiriyorsa nedenini bulmak için günlükleri açın.",
+    "viewLogs": "Günlükleri görüntüle",
+    "unavailable": "Sağlık doğrulanamadı. Sunucuya erişilebildiğinde yeniden deneyin.",
+    "historical": "Bu dağıtım artık etkin değil. Güncel servisler için projeyi açın."
   },
   "composeDeployment": {
     "title": {

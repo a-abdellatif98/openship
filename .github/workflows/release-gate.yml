@@ -34,6 +34,10 @@ permissions:
   actions: read
 
 jobs:
+  actions-runner:
+    name: Actions execution
+    uses: ./.github/workflows/actions-e2e.yml
+
   scaling:
     name: Scaling E2E
     uses: ./.github/workflows/scaling-e2e.yml
@@ -107,6 +111,10 @@ jobs:
         if: steps.resume.outputs.reused != 'true'
         run: bun install --frozen-lockfile
 
+      - name: Prepare installed Actions worker assets
+        if: steps.resume.outputs.reused != 'true'
+        uses: ./.github/actions/actions-runner
+
       # Covers packages/* too: they resolve to source, so an error in @repo/db surfaces
       # here. This is the only typecheck between a tag and a published image.
       - name: Typecheck apps/api
@@ -135,6 +143,13 @@ jobs:
       - name: Run tests
         if: steps.resume.outputs.reused != 'true'
         run: bun run test
+
+      - name: Verify Cloud build coordination on PostgreSQL
+        if: steps.resume.outputs.reused != 'true'
+        env:
+          OPENSHIP_TEST_CLOUD_POSTGRES: "1"
+        run: |
+          OPENSHIP_TEST_PG_BIN="$(pg_config --bindir)" bun run --cwd packages/db test src/repos/cloud-build-postgres.integration.test.ts
 
   sdk-package:
     name: Installed SDK (Node ${{ matrix.node }})
@@ -165,6 +180,8 @@ jobs:
           bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
         if: steps.resume.outputs.reused != 'true'
+      - uses: ./.github/actions/actions-runner
+        if: steps.resume.outputs.reused != 'true'
       - run: bun run --cwd packages/openship build
         if: steps.resume.outputs.reused != 'true'
       - run: bun run --cwd packages/openship test:package
@@ -180,8 +197,8 @@ jobs:
   # With it, an unreachable daemon fails in `beforeAll` instead of reporting skipped.
   #
   # `fast` is the ordinary daemon-level and full-cycle cases; `heavy` is
-  # rollback-build-restore alone (~225s cold, and fileParallelism is off, so it holds
-  # the whole suite up). Scaling has its own reusable job above.
+  # retained-image rebuilds and PHP version build/rollback checks. These compile
+  # real images and extensions; scaling has its own reusable job above.
   # See E2E_SCOPE in apps/api/vitest.e2e.config.ts.
   e2e-docker:
     name: E2E (real Docker, ${{ matrix.scope }})

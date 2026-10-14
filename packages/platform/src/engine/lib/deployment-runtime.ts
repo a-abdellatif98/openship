@@ -482,6 +482,10 @@ async function resolveCloudPlatformForOrg(
     cloudServer: {
       ...bindingMeta, ownerWorkspaceId: managedWorkspaceId,
       provisionLock: createProvisionLock(`cloud:server:${binding.workspaceId}`),
+      buildCacheProtection: async () => {
+        const { buildCacheProtection } = await import("./build-cache-protection");
+        return buildCacheProtection(organizationId, managedWorkspaceId);
+      },
       bridgeLock: createProvisionLock(`cloud:docker-bridge:${binding.workspaceId}`),
       resolveRegistryAuth: registryAuthResolver(organizationId),
     },

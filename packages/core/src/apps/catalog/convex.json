@@ -173,5 +173,22 @@
         }
       ]
     }
-  ]
+  ],
+  "marketplace": {
+    "features": [
+      {
+        "title": "Reactive backend",
+        "description": "Keep client queries in sync with changing data."
+      },
+      {
+        "title": "Developer dashboard",
+        "description": "Manage the backend through its included dashboard."
+      },
+      {
+        "title": "Persistent database",
+        "description": "Store backend data in a persistent volume."
+      }
+    ],
+    "articleFile": "articles/convex.md"
+  }
 }

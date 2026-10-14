@@ -22,6 +22,18 @@ const listKey = (folder = "inbox", q = "") =>
 let client: QueryClient;
 let store: ReturnType<typeof createStore>;
 let cleanup: Array<() => void>;
+let eventSourceDescriptor: PropertyDescriptor | undefined;
+
+class MailStream extends EventTarget {
+  static instances: MailStream[] = [];
+  readyState = 0;
+  constructor(readonly url: string, readonly options: EventSourceInit) {
+    super();
+    MailStream.instances.push(this);
+  }
+  close() { this.readyState = 2; }
+  mailboxChanged() { this.dispatchEvent(new Event("mailbox")); }
+}
 
 beforeEach(() => {
   jest.useFakeTimers();
@@ -30,6 +42,9 @@ beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   store = createStore();
   cleanup = [];
+  eventSourceDescriptor = Object.getOwnPropertyDescriptor(globalThis, "EventSource");
+  Object.defineProperty(globalThis, "EventSource", { configurable: true, value: MailStream });
+  MailStream.instances = [];
 });
 
 afterEach(() => {
@@ -38,6 +53,8 @@ afterEach(() => {
   focusManager.setFocused(undefined);
   onlineManager.setOnline(true);
   jest.useRealTimers();
+  if (eventSourceDescriptor) Object.defineProperty(globalThis, "EventSource", eventSourceDescriptor);
+  else Reflect.deleteProperty(globalThis, "EventSource");
 });
 
 // Let React Query's asynchronous fetch/cache notifications settle after each tick.
@@ -77,6 +94,131 @@ function start() {
 }
 
 describe("automatic mailbox refresh (#894)", () => {
+  it("keeps polling when EventSource is unavailable", async () => {
+    Reflect.deleteProperty(globalThis, "EventSource");
+    const inbox = observe(async () => page("fallback-message"));
+    start();
+    await advance();
+    expect(inbox.getCurrentResult().data?.pages).toEqual([page("fallback-message")]);
+  });
+
+  it("shows arriving mail immediately through one authenticated stream without advancing the poll", async () => {
+    let delivered = page();
+    const inbox = observe(async () => delivered);
+    const row = observe(async () => delivered);
+    start();
+    const stream = MailStream.instances[0]!;
+    expect(MailStream.instances).toHaveLength(1);
+    expect(stream.url).toEndWith("/mail/idle?view=inbox");
+    expect(stream.options.withCredentials).toBe(true);
+    delivered = page("instant-message");
+    stream.mailboxChanged();
+    await settle();
+    expect(inbox.getCurrentResult().data?.pages).toEqual([delivered]);
+    expect(row.getCurrentResult().data?.pages).toEqual([delivered]);
+  });
+
+  it("retains push during queued actions and refreshes as soon as they finish", async () => {
+    const inbox = observe(async () => page("instant-message"));
+    start();
+    store.set(backgroundQueueAtom, { type: "add", threadId: "thread:old" });
+    store.set(optimisticActionsAtom, { read: { type: "READ", threadIds: ["old"], read: true } });
+    MailStream.instances[0]!.mailboxChanged();
+    await settle();
+    expect(inbox.getCurrentResult().data?.pages).toEqual([page()]);
+    store.set(optimisticActionsAtom, {});
+    await settle();
+    expect(inbox.getCurrentResult().data?.pages).toEqual([page()]);
+    store.set(backgroundQueueAtom, { type: "clear" });
+    await settle();
+    expect(inbox.getCurrentResult().data?.pages).toEqual([page("instant-message")]);
+  });
+
+  it("drains delivery during pagination while keeping every loaded page", async () => {
+    let finish!: (value: Page) => void;
+    let delivered = page("first");
+    let delay = true;
+    const inbox = observe(async cursor => {
+      if (cursor === 0) return { ...delivered, nextPageToken: 1 };
+      if (delay) return new Promise<Page>(resolve => { finish = resolve; });
+      return page("older");
+    }, [{ ...page("first"), nextPageToken: 1 }]);
+    start();
+    const next = inbox.fetchNextPage();
+    await settle();
+    delivered = page("instant-message", "first");
+    MailStream.instances[0]!.mailboxChanged();
+    await settle();
+    expect(inbox.getCurrentResult().isFetchingNextPage).toBe(true);
+    delay = false;
+    finish(page("older"));
+    await next;
+    await settle();
+    expect(inbox.getCurrentResult().data?.pages).toEqual([{ ...delivered, nextPageToken: 1 }, page("older")]);
+  });
+
+  it("coalesces notifications during a fetch and retries errors only on a new signal", async () => {
+    let finish!: (value: Page) => void;
+    let requests = 0;
+    let fail = false;
+    const inbox = observe(async () => {
+      requests++;
+      if (fail) throw new Error("temporary IMAP failure");
+      return new Promise<Page>(resolve => { finish = resolve; });
+    });
+    start();
+    const stream = MailStream.instances[0]!;
+    stream.mailboxChanged();
+    await settle();
+    for (let i = 0; i < 20; i++) stream.mailboxChanged();
+    finish(page("first"));
+    await settle();
+    expect(requests).toBe(2);
+    finish(page("second", "first"));
+    await settle();
+    expect(inbox.getCurrentResult().data?.pages).toEqual([page("second", "first")]);
+    fail = true;
+    stream.mailboxChanged();
+    await settle();
+    expect(requests).toBe(3);
+    await settle();
+    expect(requests).toBe(3);
+    fail = false;
+    stream.mailboxChanged();
+    await settle();
+    finish(page("recovered"));
+    await settle();
+    expect(inbox.getCurrentResult().data?.pages).toEqual([page("recovered")]);
+  });
+
+  it("closes hidden/offline streams, catches up after reconnect, and ignores disposed events", async () => {
+    let delivered = page("first");
+    const inbox = observe(async () => delivered);
+    const stop = start();
+    const first = MailStream.instances[0]!;
+    focusManager.setFocused(false);
+    expect(first.readyState).toBe(2);
+    first.mailboxChanged();
+    focusManager.setFocused(true);
+    await settle();
+    expect(MailStream.instances).toHaveLength(2);
+    onlineManager.setOnline(false);
+    expect(MailStream.instances[1]!.readyState).toBe(2);
+    onlineManager.setOnline(true);
+    await settle();
+    const current = MailStream.instances[2]!;
+    delivered = page("delivered-during-reconnect");
+    current.mailboxChanged();
+    await settle();
+    expect(inbox.getCurrentResult().data?.pages).toEqual([delivered]);
+    stop();
+    expect(current.readyState).toBe(2);
+    delivered = page("after-stop");
+    current.mailboxChanged();
+    await settle();
+    expect(inbox.getCurrentResult().data?.pages).toEqual([page("delivered-during-reconnect")]);
+  });
+
   it("shows arriving mail in an empty inbox and shares each poll across row observers", async () => {
     let delivered = page();
     let requests = 0;
@@ -228,6 +370,10 @@ describe("automatic mailbox refresh (#894)", () => {
     finish(page("second"));
     await next;
     expect(inbox.getCurrentResult().data?.pages).toEqual([first, page("second")]);
+    // The notification deferred during pagination now refreshes immediately.
+    await settle();
+    finish(page("second"));
+    await settle();
 
     fail = true;
     await advance();

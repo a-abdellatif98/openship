@@ -173,7 +173,7 @@ export function useBrandName(): string {
  */
 export function interpolate(
   template: string,
-  vars: Record<string, string>,
+  vars: Record<string, string | number>,
 ): string {
-  return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? `{${key}}`);
+  return template.replace(/\{(\w+)\}/g, (_, key) => (vars[key] !== undefined ? String(vars[key]) : `{${key}}`));
 }

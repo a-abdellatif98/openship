@@ -23,7 +23,7 @@
     "edit": "Edit",
     "emptyTitle": "No notification rules yet",
     "emptyBody": "Add a rule to be notified in Slack, Telegram, Discord or a webhook when mail arrives at a mailbox or domain on this server.",
-    "noChannels": "You have no verified notification channels yet. Add and verify one in Settings → Notifications, then come back to create a rule.",
+    "noChannels": "Add and verify a channel in Monitoring → Notifications, then return to create a rule.",
     "addChannel": "Add a notification channel",
     "manageChannels": "Manage channels",
     "fieldName": "Name",

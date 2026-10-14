@@ -1,6 +1,7 @@
 import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import {
   APP_TEMPLATES,
+  APP_CATALOG_URL,
   isValidAppTemplate,
   parseAppTemplate,
   templateEngineOk,
@@ -34,8 +35,7 @@ import { readApiVersion } from "../../lib/release-dist";
  * uploads); every entry is shape-validated before it can drive an install.
  */
 
-const REMOTE_URL =
-  "https://raw.githubusercontent.com/oblien/openship/main/packages/core/src/apps/catalog.json";
+const REMOTE_URL = APP_CATALOG_URL;
 const TTL_MS = 600_000; // 10 minutes
 /** Catalog-ENVELOPE version we know how to read (the top-level `version`). A
  *  newer envelope is logged, not fatal — entries are gated individually. */

@@ -5,9 +5,45 @@ description: Generated tool descriptions, API mappings, availability, and intent
 
 This catalog is generated from the route metadata used by MCP discovery. Run `tools/list` against your instance for its current input schemas and the tools available to your credential. See [MCP setup](/docs/mcp), [protocol and arguments](/docs/api/mcp), and the [cluster/scaling workflow](/docs/guides/mcp-clusters-and-scaling).
 
-The current API has **461 unique tools**. Permission tags below describe the route's initial authority; shared operations also enforce workspace, resource, source-access and instance-admin requirements. Self-hosted tools are unavailable on the hosted Cloud controller.
+The current API has **497 unique tools**. Permission tags below describe the route's initial authority; shared operations also enforce workspace, resource, source-access and instance-admin requirements. Self-hosted tools are unavailable on the hosted Cloud controller.
 
 ## Tools
+
+### actions
+
+| Tool and HTTP route | Description | Access |
+| --- | --- | --- |
+| `delete_actions_runners_by_id`<br />`DELETE /api/actions/runners/:id` | Disable a runner for new jobs, retaining active jobs and history. | `job:admin` |
+| `delete_actions_workflows_by_id`<br />`DELETE /api/actions/workflows/:id` | Disable a workflow while retaining its execution history. | `job:write` |
+| `get_actions_discover`<br />`GET /api/actions/discover` | Discover workflow files in a repository. | `job:read` |
+| `get_actions_jobs_by_id_events`<br />`GET /api/actions/jobs/:id/events` | Read masked job logs after a durable cursor. Resume with next after reconnecting. | `job:read` |
+| `get_actions_project`<br />`GET /api/actions/project` | Read project workflows and deployment automation. | `job:read` |
+| `get_actions_projects`<br />`GET /api/actions/projects` | List projects available for linking to workflows. | `job:read` |
+| `get_actions_repository_checks`<br />`GET /api/actions/repository-checks` | Read the connected account and verify Checks access for the selected repository without starting a workflow or publishing a Check. | `job:read` |
+| `get_actions_repository_source`<br />`GET /api/actions/repository-source` | Read a repository workflow and preview its topology. | `job:read` |
+| `get_actions_runners`<br />`GET /api/actions/runners` | List Actions runners and their verified OS, architecture and Docker capabilities. | `job:read` |
+| `get_actions_runs`<br />`GET /api/actions/runs` | List durable workflow runs and their job states. | `job:read` |
+| `get_actions_runs_by_id`<br />`GET /api/actions/runs/:id` | Read workflow topology, jobs, outputs and completion. | `job:read` |
+| `get_actions_runs_by_id_artifacts`<br />`GET /api/actions/runs/:id/artifacts` | List the artifacts retained for an authorized workflow run. | `job:read` |
+| `get_actions_workflows`<br />`GET /api/actions/workflows` | List authorized GitHub-compatible Openship Actions workflows. | `job:read` |
+| `get_actions_workflows_by_id`<br />`GET /api/actions/workflows/:id` | Read a configured workflow without secret values. | `job:read` |
+| `patch_actions_runners_by_id`<br />`PATCH /api/actions/runners/:id` | Update an idle runner's configuration. | `job:admin` |
+| `patch_actions_workflows_by_id`<br />`PATCH /api/actions/workflows/:id` | Update an Actions workflow's configuration. | `job:write` |
+| `post_actions_preview`<br />`POST /api/actions/preview` | Validate workflow YAML and preview its dependency graph without executing it. | `job:read` |
+| `post_actions_project_requests`<br />`POST /api/actions/project/requests` | Retry or cancel a project's pending Actions deployment approval. | `job:write` |
+| `post_actions_runners`<br />`POST /api/actions/runners` | Enable Actions on an authorized server. Native runners execute trusted workflow code as the server's connected user. | `job:admin` |
+| `post_actions_runners_by_id_probe`<br />`POST /api/actions/runners/:id/probe` | Recheck an authorized runner's capabilities. | `job:admin` |
+| `post_actions_runners_emulation`<br />`POST /api/actions/runners/emulation` | Enable and verify Docker CPU emulation on an authorized Actions server. Installs only missing binfmt emulators; does not restart Docker or applications. | `job:admin` |
+| `post_actions_runners_inspect`<br />`POST /api/actions/runners/inspect` | Check OS, architecture, Git and Docker on an authorized Actions destination without changing the server. | `job:admin` |
+| `post_actions_runs_by_id_approve`<br />`POST /api/actions/runs/:id/approve` | Approve the reviewed commit and attempt for its allowed Actions destinations. The approval key must match the current run policy. | `job:admin` |
+| `post_actions_runs_by_id_artifacts_download`<br />`POST /api/actions/runs/:id/artifacts/download` | Get a short-lived download link for one authorized artifact. | `job:read` |
+| `post_actions_runs_by_id_cancel`<br />`POST /api/actions/runs/:id/cancel` | Request cancellation. Runner capacity is released only after execution has stopped. | `job:write` |
+| `post_actions_runs_by_id_rerun`<br />`POST /api/actions/runs/:id/rerun` | Retry the same immutable workflow and commit as a new attempt. | `job:write` |
+| `post_actions_workflows`<br />`POST /api/actions/workflows` | Configure an Actions workflow and its authorized runner destinations. Secrets are encrypted and never returned. | `job:write` |
+| `post_actions_workflows_by_id_dispatch`<br />`POST /api/actions/workflows/:id/dispatch` | Dispatch a workflow using an idempotency key and an immutable resolved commit. | `job:write` |
+| `post_actions_workflows_import`<br />`POST /api/actions/workflows/import` | Import repository workflows together, reusing existing workflows and linking authorized projects. | `job:write` |
+| `put_actions_project`<br />`PUT /api/actions/project` | Configure required workflow checks before automatic project deployment. | `job:write` |
+| `put_actions_repository_source`<br />`PUT /api/actions/repository-source` | Commit reviewed workflow YAML to its branch using the expected file SHA. | `job:write` |
 
 ### analytics
 
@@ -88,6 +124,7 @@ The current API has **461 unique tools**. Permission tags below describe the rou
 
 | Tool and HTTP route | Description | Access |
 | --- | --- | --- |
+| `get_billing_actions`<br />`GET /api/billing/actions` | Read the organization's separate prepaid Cloud Actions balance, live VM usage rates, estimated minutes and recent deposits. Amounts use the returned unitsPerDollar. Does not create a checkout or expose payment URLs. Purchases may be unavailable. | `billing:read` |
 | `get_billing_checkouts`<br />`GET /api/billing/checkouts` | List unfinished payments for the organization's managed servers, optionally scoped to one server. Saved offers and verified payment state only; no checkout is created or resumed and no payment URL is exposed. Recover payments in Billing. | `billing:read` |
 | `get_billing_subscription_change`<br />`GET /api/billing/subscription/change` | Read a provider-confirmed subscription change for the selected managed server. Queued, payment_pending and scheduled do not activate new capacity; applied confirms the new terms. Server resizing uses its existing operation status. | `billing:read` |
 | `post_billing_subscription_change_preview`<br />`POST /api/billing/subscription/change/preview` | Preview an existing managed server's plan change using the provider's prorated price and next renewal date. Saves an expiring quote without charging. Uses trusted preset or Custom resources, preserves the billing interval, and lists projects that would restart. Complete confirmation in Billing. | `billing:write` |
@@ -210,6 +247,7 @@ The current API has **461 unique tools**. Permission tags below describe the rou
 
 | Tool and HTTP route | Description | Access |
 | --- | --- | --- |
+| `delete_issues_history`<br />`DELETE /api/issues/history` | Clear resolved monitoring incident history in the caller's organization. Requires an organization owner/admin with unrestricted access. Preserves open incidents, other organizations and incidents resolving after the server-side cutoff. Does not clear audit logs, notifications or workloads. | `project:admin`<br />Self-hosted |
 | `get_issues`<br />`GET /api/issues` | THE place to answer "what is broken right now?" across the whole installation — start here before per-project tools. One org-wide feed that merges every check Openship already runs: container health incidents (unhealthy / crash_loop / down, plus a server-level `server_unreachable` row when a whole box is offline), managed edge/mail container state, deploy blockers and held prompts, partial-release decisions, unsynced routing, port advisories, unverified domains, certificate errors, and available updates. Each item carries `severity` (`outage` = not being served right now, `action_required`, `advisory`), a `target` with a dashboard href, and `resolveWith` — concrete &#123;method, path&#125; calls that fix it, callable as-is. Items whose fix is a managed container carry `infraFix` instead (a UI flow, not an API call). `?status=resolved` returns incident HISTORY (the only source with a lifecycle; up to 30 days), so a resolved-tab absence never means "nothing else ever broke". Infrastructure rows require server read access and are absent in cloud mode. | `project:list` |
 | `get_issues_health`<br />`GET /api/issues/health` | Latest health-watch snapshot for every expected workload in the organization. Cached only: this read performs no Docker polling. Includes healthy, unhealthy, crash-looping, down and unknown states plus watcher enabled status. | `project:list` |
 | `get_issues_rescan_status`<br />`GET /api/issues/rescan/status` | Read the current or most recent issue-rescan session, including stage status, errors and completion. Start once with the rescan tool, then poll this tool instead of launching repeated scans. | `job:read`<br />Self-hosted |
@@ -283,7 +321,7 @@ The current API has **461 unique tools**. Permission tags below describe the rou
 | `post_mail_admin_by_serverId_test_email`<br />`POST /api/mail/admin/:serverId/test-email` | Send a mail-delivery test to body.to, optionally from body.fromDomain. This sends a real email; use the recipient requested by the user. | `mail_server:write`<br />Self-hosted |
 | `post_mail_adopt`<br />`POST /api/mail/adopt` | Register an existing Openship mail installation found by scan. Restores control-plane ownership without reinstalling the stack. | `mail_server:write`<br />Self-hosted |
 | `post_mail_scan`<br />`POST /api/mail/scan` | Inspect an existing mail installation on body.serverId without reinstalling it. Returns adoptable state; use adopt to register an existing stack. | `mail_server:write`<br />Self-hosted |
-| `post_mail_webmail_deploy_project`<br />`POST /api/mail/webmail/deploy-project` | Deploy webmail for an existing mail server to a permitted target. Both self and cloud targets need target.serverId; use the local ID of a connected managed server for Cloud. Returns projectId and deploymentId for normal deployment monitoring. replaceLegacy=true explicitly replaces an older unmanaged webmail installation. | `mail_server:write`<br />Self-hosted |
+| `post_mail_webmail_deploy_project`<br />`POST /api/mail/webmail/deploy-project` | Deploy webmail for an existing mail server to a permitted target. Both self and cloud targets need target.serverId; use the local ID of a connected managed server for Cloud. Returns projectId and deploymentId for normal deployment monitoring. reconnectProjectId explicitly reuses an unlinked webmail on its existing mail server and hostname. replaceLegacy=true explicitly replaces an older unmanaged webmail installation. | `mail_server:write`<br />Self-hosted |
 
 ### migration
 
@@ -515,6 +553,8 @@ The current API has **461 unique tools**. Permission tags below describe the rou
 | `get_system_servers_by_id_github_connect_poll`<br />`GET /api/system/servers/:id/github/connect/poll` | Poll GitHub device authorization already started on this server. The user must complete the returned browser approval. | `server:read`<br />Self-hosted |
 | `get_system_servers_by_id_infrastructure`<br />`GET /api/system/servers/:id/infrastructure` | Read this server’s attached private networks and compute cluster, subject to fleet visibility. Use these resource IDs to inspect network or k3s readiness. | `server:read`<br />Self-hosted |
 | `get_system_servers_by_id_managed_info`<br />`GET /api/system/servers/:id/managed/info` | Read the selected managed server image, operating system, lifecycle and actual allocation. Does not start the VM or return its raw configuration. | `server:read` |
+| `get_system_servers_by_id_managed_outbound`<br />`GET /api/system/servers/:id/managed/outbound` | Read this managed server's outbound connection and revision. Returns only public IP/proxy metadata, never credentials. Does not start the server. | `server:read` |
+| `get_system_servers_by_id_managed_outbound_options`<br />`GET /api/system/servers/:id/managed/outbound/options` | List available managed outbound IPs and countries for this owned Cloud server. No proxy credentials or internal pool identifiers are exposed. | `server:read` |
 | `get_system_servers_by_id_managed_runtime_api`<br />`GET /api/system/servers/:id/managed/runtime-api` | Read the managed server Runtime API status without enabling it or returning a token. | `server:read` |
 | `get_system_servers_by_id_managed_ssh`<br />`GET /api/system/servers/:id/managed/ssh` | Read SSH enablement and public connection instructions for this managed server. Never returns passwords. | `server:read` |
 | `get_system_servers_by_id_managed_workloads`<br />`GET /api/system/servers/:id/managed/workloads` | List native managed processes with live status, capped at 100 entries. Distinguishes manual, project and system workloads; does not return environments or commands. | `server:read` |
@@ -534,6 +574,7 @@ The current API has **461 unique tools**. Permission tags below describe the rou
 | `patch_system_networks_by_id`<br />`PATCH /api/system/networks/:id` | Replace a native private network configuration using its current revision. Existing runtime dependencies block membership changes. Verify again after changing the configuration. | `server:admin`<br />Self-hosted |
 | `patch_system_networks_preparations_by_preparationId_connections`<br />`PATCH /api/system/networks/preparations/:preparationId/connections` | Revise permitted server-to-server connections for an unfinished managed-network preparation using its latest sequence and a new requestId. Returns replacement preparation; inspect and apply its new plan. k3s requires bidirectional access among all selected members. | `server:admin`<br />Self-hosted |
 | `patch_system_servers_by_id`<br />`PATCH /api/system/servers/:id` | Update this registered server’s name or SSH connection settings. Omitted fields are preserved. Check reachability after changing connection settings. | `server:write` |
+| `patch_system_servers_by_id_managed_outbound`<br />`PATCH /api/system/servers/:id/managed/outbound` | Change this managed server's outbound connection after explicit review. Send expectedRevision from managed/outbound and confirm:true. Choose a listed managed IP, or a custom public IPv4 HTTP/HTTPS proxy with both credentials or neither. Affects outgoing connections for every project; preserves internet policy, ingress and routes. Credentials are never returned or audited. | `server:admin` |
 | `patch_system_servers_by_id_managed_ssh`<br />`PATCH /api/system/servers/:id/managed/ssh` | Enable or disable SSH with explicit confirmation and expected enablement. Changes all SSH users on this server. | `server:admin` |
 | `patch_system_servers_by_id_network_settings`<br />`PATCH /api/system/servers/:id/network-settings` | Change outbound internet access and optional egress host allowlist on a managed Docker server after reviewing current settings. Egress changes also require expectedRevision from the network read. Disabling it affects downloads, external APIs and builds for every project. Send expectedInternetAccess and confirm:true. Ingress, private links and edge routing remain managed by Openship and Oblien. | `server:admin` |
 | `patch_system_servers_by_id_rate_limit`<br />`PATCH /api/system/servers/:id/rate-limit` | Update the server-wide OpenResty rate limit and whitelist. This affects traffic to all routes on the server. | `server:admin`<br />Self-hosted |
@@ -604,6 +645,23 @@ Every remaining route has an explicit boundary: browser authorization, streaming
 | `GET /.well-known/oauth-protected-resource/api/mcp` | Authentication, credential issuance or MCP transport. These modules cannot become tools. |
 | `GET /.well-known/oauth-protected-resource/api/proxy/api/mcp` | Authentication, credential issuance or MCP transport. These modules cannot become tools. |
 | `GET /accept-invite/:id` | Browser landing pages for API-only instances. |
+| `GET /api/actions/oidc/.well-known/openid-configuration` | Public OIDC discovery and RSA verification keys contain no credentials or tenant data. |
+| `GET /api/actions/oidc/jwks` | Public OIDC discovery and RSA verification keys contain no credentials or tenant data. |
+| `GET /api/actions/oidc/token` | Requires a purpose-bound job capability and rechecks running job, actor, approval, destination and id-token permission before issuing a five-minute identity. |
+| `GET /api/actions/runtime/_apis/artifactcache/cache` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /api/actions/runtime/_apis/artifactcache/caches` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `PATCH /api/actions/runtime/_apis/artifactcache/caches/:id` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /api/actions/runtime/_apis/artifactcache/caches/:id` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `GET /api/actions/runtime/objects/:id` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `PUT /api/actions/runtime/objects/:id` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /api/actions/runtime/twirp/github.actions.results.api.v1.ArtifactService/CreateArtifact` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /api/actions/runtime/twirp/github.actions.results.api.v1.ArtifactService/DeleteArtifact` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /api/actions/runtime/twirp/github.actions.results.api.v1.ArtifactService/FinalizeArtifact` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /api/actions/runtime/twirp/github.actions.results.api.v1.ArtifactService/GetSignedArtifactURL` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /api/actions/runtime/twirp/github.actions.results.api.v1.ArtifactService/ListArtifacts` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /api/actions/runtime/twirp/github.actions.results.api.v1.CacheService/CreateCacheEntry` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /api/actions/runtime/twirp/github.actions.results.api.v1.CacheService/FinalizeCacheEntryUpload` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /api/actions/runtime/twirp/github.actions.results.api.v1.CacheService/GetCacheEntryDownloadURL` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
 | `GET /api/analytics/usage/stream` | SSE transport for live progress. Use the resource’s JSON status/log tools over MCP, or an authenticated HTTP client for streaming. |
 | `GET /api/auth/*` | Authentication, credential issuance or MCP transport. These modules cannot become tools. |
 | `POST /api/auth/*` | Authentication, credential issuance or MCP transport. These modules cannot become tools. |
@@ -627,6 +685,9 @@ Every remaining route has an explicit boundary: browser authorization, streaming
 | `POST /api/auth/sign-up/*` | Authentication, credential issuance or MCP transport. These modules cannot become tools. |
 | `GET /api/backup-restores/:restoreId/stream` | SSE transport for live progress. Use the resource’s JSON status/log tools over MCP, or an authenticated HTTP client for streaming. |
 | `GET /api/backup-runs/:runId/stream` | SSE transport for live progress. Use the resource’s JSON status/log tools over MCP, or an authenticated HTTP client for streaming. |
+| `POST /api/billing/actions/checkout` | Starts a prepaid browser payment. Complete payment in Actions → Budget when purchases are available. |
+| `POST /api/billing/actions/checkout/resume` | Resumes the original prepaid browser checkout. Complete payment in Actions → Budget. |
+| `GET /api/billing/actions/purchase` | Reconciles a browser payment with its verified provider receipt. Use Actions → Budget for payment recovery. |
 | `POST /api/billing/cancel` | Paid subscription renewal is managed by the account owner in Settings → Billing; MCP exposes the resulting subscription state. |
 | `GET /api/billing/checkout` | Browser checkout configuration; use the billing reads to inspect a plan and complete purchases in Settings → Billing. |
 | `POST /api/billing/checkout/cancel` | Cancels an unfinished hosted payment and releases its capacity reservation. Financial actions are completed in Billing. |
@@ -880,3 +941,11 @@ Every remaining route has an explicit boundary: browser authorization, streaming
 | `GET /auth/callback/close` | Authentication, credential issuance or MCP transport. These modules cannot become tools. |
 | `GET /auth/callback/install` | Authentication, credential issuance or MCP transport. These modules cannot become tools. |
 | `GET /login` | Browser landing pages for API-only instances. |
+| `POST /twirp/github.actions.results.api.v1.ArtifactService/CreateArtifact` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /twirp/github.actions.results.api.v1.ArtifactService/DeleteArtifact` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /twirp/github.actions.results.api.v1.ArtifactService/FinalizeArtifact` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /twirp/github.actions.results.api.v1.ArtifactService/GetSignedArtifactURL` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /twirp/github.actions.results.api.v1.ArtifactService/ListArtifacts` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /twirp/github.actions.results.api.v1.CacheService/CreateCacheEntry` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /twirp/github.actions.results.api.v1.CacheService/FinalizeCacheEntryUpload` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |
+| `POST /twirp/github.actions.results.api.v1.CacheService/GetCacheEntryDownloadURL` | Authenticates an expiring, purpose-bound Actions job capability and rechecks the saved actor and organization; user sessions and provider keys are not accepted. |

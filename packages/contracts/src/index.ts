@@ -53,6 +53,8 @@ export * from "./backups";
 export * from "./job-inputs";
 
 export * from "./jobs";
+export * from "./actions";
+export * from "./action-billing";
 
 export * from "./analytics";
 
@@ -98,3 +100,5 @@ export * from "./mail";
 export * from "./cloud-analytics";
 export * from "./terminal";
 export * from "./instance";
+
+export * from "./action-routes";

@@ -34,7 +34,6 @@
     "sharedBuilds": "Os builds compartilham seu servidor, sem limite de tempo mensal",
     "power": "Até {powerCpu} vCPU e {powerRamGb} GB de RAM por app",
     "projects": "{maxProjects} projetos",
-    "projectsUnlimited": "Projetos ilimitados",
     "freeSubdomains": "{freeSubdomains} subdomínios {freeDomainSuffix} gratuitos",
     "freeSubdomainsUnlimited": "Subdomínios {freeDomainSuffix} gratuitos e ilimitados",
     "gitDeploys": "Faça deploy do GitHub, GitLab ou qualquer remoto Git",

@@ -75,6 +75,9 @@
       "onFailureWarn": "Deployment live lassen und zur Prüfung markieren",
       "onFailureFail": "Deployment abbrechen und die vorherige Version weiter ausliefern"
     },
+    "runtimeVersionLabel": "Runtime-Version",
+    "runtimeVersionDefault": "Standard",
+    "runtimeVersionDesc": "Verwendet passende Build- und Runtime-Images für die gewählte Version. Erfordert einen von Openship generierten Docker-Build.",
     "buildImageLabel": "Build-Image",
     "buildImageDesc": "Builder-Container-Image für Cloud- oder Server-Builds. Überschreibe es, wenn das erkannte Basis-Image falsch ist.",
     "productionPathsLabel": "Produktionspfade",
@@ -110,7 +113,10 @@
     "releaseDescription": "Optionale Befehle nach dem Build. Ein Fehler stoppt das Deployment. Nur für Docker- und Bare-Apps.",
     "releaseCommand": "Befehl {number}",
     "addReleaseCommand": "Befehl hinzufügen",
-    "removeReleaseCommand": "Befehl {number} entfernen"
+    "removeReleaseCommand": "Befehl {number} entfernen",
+    "runtimeImageLabel": "Runtime-Image",
+    "runtimeImageDesc": "Optionales Produktions-Basisimage für Docker-Builds. Muss zur Runtime und zum generierten Rezept passen; leer lassen für den verwalteten Standard.",
+    "staticPathHint": "Wird als statische Dateien vom Edge bereitgestellt — es läuft kein Hintergrundprozess."
   },
   "projectSettings": {
     "framework": "Framework",
@@ -180,7 +186,9 @@
       "domainLabel": "Domain",
       "free": "Kostenlos",
       "custom": "Benutzerdefiniert",
-      "routingTrafficPrefix": "Verkehr wird geleitet an Port"
+      "routingTrafficPrefix": "Verkehr wird geleitet an Port",
+      "duplicateTitle": "Doppelte Domain",
+      "duplicateDescription": "Zwei Routen verweisen auf dieselbe Domain — ändern Sie eine, damit jede Route eine eigene Domain hat:"
     },
     "shared": {
       "title": "Gemeinsame Umgebung",
@@ -349,7 +357,38 @@
     "detailFramework": "Framework",
     "detailBranch": "Branch",
     "detailDomains": "Domains",
-    "detailDomain": "Domain"
+    "detailDomain": "Domain",
+    "portAdvisory": {
+      "loopbackTitle": "Die App kann keinen weitergeleiteten Datenverkehr empfangen",
+      "loopbackNote": "Die Bereitstellung läuft, aber ein weitergeleiteter Port erfordert Aufmerksamkeit.",
+      "loopbackBody": "Port {port} lauscht nur innerhalb des Containers.",
+      "loopbackBodyService": "Dienst \"{service}\" lauscht nur innerhalb des Containers auf Port {port}.",
+      "loopbackHelp": "Für eine App mit weitergeleitetem Datenverkehr: auf 0.0.0.0 lauschen und erneut bereitstellen oder den vorgesehenen Proxy als Ziel verwenden.",
+      "openSettings": "Einstellungen öffnen",
+      "skipError": "Dieser Hinweis konnte nicht ausgeblendet werden. Bitte erneut versuchen.",
+      "title": "Hinweis auf abweichenden Port",
+      "bannerTitle": "Abweichender Container-Port erkannt",
+      "review": "Port überprüfen",
+      "note": "Der Edge-Router leitet den Datenverkehr an Port {port} weiter, aber Ihre Anwendung hat dort nicht geantwortet.",
+      "body": "Auf Port {port} hat nichts geantwortet. Wenn Ihre Anwendung auf einem anderen Port lauscht, aktualisieren Sie ihn unten.",
+      "bodyService": "Dienst „{service}“: Auf Port {port} hat nichts geantwortet. Wenn er auf einem anderen Port lauscht, geben Sie hier den richtigen an.",
+      "newPortLabel": "Korrekter Port",
+      "changePort": "Port ändern",
+      "skip": "Überspringen",
+      "applied": "Routing auf Port {port} aktualisiert.",
+      "changeError": "Der Port konnte nicht aktualisiert werden. Bitte versuchen Sie es erneut."
+    }
+  },
+  "deploymentHealth": {
+    "recheck": "Zustand erneut prüfen",
+    "checking": "Wird geprüft…",
+    "healthy": "Die Dienste sind gesund",
+    "atDeployment": "Warnung beim Deployment",
+    "currentHealth": "Aktueller Dienststatus",
+    "startupHint": "Wenn die App noch startet, warten Sie und prüfen Sie erneut. Bei Neustarts oder Fehlern öffnen Sie die Logs, um die Ursache zu finden.",
+    "viewLogs": "Logs anzeigen",
+    "unavailable": "Der Zustand konnte nicht geprüft werden. Versuchen Sie es erneut, wenn der Server erreichbar ist.",
+    "historical": "Dieses Deployment ist nicht mehr aktiv. Öffnen Sie das Projekt für die aktuellen Dienste."
   },
   "composeDeployment": {
     "title": {

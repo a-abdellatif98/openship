@@ -397,7 +397,9 @@ export function ServerMigrationWizard({
         setConflictResolution({});
       },
     },
-    visible && !initialRunId,
+    // An existing run needs no destination inventory until Edit & retry
+    // replaces its detail view with a freshly scanned import draft.
+    visible && (!initialRunId || stack !== null),
   );
   const handleCloudPricing = useCloudDeployPricing(targetSelection.selected?.managed?.id);
 

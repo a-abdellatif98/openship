@@ -518,6 +518,56 @@ describe("advisories stay advisories", () => {
     expect(action.severity).toBe("advisory");
   });
 
+  it.each([
+    { framework: undefined, target: 8080 },
+    { framework: "docker-compose", target: "svc-1" },
+  ])(
+    "reuses the port review action for a confirmed loopback bind ($framework)",
+    async ({ framework, target }) => {
+      const meta = {
+        portCheck: [
+          {
+            port: 8080,
+            serviceId: "svc-1",
+            serviceName: "api",
+            checked: true,
+            listening: true,
+            loopbackOnly: true,
+          },
+        ],
+      };
+      withPortCheck(meta, framework);
+
+      const actions = await getProjectPendingActions(PROJECT, ORG);
+
+      expect(actions).toHaveLength(1);
+      expect(actions[0]).toMatchObject({
+        id: `port_advisory:dep-live:${target}`,
+        kind: "port_advisory",
+        severity: "action_required",
+        details: { port: 8080, serviceId: "svc-1", loopbackOnly: true },
+        resolveWith: [
+          { method: "POST", path: "/api/deployments/dep-live/skip-port-check", body: { target } },
+        ],
+      });
+      expect(actions[0].message).toContain("0.0.0.0");
+      expect(actions[0].message).not.toContain("different port");
+
+      withPortCheck({ ...meta, portCheckSkipped: [target] }, framework);
+      expect(await getProjectPendingActions(PROJECT, ORG)).toEqual([]);
+    },
+  );
+
+  it("does not turn an unconfirmed bind or a reachable listener into an action", async () => {
+    withPortCheck({
+      portCheck: [
+        { port: 8080, checked: false, listening: true, loopbackOnly: true },
+        { port: 8081, checked: true, listening: true },
+      ],
+    });
+    expect(await getProjectPendingActions(PROJECT, ORG)).toEqual([]);
+  });
+
   /**
    * The dismissal target must match `skipTarget` in PortAdvisoryModal exactly:
    * the numeric PORT for a single-app project, the service id only for compose.

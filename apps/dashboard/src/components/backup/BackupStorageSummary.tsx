@@ -6,9 +6,11 @@ import { formatBytes } from "@/lib/formatBytes";
 export function BackupStorageSummary({
   destinations,
   showDestinationCount = false,
+  compact = false,
 }: {
   destinations: BackupDestinationSummary[];
   showDestinationCount?: boolean;
+  compact?: boolean;
 }) {
   const { t, locale } = useI18n();
   const m = t.misc.backups;
@@ -24,13 +26,21 @@ export function BackupStorageSummary({
   return (
     <section
       aria-label={m.summaryTitle}
-      className="rounded-2xl border border-border/50 bg-card p-5"
+      className={
+        compact ? "rounded-2xl bg-card p-5" : "rounded-2xl border border-border/50 bg-card p-5"
+      }
     >
-      <div className="mb-4 flex items-center gap-2">
+      <div className={compact ? "sr-only" : "mb-4 flex items-center gap-2"}>
         <Icon name="hard-drive" className="size-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold text-foreground">{m.summaryTitle}</h2>
       </div>
-      <dl className="space-y-3">
+      <dl
+        className={
+          compact
+            ? "grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4 [&>div]:flex-col [&>div]:items-start [&>div]:justify-start [&>div]:gap-2 [&_dt]:text-xs [&_dd]:text-start [&_dd]:text-lg [&_dd]:tabular-nums"
+            : "space-y-3"
+        }
+      >
         <Stat icon="database" label={m.summaryStored} value={formatBytes(total("storedBytes"))} />
         <Stat
           icon="check-circle"
@@ -49,6 +59,7 @@ export function BackupStorageSummary({
         <Stat
           icon="clock"
           label={m.statsLast}
+          valueClassName={compact ? "!text-sm" : undefined}
           value={
             last
               ? new Date(last).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" })
@@ -68,11 +79,13 @@ function Stat({
   value,
   icon,
   tone = "text-foreground",
+  valueClassName = "",
 }: {
   label: string;
   value: string;
   icon: IconName;
   tone?: string;
+  valueClassName?: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 text-sm">
@@ -80,7 +93,7 @@ function Stat({
         <Icon name={icon} className="size-4 shrink-0" />
         {label}
       </dt>
-      <dd className={`text-end font-medium ${tone}`}>{value}</dd>
+      <dd className={`text-end font-medium ${tone} ${valueClassName}`}>{value}</dd>
     </div>
   );
 }

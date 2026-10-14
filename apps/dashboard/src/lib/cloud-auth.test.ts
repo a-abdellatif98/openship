@@ -10,6 +10,8 @@ import {
   computePkceChallenge,
   getPostAuthRedirect,
   validateReturnTo,
+  authContinuationHref,
+  emailVerificationHref,
 } from "./cloud-auth";
 
 describe("computePkceChallenge", () => {
@@ -29,6 +31,45 @@ describe("computePkceChallenge", () => {
 
     expect(fallback).toBe(native);
   });
+});
+
+describe("app installation post-auth return", () => {
+  const destination = "/apps/new/open-webui?projectId=proj_draft";
+
+  it("preserves custom catalog identifiers without restricting them to bundled app names", () => {
+    const returnTo = "/apps/new/Custom_app_42";
+    expect(getPostAuthRedirect(new URLSearchParams({ returnTo }))).toBe(returnTo);
+  });
+
+  it("keeps the app across login, registration, verification, 2FA and organization selection", () => {
+    let href = authContinuationHref("/login", destination);
+    href = buildAuthPageHref("/register", new URL(href, "https://app.openship.io").searchParams);
+    href = emailVerificationHref("user@example.test", new URL(href, "https://app.openship.io").searchParams);
+    expect(getPostAuthRedirect(new URL(href, "https://app.openship.io").searchParams)).toBe(destination);
+    for (const route of ["/two-factor", "/select-organization", "/forgot-password", "/reset-password", "/login"] as const) {
+      href = buildAuthPageHref(route, new URL(href, "https://app.openship.io").searchParams);
+      expect(getPostAuthRedirect(new URL(href, "https://app.openship.io").searchParams)).toBe(destination);
+    }
+  });
+
+  it.each([
+    "https://evil.test/apps/new/minio", "//evil.test/apps/new/minio", "/\\evil.test/apps/new/minio",
+    "/apps/new", "/apps/new/", "/apps/new/minio/extra", "/apps/new/minio/../../settings",
+    "/apps/new/minio\\..\\settings", "/apps/new/%2e%2e", "/apps/new/%2f%2fevil.test",
+    "/apps/new/minio\n", "/settings", "/apps/new/minio" + "?x=" + "x".repeat(512),
+  ])("rejects an unsafe or unrelated continuation: %s", (input) => {
+    expect(validateReturnTo(input)).toBeNull();
+    expect(authContinuationHref("/login", input)).toBe("/login");
+  });
+});
+
+it("preserves a landing-page plan purchase through login without allowing arbitrary billing routes", () => {
+  const destination = "/billing/plans?newServer=1&plan=starter&startCheckout=1&checkoutIntent=72e918ec-8d9c-4b81-bf43-7a5790ca239a";
+  const login = authContinuationHref("/login", destination);
+  const signup = buildAuthPageHref("/register", new URL(login, "https://app.openship.io").searchParams);
+  expect(getPostAuthRedirect(new URL(signup, "https://app.openship.io").searchParams)).toBe(destination);
+  for (const unsafe of ["//evil.test/billing/plans", "/billing/plans/../../settings", "/billing/plans\\evil.test", "/billing/plans%2fextra", "/billing/payment"])
+    expect(validateReturnTo(unsafe)).toBeNull();
 });
 
 describe("invitation post-auth return", () => {

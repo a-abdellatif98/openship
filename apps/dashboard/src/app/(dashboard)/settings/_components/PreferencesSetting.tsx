@@ -10,47 +10,49 @@ import type { ReactNode } from "react";
 import { SettingsSection } from "./SettingsSection";
 import { Toggle } from "@/components/project-settings/ServerSideSwitch";
 import { useDemoMode, setDemoMode } from "@/lib/demo-mode";
+import { useI18n } from "@/components/i18n-provider";
 
 export function PreferencesSetting() {
-  const demoMode = useDemoMode();
+	const { t } = useI18n();
+	const demoMode = useDemoMode();
 
-  return (
-    <SettingsSection
-      icon={"sliders"}
-      title="Preferences"
-      description="Personal display preferences for this browser — nothing is sent to the server."
-      collapsible
-    >
-      <div className="space-y-3">
-        <PreferenceRow
-          title="Demo mode"
-          hint="Blur IP addresses, hosts, and environment values during screen-shares and recordings."
-          checked={demoMode}
-          onChange={setDemoMode}
-        />
-      </div>
-    </SettingsSection>
-  );
+	return (
+		<SettingsSection
+			icon={"sliders"}
+			title={t.settings.preferences.title}
+			description={t.settings.preferences.description}
+			collapsible
+		>
+			<div className="space-y-3">
+				<PreferenceRow
+					title={t.settings.preferences.demoMode.title}
+					hint={t.settings.preferences.demoMode.description}
+					checked={demoMode}
+					onChange={setDemoMode}
+				/>
+			</div>
+		</SettingsSection>
+	);
 }
 
 function PreferenceRow({
-  title,
-  hint,
-  checked,
-  onChange,
+	title,
+	hint,
+	checked,
+	onChange,
 }: {
-  title: string;
-  hint: ReactNode;
-  checked: boolean;
-  onChange: (v: boolean) => void;
+	title: string;
+	hint: ReactNode;
+	checked: boolean;
+	onChange: (v: boolean) => void;
 }) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-muted/10 p-4">
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground">{hint}</p>
-      </div>
-      <Toggle checked={checked} onChange={onChange} aria-label={title} />
-    </div>
-  );
+	return (
+		<div className="flex items-center justify-between gap-4 rounded-xl border border-border/50 bg-muted/10 p-4">
+			<div className="min-w-0">
+				<p className="text-sm font-medium text-foreground">{title}</p>
+				<p className="text-xs text-muted-foreground">{hint}</p>
+			</div>
+			<Toggle checked={checked} onChange={onChange} aria-label={title} />
+		</div>
+	);
 }

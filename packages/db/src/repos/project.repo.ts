@@ -287,6 +287,16 @@ export function createProjectRepo(db: Database, encryption: ConfigurationEncrypt
       return { rows, total: Number(total), page, perPage };
     },
 
+    /** Catalog apps on a particular server, scoped before returning any rows. */
+    async listAppsOnServer(organizationId: string, serverId: string, appTemplateId: string) {
+      return db.query.project.findMany({
+        where: and(eq(project.organizationId, organizationId), eq(project.serverId, serverId),
+          eq(project.appTemplateId, appTemplateId), eq(project.isApp, true),
+          isNull(project.deletedAt)),
+        orderBy: [desc(project.createdAt)],
+      });
+    },
+
     /**
      * Project counts for the dashboard home — total and with-an-active-
      * deployment, in one aggregate query instead of listing every row.

@@ -6,6 +6,8 @@ import type { MailSetupStatus } from "@/lib/api/mail";
 import { I18nProvider } from "@/components/i18n-provider";
 
 const h = vi.hoisted(() => ({
+  selfHosted: true,
+  deployMode: "server",
   query: "serverId=one",
   router: { replace: vi.fn() },
   status: vi.fn(),
@@ -16,6 +18,7 @@ const h = vi.hoisted(() => ({
   modal: vi.fn(),
   toast: vi.fn(),
 }));
+vi.mock("@/context/PlatformContext", () => ({ usePlatform: () => ({ selfHosted: h.selfHosted, deployMode: h.deployMode }) }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(h.query),
   useRouter: () => h.router,
@@ -103,6 +106,8 @@ async function click(label: string) {
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
+  h.selfHosted = true;
+  h.deployMode = "server";
   h.query = "serverId=one";
   h.status.mockReset().mockImplementation(async (id) => status(id));
   h.registry.mockReset().mockResolvedValue({ servers: [registry()] });
@@ -185,4 +190,25 @@ it("discards an old server response when the newly selected server cannot be loa
   expect(admin()?.getAttribute("data-server")).toBe("two");
   expect(admin()?.textContent).toContain("two.example.com");
   expect(node.textContent).not.toContain("one.example.com");
+});
+
+
+it("offers the generic Cloud mail client without loading or provisioning mail servers", async () => {
+  h.selfHosted = false;
+  h.deployMode = "cloud";
+  await render();
+  expect(node.textContent).toContain("Coming soon");
+  expect(node.textContent).toContain("do not provision a mail server");
+  expect(node.querySelector('a[href="/apps/new/webmail"]')?.textContent).toContain("Connect existing mail server");
+  expect(h.registry).not.toHaveBeenCalled();
+  expect(h.status).not.toHaveBeenCalled();
+  expect(setup()).toBeNull();
+});
+
+it("keeps the desktop mail console available", async () => {
+  h.selfHosted = false;
+  h.deployMode = "desktop";
+  await render();
+  expect(node.textContent).not.toContain("Coming soon");
+  expect(h.registry).toHaveBeenCalled();
 });

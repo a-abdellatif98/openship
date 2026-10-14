@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import { useI18n } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/Checkbox";
+import { Switch } from "@/components/ui/Switch";
 import { Textarea } from "@/components/ui/textarea";
 import { systemApi } from "@/lib/api/system";
 import { ManagedControlPanel, ConnectionValue } from "./ManagedControlPanel";
@@ -16,8 +16,7 @@ export function ManagedServerNetwork({ serverId }: { serverId: string }) {
     network = common.network;
   const resource = useManagedServerResource(serverId, systemApi.getServerNetworkSettings);
   const settings = resource.data;
-  const checkboxId = useId(),
-    egressId = useId();
+  const egressId = useId();
   const [internet, setInternet] = useState(false);
   const [rules, setRules] = useState("*");
   const [notice, setNotice] = useState<string | null>(null);
@@ -66,30 +65,28 @@ export function ManagedServerNetwork({ serverId }: { serverId: string }) {
   }
   return (
     <ManagedControlPanel
-      title={copy.title}
-      description={copy.description}
-      icon="network"
+      title={network.policyTitle}
+      description={network.policyHint}
+      icon="shield"
       {...resource}
     >
       {!settings && resource.busy && <div className="h-32 animate-pulse rounded-xl bg-muted/40" />}
       {settings && (
         <>
-          <div className="flex items-start gap-3 rounded-xl bg-muted/30 p-4">
-            <Checkbox
-              id={checkboxId}
-              checked={internet}
-              disabled={resource.busy || settings.internetAccess == null}
-              onCheckedChange={setInternet}
-            />
+          <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/30 p-4">
             <div>
-              <label htmlFor={checkboxId} className="text-sm font-medium">
-                {copy.internet}
-              </label>
-              <p className="mt-1 text-sm text-muted-foreground">{copy.internetHint}</p>
+              <p className="text-sm font-medium">{copy.internet}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{copy.internetHint}</p>
               {settings.internetAccess == null && (
                 <p className="mt-2 text-sm text-muted-foreground">{common.unavailable}</p>
               )}
             </div>
+            <Switch
+              checked={internet}
+              disabled={resource.busy || settings.internetAccess == null}
+              onChange={setInternet}
+              ariaLabel={copy.internet}
+            />
           </div>
           <div className="space-y-2">
             <label htmlFor={egressId} className="text-sm font-medium">
@@ -100,7 +97,7 @@ export function ManagedServerNetwork({ serverId }: { serverId: string }) {
               id={egressId}
               dir="ltr"
               variant="filled"
-              className="bg-muted/40 font-mono text-xs"
+              className="font-mono text-sm"
               rows={4}
               value={rules}
               onChange={(event) => setRules(event.target.value)}
@@ -133,38 +130,27 @@ export function ManagedServerNetwork({ serverId }: { serverId: string }) {
               {notice}
             </p>
           )}
-          <div className="grid min-w-0 grid-cols-1 gap-4 @min-[32rem]/server-detail:grid-cols-2">
-            <ConnectionValue
-              label={network.privateIp}
-              value={settings.privateIp ?? common.unavailable}
-            />
-            <ConnectionValue
-              label={network.outboundIp}
-              value={settings.outboundIp ?? common.unavailable}
-            />
-          </div>
-          <div>
-            <h3 className="text-sm font-medium">{network.outboundMode}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {settings.outboundMode === "managed"
-                ? network.managed
-                : settings.outboundMode === "custom"
-                  ? network.custom
-                  : common.unavailable}
-            </p>
-          </div>
-          <div>
-            <h3 className="text-sm font-medium">{copy.routing}</h3>
-            <p className="mt-1 text-sm text-muted-foreground">{network.routingHint}</p>
-            <p className="mt-3 break-words text-xs text-muted-foreground">
-              {copy.ports}:{" "}
-              {settings.ingressAll
-                ? network.allPorts
-                : settings.ingressPorts.length
-                  ? settings.ingressPorts.join(", ")
-                  : network.noPorts}
-            </p>
-          </div>
+          <details className="rounded-xl bg-muted/20 p-4">
+            <summary className="cursor-pointer text-sm font-medium">{network.addresses}</summary>
+            <div className="mt-4 space-y-4">
+              <ConnectionValue
+                label={network.privateIp}
+                value={settings.privateIp ?? common.unavailable}
+              />
+              <div>
+                <h3 className="text-sm font-medium">{copy.routing}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{network.routingHint}</p>
+                <p className="mt-3 break-words text-xs text-muted-foreground">
+                  {copy.ports}:{" "}
+                  {settings.ingressAll
+                    ? network.allPorts
+                    : settings.ingressPorts.length
+                      ? settings.ingressPorts.join(", ")
+                      : network.noPorts}
+                </p>
+              </div>
+            </div>
+          </details>
         </>
       )}
     </ManagedControlPanel>

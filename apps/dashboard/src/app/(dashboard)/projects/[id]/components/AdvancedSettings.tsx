@@ -655,8 +655,8 @@ export const AdvancedSettings = ({ onDeleteProject }: Props) => {
 
         {selfHosted && user?.role === "admin" && projectId && (
           <SectionCard
-            title="Export project"
-            description="Download all project settings, environment values, and credentials as plain JSON."
+            title={t.projectSettings.advanced.export.title}
+            description={t.projectSettings.advanced.export.description}
             icon={"download"}
             iconTone="primary"
             collapsible

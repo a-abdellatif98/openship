@@ -134,8 +134,14 @@ preserves the server and its other projects. The normal project deletion
 choice still controls whether persistent volumes are removed. An application
 rollback reuses project artifacts; it never restores or deletes the whole host.
 
-To delete a server, first remove or migrate its projects and end its
-subscription. Deletion is blocked while a paid period or unresolved checkout
+Removing projects does not cancel a server's subscription. Open the server's
+**Manage subscription** link (also available in its deletion confirmation), then
+choose **Cancel subscription → Stop renewal** in Billing. The confirmed end date
+shows when the paid period finishes; no server or project data is deleted by
+stopping renewal.
+
+To delete a server, first remove or migrate its projects and wait for its
+subscription to end. Deletion is blocked while a paid period or unresolved checkout
 remains. Provider removal must be confirmed before Openship removes workspace
 ownership. Billing records remain with the payment provider. Cancellation by
 itself does not delete project data.

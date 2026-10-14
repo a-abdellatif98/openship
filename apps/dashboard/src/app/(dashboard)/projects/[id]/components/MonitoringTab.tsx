@@ -34,7 +34,7 @@ import {
   useAnalyticsData,
   useAnalyticsGeo,
   useProjectUsageHistory,
-  invalidateProjectCaches,
+  retryProjectRequests,
 } from "@/hooks/useProjectEndpoints";
 import { useProjectUsageStream } from "@/hooks/useProjectUsageStream";
 import { MOCK_VARIANTS, type MockVariant } from "@/components/monitoring/fixtures";
@@ -118,11 +118,18 @@ export const MonitoringTab = () => {
     data: liveAnalytics,
     isLoading: isLoadingAnalytics,
     error: liveAnalyticsError,
+    isRefreshing: isRefreshingAnalytics,
   } = useAnalyticsData(liveId, domainScope);
-  const { data: liveGeo, isLoading: isLoadingGeo } = useAnalyticsGeo(liveId, domainScope);
+  const {
+    data: liveGeo,
+    isLoading: isLoadingGeo,
+    error: geoError,
+    isRefreshing: isRefreshingGeo,
+  } = useAnalyticsGeo(liveId, domainScope);
   const {
     usage: liveUsage,
     isConnected,
+    isConnecting,
     error: usageError,
     reconnect,
   } = useProjectUsageStream(liveId);
@@ -130,8 +137,13 @@ export const MonitoringTab = () => {
   /** Scope for the history read. Held here rather than in the view because it keys the
    *  fetch — the view raises changes through `onServiceKeyChange`. */
   const [serviceKey, setServiceKey] = React.useState<string | null>(null);
-  const { data: liveHistory, isLoading: isLoadingHistory } = useProjectUsageHistory(
-    liveId,
+  const {
+    data: liveHistory,
+    isLoading: isLoadingHistory,
+    error: historyError,
+    isRefreshing: isRefreshingHistory,
+  } = useProjectUsageHistory(
+    isDesktop ? null : liveId,
     serviceKey,
     isDesktop ? undefined : USAGE_HISTORY_POLL_MS,
   );
@@ -150,7 +162,7 @@ export const MonitoringTab = () => {
   const [liveOn, setLiveOn] = useState(false);
   const hits = useLiveHits();
   const [liveStatus, setLiveStatus] = useState<string | null>(null);
-  useRequestLogStream({
+  const { reconnect: reconnectRequests } = useRequestLogStream({
     projectId: id,
     domain: domainScope,
     // When no single domain is scoped (default All), fan out across every route so the map
@@ -162,7 +174,7 @@ export const MonitoringTab = () => {
     enabled: liveOn && !mock,
     onEntry: (e) => hits.push({ country: e.country, path: e.path, statusCode: e.statusCode }),
     onStatus: (st) =>
-      setLiveStatus(st.state === "error" || st.state === "unavailable" ? st.state : null),
+      setLiveStatus(st.state === "open" || st.state === "idle" ? null : st.state),
   });
 
   // Turning it off, or changing which domain is in scope, clears the counter and the feed —
@@ -173,9 +185,10 @@ export const MonitoringTab = () => {
   const setLive = React.useCallback(
     (on: boolean) => {
       resetHits();
+      setLiveStatus(on && !mock ? "connecting" : null);
       setLiveOn(on);
     },
-    [resetHits],
+    [resetHits, mock],
   );
   React.useEffect(() => {
     resetHits();
@@ -336,10 +349,20 @@ export const MonitoringTab = () => {
       historySupported={fixture ? true : !isDesktop}
       usage={usage}
       isUsageConnected={fixture ? true : isConnected}
+      isUsageConnecting={fixture ? false : isConnecting}
       usageError={fixture ? null : usageError}
       onReconnectUsage={reconnect}
       analyticsError={fixture ? null : liveAnalyticsError}
-      onRetryAnalytics={() => id && invalidateProjectCaches(id)}
+      geoError={fixture ? null : geoError}
+      historyError={fixture ? null : historyError}
+      isRefreshingData={
+        !fixture && !!(
+          (liveAnalyticsError && isRefreshingAnalytics) ||
+          (geoError && isRefreshingGeo) ||
+          (historyError && isRefreshingHistory)
+        )
+      }
+      onRetryAnalytics={() => id && retryProjectRequests(id)}
       serviceKey={serviceKey}
       onServiceKeyChange={setServiceKey}
       // Shown on the traffic block's fold line, so a collapsed block still states the
@@ -386,6 +409,7 @@ export const MonitoringTab = () => {
         ripples: hits.ripples,
         feed: hits.feed,
         status: liveStatus,
+        onReconnect: reconnectRequests,
       }}
       onDomainScopeChange={setDomainScope}
     />

@@ -19,7 +19,7 @@
 
 import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import type { Context } from "hono";
-import { AppError } from "@repo/core";
+import { AppError, validateGitHubInstallationScope } from "@repo/core";
 import { getRequestContext } from "../../lib/request-context";
 import { auth } from "@repo/platform/engine/lib/auth";
 import { issueNamespaceToken } from "@repo/platform/engine/lib/openship-cloud";
@@ -82,6 +82,9 @@ import {
 
 /** Coerce a thrown Oblien SDK error into an HTTP response shape. */
 function oblienErrorResponse(c: Context, err: unknown, fallback: string) {
+  // Application permission/validation failures retain their status and safe
+  // response through the shared handler; they are not provider server faults.
+  if (err instanceof AppError) throw err;
   const message = err instanceof Error ? err.message : fallback;
   const status =
     typeof err === "object" && err !== null && "status" in err && typeof (err as { status?: unknown }).status === "number"
@@ -141,23 +144,18 @@ export async function analyticsProxy(c: Context) {
 
 export async function getToken(c: Context) {
   const ctx = getRequestContext(c);
-  const result = await issueNamespaceToken(ctx.organizationId, null);
+  const { authorizeCloudRelayWorkspace } = await import("./cloud-relay-access");
+  const workspaceId = await authorizeCloudRelayWorkspace(ctx);
+  const result = await issueNamespaceToken(ctx.organizationId, workspaceId);
+  c.header("Cache-Control", "no-store");
   return c.json({ data: result });
 }
 
 export async function preflight(c: Context) {
   const ctx = getRequestContext(c);
   const body = await c.req.json<{ slug?: string; customDomain?: string }>();
-  let workspaceId: string | null = null;
-  const serverId = c.req.query("serverId");
-  if (serverId) {
-    const { workspaceForServer } = await import("@repo/platform/engine/lib/cloud-workspace-scope");
-    const { authorization } = await import("@repo/platform/engine/lib/authorization");
-    const { workspace } = await workspaceForServer(ctx.organizationId, serverId);
-    if (!workspace) return c.json({ error: "Managed server not found" }, 404);
-    await authorization.authorize(ctx, { resourceType: "server", resourceId: serverId, action: "write" });
-    workspaceId = workspace.id;
-  }
+  const { authorizeCloudRelayWorkspace } = await import("./cloud-relay-access");
+  const workspaceId = await authorizeCloudRelayWorkspace(ctx, c.req.query("serverId"), "write");
   const result = await runCloudPreflight(ctx.organizationId, {
     slug: body.slug,
     customDomain: body.customDomain,
@@ -1194,7 +1192,7 @@ export async function githubInstallations(c: Context) {
  */
 export async function githubInstallationToken(c: Context) {
   const ctx = getRequestContext(c);
-  const body = await c.req.json<{ owner?: string; repos?: string[] }>();
+  const body = await c.req.json<{ owner?: string; repos?: string[]; permissions?: Record<string, "read" | "write"> }>();
   if (!body.owner) return c.json({ error: "owner is required" }, 400);
 
   // The repo-grant gate. Without it the route's `cloud:write` tag was the only check,
@@ -1203,8 +1201,10 @@ export async function githubInstallationToken(c: Context) {
   // live GitHub App installation token, and the grant system that decides WHICH repos
   // a member may touch was never consulted. The repos-vs-no-repos distinction is the
   // security-relevant part; it lives in canMintInstallationToken.
+  const scope = body.permissions ? validateGitHubInstallationScope(body.repos, body.permissions) : null;
+  const access = scope && Object.values(scope.permissions).includes("write") ? "write" : "read";
   const requested = (body.repos ?? []).map((r) => r.trim()).filter(Boolean);
-  if (!(await canMintInstallationToken(ctx, body.owner, body.repos))) {
+  if (!(await canMintInstallationToken(ctx, body.owner, body.repos, access))) {
     return c.json(
       {
         error: requested.length
@@ -1216,11 +1216,11 @@ export async function githubInstallationToken(c: Context) {
     );
   }
 
-  const result = await mintOrgInstallationToken(ctx.organizationId, body.owner, body.repos);
+  const result = await mintOrgInstallationToken(ctx.organizationId, body.owner, body.repos, scope?.permissions);
   if (result.kind === "not-found") {
     return c.json({ error: `No GitHub App installation found for ${result.owner}` }, 404);
   }
-  return c.json({ data: { token: result.token, expiresAt: result.expiresAt } });
+  return c.json({ data: { token: result.token, expiresAt: result.expiresAt, ...(scope ? { scope } : {}) } });
 }
 
 /**

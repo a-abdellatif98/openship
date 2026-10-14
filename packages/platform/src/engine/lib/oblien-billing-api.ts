@@ -13,6 +13,20 @@ const allowance = amount.nonnegative().nullable();
 const date = z.string().refine((value) => Number.isFinite(Date.parse(value))).nullable();
 const namespace = z.string().min(1).max(128);
 const timestamp = (value: string | null) => value === null ? null : Date.parse(value);
+// The live credit meter, distinct from proposed rate cards or monthly capacity.
+// Actions offers sell 100 credits per dollar; reject a changed conversion rather
+// than silently quote a different purchasing power.
+export const oblienMeteredPricingSchema = z.object({
+  success: z.literal(true),
+  credits_per_dollar: z.literal(100),
+  rate_card_id: z.string().min(1),
+  rates: z.object({
+    cpu_per_min: amount.positive(),
+    memory_per_gb_min: amount.positive(),
+    disk_per_gb: amount.nonnegative(),
+    network_per_gb: amount.nonnegative(),
+  }),
+});
 // These validation refusals occur before a checkout is opened. Use the original
 // provider status: an operator's funding or eligibility error is presented as 503.
 const REJECTED_CHECKOUT_CODES = new Set([
@@ -27,6 +41,7 @@ export const oblienCatalogSchema = z.object({
   reseller: z
     .object({
       contractVersion: amount.int().positive(),
+      checkoutCancellation: z.boolean().optional(),
       offerPolicy: z.boolean(),
       resourceLimits: z.boolean(),
       effectiveResourceLimits: z.boolean().optional(),
@@ -286,12 +301,13 @@ export class OblienBillingApi {
   }
 
   private async request<T>({ method, path, body, query }: Parameters<Oblien["_http"]["request"]>[0]): Promise<T> {
-    if (!path.startsWith("/billing/")) throw new Error("Billing transport only accepts billing routes");
+    const meteredPricing = method === "GET" && path === "/pricing/calculator";
+    if (!path.startsWith("/billing/") && !meteredPricing) throw new Error("Billing transport only accepts billing routes");
     const url = new URL(`${this.baseUrl}${path}`);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
-    const publicRead = method === "GET" && (path === "/billing/catalog" || path === "/billing/capacity/catalog");
+    const publicRead = meteredPricing || (method === "GET" && (path === "/billing/catalog" || path === "/billing/capacity/catalog"));
     const headers: Record<string, string> = { Accept: "application/json" };
     if (!publicRead) {
       if (!this.options.clientId || !this.options.clientSecret) {
@@ -350,6 +366,9 @@ export class OblienBillingApi {
         invalid_redirect_url: "Cloud billing requires a valid HTTPS return link. Contact Openship support.",
         billing_idempotency_conflict: "This checkout attempt no longer matches the original request. Contact Openship support before starting another payment.",
         billing_checkout_reconciliation_required: "An earlier checkout needs to be reviewed. Contact Openship support before starting another payment.",
+        checkout_cancellation_pending:
+          "Cancellation is still being confirmed. Retry the same payment before starting another checkout.",
+        checkout_already_paid: "Payment already completed. Refresh its verification status.",
         checkout_expired: "This checkout has expired. Choose your plan again to start a new checkout.",
         capacity_checkout_expired: "This checkout has expired. Choose your plan again to start a new checkout.",
         invalid_offer: "This Cloud offer is not configured correctly. Contact Openship support.",
@@ -407,6 +426,12 @@ export class OblienBillingApi {
     return this.validate(this.billing.capacityCatalog(), oblienCapacityCatalogSchema);
   }
 
+  /** This public endpoint is not yet exposed by the SDK. Keep it on the same
+   * validated, bounded transport as the SDK's billing calls. */
+  getMeteredPricing() {
+    return this.validate(this.request({ method: "GET", path: "/pricing/calculator" }), oblienMeteredPricingSchema);
+  }
+
   /** Sales check only. Existing contracts and renewal keep their saved tariff. */
   async assertMonthlyCapacitySupport() {
     const catalog = await this.getCapacityCatalog();
@@ -436,9 +461,9 @@ export class OblienBillingApi {
     return this.validate(this.billing.entitlement(slug), oblienEntitlementSchema, slug);
   }
 
-  getCheckout(slug: string, checkoutId: string) {
+  private checkoutResponse(response: Promise<unknown>, slug: string, checkoutId: string) {
     return this.validate(
-      this.billing.checkoutStatus(slug, checkoutId),
+      response,
       z.object({
         success: z.literal(true),
         namespace,
@@ -463,6 +488,24 @@ export class OblienBillingApi {
         }),
       }),
       slug,
+    );
+  }
+
+  getCheckout(slug: string, checkoutId: string) {
+    return this.checkoutResponse(this.billing.checkoutStatus(slug, checkoutId), slug, checkoutId);
+  }
+
+  cancelCheckout(slug: string, checkoutId: string, input: { idempotencyKey: string }) {
+    // Use the existing authenticated, bounded transport until the provider SDK
+    // release includes this endpoint. Validate the original checkout identity.
+    return this.checkoutResponse(
+      this.request({
+        method: "POST",
+        path: `/billing/checkout/${encodeURIComponent(checkoutId)}/cancel`,
+        body: { namespace: slug, idempotencyKey: input.idempotencyKey },
+      }),
+      slug,
+      checkoutId,
     );
   }
 

@@ -65,6 +65,12 @@ const serviceSpec = z.object({
   name: z.string(),
   /** Prebuilt image to pull. Exactly one of `image`/`build` must be set per service. */
   image: z.string().optional(),
+  /** Exact retired defaults eligible for an explicit operator repair. Never auto-upgrade. */
+  replacesImages: z.array(z.string().min(1)).optional(),
+  /** SHA-256 of explicitly retired inline recipes eligible for operator-reviewed
+   * conversion to this image and its runtime setup files. Never auto-applied. */
+  replacesBuilds: z.array(z.string().regex(/^[a-f0-9]{64}$/)).optional(),
+  /** Advisory sizing recommendation, never an installed container limit. */
   resources: z
     .object({
       cpuCores: z.number().min(MIN_CPU_CORES),
@@ -102,6 +108,8 @@ const serviceSpec = z.object({
    * (`a && b`), `commandArgv` when the image needs exact argv.
    */
   commandArgv: z.array(z.string()).optional(),
+  /** Exact image entrypoint override. An empty array clears the image default. */
+  entrypointArgv: z.array(z.string()).optional(),
   /**
    * How long Docker waits after SIGTERM before SIGKILL (compose duration, e.g.
    * "10m"). The engine has always honored `advanced.stopGracePeriod`; only the
@@ -291,6 +299,11 @@ export const appTemplateSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string(),
+  marketplace: z.object({
+    features: z.array(z.object({ title: z.string().min(1), description: z.string().optional() })).optional(),
+    article: z.string().max(200_000).optional(),
+    articleFile: z.string().regex(/^articles\/[a-z0-9][a-z0-9-]*\.md$/).optional(),
+  }).optional(),
   kind: z.enum(["template", "flow"]),
   logo: z.string(),
   category: z.enum(["backend", "database", "cms", "mail", "analytics", "automation", "other"]),
@@ -349,7 +362,19 @@ export const appTemplateSchema = z.object({
   updatedAt: z.string().optional(),
   repository: z.string().url().optional(),
 }).superRefine((data, ctx) => {
-  // Referential integrity — catch dangling references at the gate rather than at
+  for (const [index, service] of (data.services ?? []).entries()) {
+      if (
+        service.entrypointArgv !== undefined &&
+        (!data.minEngine || !templateEngineOk("0.9.2", data.minEngine))
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["services", index, "entrypointArgv"],
+          message: "entrypointArgv requires minEngine >= 0.9.2",
+        });
+      }
+    }
+    // Referential integrity — catch dangling references at the gate rather than at
   // deploy time. Only enforced when the template declares services (flow apps
   // have none). `template:` sources aren't a direct service ref (they embed
   // {{env:svc:KEY}} placeholders), so only env:/publicUrl: sources are checked.

@@ -108,5 +108,6 @@ export const MailRequestSchemas = {
       Type.Object({ kind: Type.Literal("cloud"), serverId: Type.Optional(ResourceIdSchema) }),
     ]),
     replaceLegacy: Type.Optional(Type.Boolean({ default: false })),
+    reconnectProjectId: Type.Optional(ResourceIdSchema),
   }),
 } as const;

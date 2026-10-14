@@ -24,6 +24,8 @@ export const ProjectSchema = Type.Object({
   gitRepo: Type.Optional(nullableString()),
   gitBranch: Type.Optional(nullableString()),
   framework: Type.Optional(nullableString()),
+  runtimeVersion: EnsureProjectBody.properties.runtimeVersion,
+  runtimeImage: EnsureProjectBody.properties.runtimeImage,
   packageManager: Type.Optional(nullableString()),
   localPath: Type.Optional(nullableString()),
   serverId: Type.Optional(nullableString()),
@@ -43,6 +45,7 @@ export const ProjectSchema = Type.Object({
   hasServer: Type.Optional(Type.Boolean()),
   hasBuild: Type.Optional(Type.Boolean()),
   autoDeploy: Type.Optional(Type.Boolean()),
+  githubChecks: EnsureProjectBody.properties.githubChecks,
   port: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
 }, { additionalProperties: true });
 

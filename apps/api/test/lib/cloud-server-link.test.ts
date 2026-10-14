@@ -6,7 +6,7 @@ const h = vi.hoisted(() => ({
   identity: { apiUrl: "https://cloud.example.test", userId: "cloud-user", organizationId: "cloud-org", token: "session" },
   fetch: vi.fn(), link: vi.fn(), workspace: vi.fn(), workspaceById: vi.fn(), workspaces: vi.fn(),
   reserve: vi.fn(), attach: vi.fn(), proxy: vi.fn(), audit: vi.fn(),
-  setNamespace: vi.fn(), finishDeletion: vi.fn(), binding: null as null | { workspaceId: string },
+  setNamespace: vi.fn(), finishDeletion: vi.fn(), projects: vi.fn(), connected: true, binding: null as null | { workspaceId: string },
 }));
 vi.mock("@repo/platform/engine/config/env", () => ({ env: { CLOUD_MODE: false } }));
 vi.mock("@repo/platform/engine/modules/billing/billing-application.service", () => ({ listPlans: vi.fn() }));
@@ -16,7 +16,7 @@ vi.mock("@repo/platform/engine/lib/audit-emitter", () => ({ audit: { recordAsync
 vi.mock("@repo/platform/engine/lib/cloud/transport", async original => ({
   ...await original<typeof import("@repo/platform/engine/lib/cloud/transport")>(),
   resolveOrgCloudUserId: async () => "local-owner",
-  readCloudSession: async () => ({ ...h.identity }),
+  readCloudSession: async () => h.connected ? { ...h.identity } : null,
   cloudFetchAsOrgOwner: h.fetch,
 }));
 vi.mock("@repo/platform/engine/lib/provision-lock", () => ({ createProvisionLock: () => ({ run: (work: () => Promise<unknown>) => work() }) }));
@@ -24,9 +24,10 @@ vi.mock("@repo/db", () => ({ repos: {
   cloudWorkspace: { findById: h.workspaceById, findByIdInOrganization: h.workspace, link: h.link, setNamespace: h.setNamespace,
     finishDeletion: h.finishDeletion, listByOrganization: h.workspaces },
   server: { findByWorkspace: async () => ({ id: "local-server", workspaceId: "local-workspace" }) },
+  project: { listByWorkspace: h.projects },
   cloudDockerWorkspace: { reserve: h.reserve, attach: h.attach, updateResources: vi.fn(), markReady: vi.fn() },
 } }));
-import { connectCloudServer, requireLinkedCloudServer, confirmLinkedServerDeletion } from "@repo/platform/engine/lib/cloud/server-link";
+import { connectCloudServer, requireLinkedCloudServer, confirmLinkedServerDeletion, linkedServerSummary, linkedServerRequest } from "@repo/platform/engine/lib/cloud/server-link";
 import { remoteServerConnection } from "@repo/platform/engine/lib/cloud/server-connection";
 import { billingDependencies } from "@repo/platform/engine/modules/billing/billing.operations";
 
@@ -46,6 +47,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 beforeEach(() => {
   vi.resetAllMocks(); Object.assign(h.identity, { ...remote, token: "session" });
+  h.connected = true;
+  h.projects.mockResolvedValue([]);
   h.workspace.mockImplementation(async (id, org) => id === row.id && org === row.organizationId ? row : undefined);
   h.workspaceById.mockImplementation(async id => id === row.id ? row : undefined);
   h.workspaces.mockResolvedValue([]);
@@ -53,6 +56,51 @@ beforeEach(() => {
   h.binding = null;
   h.reserve.mockImplementation(async () => h.binding ?? {});
   h.fetch.mockImplementation(async (_org: string, path: string) => json(path.endsWith("/authorize") ? authorized : server));
+});
+
+describe("linked server connection feedback", () => {
+  it("retains the explicit link and classifies missing sign-in without contacting Cloud", async () => {
+    h.connected = false;
+    expect(await linkedServerSummary(row as never)).toMatchObject({
+      id: row.id, serverId: "local-server", subscriptionStatus: "unavailable", resources: null,
+      connectionIssue: "not_connected",
+    });
+    expect(h.fetch).not.toHaveBeenCalled();
+    expect(h.finishDeletion).not.toHaveBeenCalled();
+    expect(h.link).not.toHaveBeenCalled();
+  });
+  it("distinguishes the wrong Cloud account from missing sign-in and recovers on reconnect", async () => {
+    h.identity.userId = "another-user";
+    expect(await linkedServerSummary(row as never)).toMatchObject({ connectionIssue: "account_mismatch" });
+    expect(h.fetch).not.toHaveBeenCalled();
+    h.identity.userId = remote.userId;
+    const result = await linkedServerSummary(row as never);
+    expect(result).toMatchObject({ id: row.id, serverId: "local-server", state: "running", resources: summary.resources });
+    expect(result).not.toHaveProperty("connectionIssue");
+    expect(h.link).not.toHaveBeenCalled();
+  });
+  it("keeps temporary Cloud failure distinct from a disconnected account", async () => {
+    h.fetch.mockResolvedValue(null);
+    expect(await linkedServerSummary(row as never)).toMatchObject({ connectionIssue: "unavailable" });
+  });
+  it("offers sign-in when Cloud rejects an expired session without discarding the link", async () => {
+    h.fetch.mockResolvedValue(json({ error: "Unauthorized", code: "UNAUTHORIZED" }, 401));
+    expect(await linkedServerSummary(row as never)).toMatchObject({ connectionIssue: "not_connected" });
+    expect(h.finishDeletion).not.toHaveBeenCalled();
+  });
+  it.each(["/managed/outbound", "/managed/outbound/options"])("reports an unsupported Cloud route for %s without bypassing Cloud", async suffix => {
+    h.fetch.mockResolvedValue(new Response("404 Not Found", { status: 404 }));
+    await expect(linkedServerRequest(row.organizationId, row.id, suffix)).rejects.toMatchObject({
+      statusCode: 501, code: "CLOUD_SERVER_CONTROL_UNAVAILABLE",
+    });
+    expect(h.fetch).toHaveBeenCalledExactlyOnceWith(row.organizationId, `/api/system/servers/${remote.serverId}${suffix}`, undefined, remote);
+  });
+  it("preserves a structured resource 404 instead of mistaking it for an old API", async () => {
+    h.fetch.mockResolvedValue(json({ error: "Server not found", code: "SERVER_NOT_FOUND" }, 404));
+    await expect(linkedServerRequest(row.organizationId, row.id, "/managed/outbound")).rejects.toMatchObject({
+      statusCode: 404, code: "SERVER_NOT_FOUND",
+    });
+  });
 });
 
 describe("linked server checkout recovery", () => {

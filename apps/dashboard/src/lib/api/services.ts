@@ -132,6 +132,8 @@ export interface ServiceContainer {
   serviceName: string;
   containerId: string | null;
   status: string;
+  /** Docker's reported healthcheck result; absent/null is not proof of health. */
+  health?: "healthy" | "starting" | "unhealthy" | null;
   ip: string | null;
   hostPort: number | null;
   imageRef: string | null;
@@ -194,6 +196,7 @@ export type ServiceInput = {
   environment?: Record<string, string | null> | null;
   volumes?: string[];
   command?: string;
+  commandArgv?: string[];
   restart?: string;
   advanced?: ComposeAdvancedPatch;
   exposed?: boolean;

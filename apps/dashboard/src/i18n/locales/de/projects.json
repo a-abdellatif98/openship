@@ -34,6 +34,7 @@
     "local": "Lokal"
   },
   "card": {
+    "more": "Mehr",
     "liveVersion": "Live-Version v{version}",
     "sourceLocal": "Lokal",
     "services": "Dienste",
@@ -243,7 +244,10 @@
     "noTransfer": "Noch keine Übertragung"
   },
   "analytics": {
-    "loadFailed": "Traffic-Analysen konnten nicht geladen werden"
+    "loadFailed": "Traffic-Analysen konnten nicht geladen werden",
+    "loadFailedDescription": "Erneut versuchen, um die neuesten Daten zu laden.",
+    "sectionsUnavailable": "Nicht verfügbar: {sections}.",
+    "staleData": "Die zuletzt verfügbaren Daten werden angezeigt."
   },
   "monitoring": {
     "noDataTitle": "Noch keine Monitoring-Daten",
@@ -308,7 +312,11 @@
       "disable": "Top-Pfade deaktivieren"
     },
     "liveFeed": "Letzte Treffer",
-    "liveFeedHint": "Liste der letzten Treffer auf der Karte anzeigen (alle Details im Protokoll-Tab)"
+    "liveFeedHint": "Liste der letzten Treffer auf der Karte anzeigen (alle Details im Protokoll-Tab)",
+    "dataUnavailable": "Einige Überwachungsdaten sind nicht verfügbar",
+    "connecting": "Verbindung wird hergestellt…",
+    "liveUnavailable": "Live-Anfragen nicht verfügbar",
+    "liveUnavailableDescription": "Bisheriger Datenverkehr wird weiterhin angezeigt. Für Live-Anfragen erneut verbinden."
   },
   "services": {
     "failedLoad": "Dienste konnten nicht geladen werden",
@@ -403,6 +411,8 @@
     "fixStep3": "Verifiziere die Domain und stelle bereit."
   },
   "connections": {
+    "nativeClusterHint": "Wähle ein Projekt im Cluster dieser Datenbank. Nur verknüpfte Projekte erhalten privaten Zugriff.",
+    "nativeNoTargets": "Noch kein anderes Projekt verwendet diesen Cluster.",
     "useInProject": "In einem Projekt verwenden",
     "title": "In einem Projekt verwenden",
     "subtitle": "Teile diesen Dienst über eine Verbindung mit einem anderen Projekt.",

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Oblien } from "oblien";
 import { CloudInfraProvider } from "./cloud";
+import { probePublicTlsCertificate } from "../system/tls-probe";
+
+vi.mock("../system/tls-probe", () => ({ probePublicTlsCertificate: vi.fn() }));
 
 const hostname = "app.example.com";
 const expiry = "2030-01-01T00:00:00.000Z";
@@ -10,6 +13,7 @@ let pages: Record<string, ReturnType<typeof vi.fn>>;
 let provider: CloudInfraProvider;
 
 beforeEach(() => {
+  vi.mocked(probePublicTlsCertificate).mockReset().mockImplementation(async domain => ({ domain, verified: true, expiresAt: expiry, issuer: "Let's Encrypt", reason: "issued" }));
   page = { slug: "route-one", domain: "opsh.io", url: `https://${hostname}`, custom_domain: hostname,
     namespace: "ns-one", source_workspace_id: "ws-one", exported_path: "/opt/openship/cloud-docker/routes/route-one" };
   routes = vi.fn(async () => ({ data: [{ hostname, namespace: "ns-one", owner_type: "page", owner_id: "route-one", is_custom: 1 }] }));
@@ -22,6 +26,31 @@ beforeEach(() => {
 });
 
 describe("Cloud custom-domain certificates", () => {
+  it("rejects an apex-only live certificate even when the provider reports active", async () => {
+    vi.mocked(probePublicTlsCertificate).mockResolvedValue({ domain: hostname, verified: false, expiresAt: "", issuer: "", reason: "edge_invalid" });
+    await expect(provider.verifyCert(hostname)).resolves.toMatchObject({ verified: false, reason: "edge_invalid" });
+    await expect(provider.provisionCert(hostname)).resolves.toMatchObject({ verified: false });
+    expect(pages.renewSSL).not.toHaveBeenCalled();
+  });
+
+  it("reports accepted renewal as pending until the served certificate is valid", async () => {
+    vi.mocked(probePublicTlsCertificate).mockResolvedValueOnce({ domain: hostname, verified: false, expiresAt: expiry, issuer: "", reason: "edge_invalid" });
+    await expect(provider.renewCert(hostname)).resolves.toMatchObject({ verified: false, reason: "pending" });
+    await expect(provider.verifyCert(hostname)).resolves.toMatchObject({ verified: true });
+    expect(pages.renewSSL).toHaveBeenCalledOnce();
+  });
+
+  it("does not report provider rejection as a successful renewal", async () => {
+    pages.renewSSL.mockResolvedValue({ success: false });
+    await expect(provider.renewCert(hostname)).rejects.toThrow("did not accept");
+    expect(probePublicTlsCertificate).not.toHaveBeenCalled();
+  });
+
+  it("keeps an unreachable observer distinct from an invalid certificate", async () => {
+    vi.mocked(probePublicTlsCertificate).mockResolvedValue({ domain: hostname, verified: false, expiresAt: "", issuer: "", reason: "read_error" });
+    await expect(provider.verifyCert(hostname)).resolves.toMatchObject({ reason: "read_error" });
+    expect(pages.renewSSL).not.toHaveBeenCalled();
+  });
   it("reads the flat Page domain response returned by deployed Oblien APIs", async () => {
     await expect(provider.verifyCert(hostname)).resolves.toMatchObject({ domain: hostname, verified: true, expiresAt: expiry });
     expect(pages.renewSSL).not.toHaveBeenCalled();
@@ -42,11 +71,18 @@ describe("Cloud custom-domain certificates", () => {
     expect(pages.renewSSL).not.toHaveBeenCalled();
   });
 
-  it("reads the renewed certificate after a pending first response", async () => {
-    pages.getDomain.mockResolvedValueOnce({ domain: { customDomain: hostname, sslStatus: "pending", sslExpiry: null } });
+  it("reads the served certificate after requesting a missing certificate", async () => {
+    pages.getDomain.mockResolvedValueOnce({ domain: { customDomain: hostname, sslStatus: "missing", sslExpiry: null } });
     await expect(provider.provisionCert(hostname)).resolves.toMatchObject({ verified: true, reason: "renewed" });
     expect(pages.renewSSL).toHaveBeenCalledOnce();
     expect(pages.renewSSL).toHaveBeenCalledWith("route-one");
+  });
+
+  it("waits for an issuance already in progress without requesting another", async () => {
+    pages.getDomain.mockResolvedValue({ domain: { customDomain: hostname, sslStatus: "pending", sslExpiry: null } });
+    await expect(provider.provisionCert(hostname)).resolves.toMatchObject({ verified: false, reason: "pending" });
+    expect(pages.renewSSL).not.toHaveBeenCalled();
+    expect(probePublicTlsCertificate).not.toHaveBeenCalled();
   });
 
   it.each(["2000-01-01", "not-a-date", null])("does not accept a certificate with invalid expiry %s", async (value) => {
@@ -58,6 +94,7 @@ describe("Cloud custom-domain certificates", () => {
     routes.mockResolvedValue({ data: [{ hostname, namespace: "ns-other", owner_type: "page", is_custom: 1 }] });
     await expect(provider.provisionCert(hostname)).rejects.toMatchObject({ code: "CLOUD_DOMAIN_NOT_CONNECTED", statusCode: 409 });
     expect(pages.getDomain).not.toHaveBeenCalled();
+    expect(probePublicTlsCertificate).not.toHaveBeenCalled();
     expect(pages.renewSSL).not.toHaveBeenCalled();
   });
 

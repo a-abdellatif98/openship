@@ -178,6 +178,24 @@ function providerError(status: number, body: unknown): OblienError {
  * requests, reject credential redirects, and keep provider bodies private while
  * preserving SDK cancellation and token refresh/restore. */
 export class Oblien extends OblienSdk {
+  /** Provider's public egress picker. SDK 2.10 exposes applying an IP but not
+   * listing it. Keep this fixed endpoint and strip all pool credentials here. */
+  async listOutboundIps(): Promise<{ ip: string; countryCode: string | null }[]> {
+    const response = await this._http.request<{ success: boolean; proxies: unknown }>({
+      method: "GET", path: "/zone/mine",
+    });
+    if (response.success !== true || !Array.isArray(response.proxies) || response.proxies.length > 10_000)
+      throw new OblienError("Outbound addresses are unavailable", 502, "OBLIEN_OUTBOUND_OPTIONS_INVALID");
+    const ips = new Map<string, { ip: string; countryCode: string | null }>();
+    for (const item of response.proxies) {
+      if (!item || typeof item !== "object" || typeof item.ip !== "string" ||
+          !/^(?:\d{1,3}\.){3}\d{1,3}$/.test(item.ip) || item.ip.split(".").some((octet: string) => Number(octet) > 255))
+        throw new OblienError("Outbound addresses are unavailable", 502, "OBLIEN_OUTBOUND_OPTIONS_INVALID");
+      ips.set(item.ip, { ip: item.ip, countryCode: typeof item.country_code === "string" && /^[A-Z]{2}$/.test(item.country_code) ? item.country_code : null });
+    }
+    return [...ips.values()];
+  }
+
   constructor(options: OblienOptions) {
     const base = new URL(options.baseUrl ?? "https://api.oblien.com");
     if (base.username || base.password || base.search || base.hash ||

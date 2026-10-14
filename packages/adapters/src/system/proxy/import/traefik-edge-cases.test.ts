@@ -308,8 +308,23 @@ describe("traefik: rule parsing", () => {
         },
       }),
     ]);
-    expect(res.sites).toEqual([]);
-    expect(res.warnings[0]).toContain("without a root");
+    expect(res.sites).toHaveLength(1);
+    expect(res.sites[0].serverNames).toEqual(["a.example.com"]);
+    expect(res.sites[0].routes).toEqual([
+      { path: "/x", url: "http://172.18.0.5:80" },
+      { path: "/y", url: "http://172.18.0.5:80" },
+    ]);
+    expect(res.warnings).toEqual([]);
+  });
+
+  test.each(["/mcp", "/"])("preserves a single exact %s match without a catch-all", (path) => {
+    const res = parseTraefikLabels([
+      box({ name: "a", labels: { "traefik.http.routers.r.rule": `Host(\`a.example.com\`) && Path(\`${path}\`)` } }),
+    ]);
+    expect(res.sites).toHaveLength(1);
+    expect(res.sites[0].routes).toEqual([
+      { path, exact: true, url: expect.stringMatching(/^http:\/\//) },
+    ]);
   });
 
   test("uppercase HOST( and single quotes both parse", () => {

@@ -16,14 +16,40 @@ export { DEV_LOCK_TAKEOVER_GRACE_MS, isDevWatchReload } from "./pglite-lock";
 export {
   withAdvisoryLock,
   tryAcquireAdvisoryLock,
+  runOutsideAdvisoryLock,
   hashStringToInt,
   type AdvisoryLockHandle,
 } from "./advisory-lock";
 
 // ─── Schema (table definitions) ──────────────────────────────────────────────
 export * as schema from "./schema";
+export type { ActionRunConfiguration } from "./schema/actions";
+export {
+  githubActionRunId,
+  githubActionJobId,
+  type ActionRunnerSession,
+} from "./repos/action-github.repo";
+export {
+  createActionsRepo,
+  type ActionRunner,
+  type ActionWorkflow,
+  type ActionRun,
+  type ActionJob,
+  type ActionDelivery,
+} from "./repos/actions.repo";
+export type { ActionDeploymentRequest } from "./repos/action-project.repo";
+export {
+  createActionStorageRepo,
+  type ActionStorageObject,
+  type ActionStorageChunk,
+} from "./repos/action-storage.repo";
 export type { ComposeServiceSpec, ServicePublicEndpoint } from "./schema/service";
-export type { CloudWorkspaceOperation, CloudWorkspaceActivity, LinkedCloudServer, CloudSubscriptionChangeIntent } from "./schema/cloud-workspace";
+export type {
+  CloudWorkspaceOperation,
+  CloudWorkspaceActivity,
+  LinkedCloudServer,
+  CloudSubscriptionChangeIntent,
+} from "./schema/cloud-workspace";
 export type { ServerContainerDetail } from "./schema/server-container-status";
 export type {
   IncomingWebhookActionType,
@@ -257,3 +283,7 @@ export {
   createClusterDatabaseRepo,
   type ClusterDatabaseRecord,
 } from "./repos/cluster-database.repo";
+
+export type { CloudBuildActivity } from "./schema/cloud-build-activity";
+export { createCloudBuildActivityRepo, reserveCloudBuildActivity, type CloudBuildActivityIdentity, type CloudBuildResources } from "./repos/cloud-build-activity.repo";
+export { createDeploymentCheckRepo, type DeploymentCheck } from "./repos/deployment-check.repo";

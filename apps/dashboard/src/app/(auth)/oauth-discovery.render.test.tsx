@@ -1,15 +1,19 @@
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "@/components/i18n-provider";
 import { AuthProviders } from "./providers";
 import LoginPage from "./login/page";
 import RegisterPage from "./register/page";
+import ForgotPasswordPage from "./forgot-password/page";
+import ResetPasswordPage from "./reset-password/page";
 
+const h = vi.hoisted(() => ({ query: "" }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(h.query),
 }));
+beforeEach(() => { h.query = ""; });
 vi.mock("@/components/auth-shell", () => ({ AuthShell: ({ children }: { children: ReactNode }) => children }));
 
 function render(Page: typeof LoginPage, selfHosted: boolean, authMode: "local" | "none" | "cloud" = "local") {
@@ -24,6 +28,13 @@ function render(Page: typeof LoginPage, selfHosted: boolean, authMode: "local" |
 }
 
 describe("auth pages use the advertised login providers", () => {
+  it.each([LoginPage, RegisterPage, ForgotPasswordPage, ResetPasswordPage])("retains the app in auth navigation", Page => {
+    const destination = "/apps/new/minio";
+    h.query = new URLSearchParams({ returnTo: destination }).toString();
+    const html = render(Page, false);
+    expect(html).toContain(`returnTo=${encodeURIComponent(destination)}`);
+    expect(html).not.toContain('href="/login"');
+  });
   it.each([true, false])("renders only configured providers on the login page (self-hosted: %s)", selfHosted => {
     const html = render(LoginPage, selfHosted);
     expect(html).toContain("Continue with GitHub");

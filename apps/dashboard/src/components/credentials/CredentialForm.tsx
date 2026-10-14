@@ -50,6 +50,9 @@ export function CredentialForm({
     provider.selector &&
     normalizeCredentialSelector(provider, selector) !== existing.selector,
   );
+  const pLoc = (copy as any)?.providers?.[provider.id];
+  const selectorLabel = pLoc?.selector?.label ?? provider.selector?.label;
+  const selectorHelp = pLoc?.selector?.help ?? provider.selector?.help;
 
   async function submit() {
     if (busy.current) return;
@@ -109,7 +112,7 @@ export function CredentialForm({
             htmlFor={`${id}-selector`}
             className="mb-1.5 block text-sm font-medium text-foreground"
           >
-            {provider.selector.label}
+            {selectorLabel}
           </label>
           <Input
             id={`${id}-selector`}
@@ -124,19 +127,23 @@ export function CredentialForm({
           />
           {provider.selector.help && (
             <p id={`${id}-selector-help`} className="mt-1.5 text-xs text-muted-foreground">
-              {provider.selector.help}
+              {selectorHelp}
             </p>
           )}
         </div>
       )}
 
-      {provider.fields.map((field) => (
+      {provider.fields.map((field) => {
+        const fieldLoc = pLoc?.fields?.[field.key];
+        const fieldLabel = fieldLoc?.label ?? field.label;
+        const fieldHelp = fieldLoc?.help ?? field.help;
+        return (
         <div key={field.key}>
           <label
             htmlFor={`${id}-${field.key}`}
             className="mb-1.5 block text-sm font-medium text-foreground"
           >
-            {field.label}
+            {fieldLabel}
           </label>
           {field.type === "select" ? (
             <CustomSelect
@@ -173,13 +180,13 @@ export function CredentialForm({
               className={field.type === "secret" ? "font-mono" : undefined}
             />
           )}
-          {field.help && (
+          {fieldHelp && (
             <p id={`${id}-${field.key}-help`} className="mt-1.5 text-xs text-muted-foreground">
-              {field.help}
+              {fieldHelp}
             </p>
           )}
         </div>
-      ))}
+      );})}
 
       {error && (
         <p role="alert" className="rounded-xl bg-danger-bg p-3 text-sm text-danger break-words">

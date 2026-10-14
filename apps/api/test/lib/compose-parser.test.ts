@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { serializeEnvFile } from "@repo/core";
+import { toDockerHealthcheck, toStopConfig } from "../../../../packages/adapters/src/runtime/docker";
 import {
   blockingComposeFields,
   parseComposeEnvFile,
@@ -8,6 +9,11 @@ import {
 } from "@repo/platform/engine/lib/compose-parser";
 
 describe("parseComposeFile", () => {
+  it("preserves host-gateway aliases with one interpolation pass", () => {
+    const parsed = parseComposeFile('services:\n  webmail:\n    image: webmail:test\n    extra_hosts:\n      - "mail.example.com=${ADDRESS}"\n', { envFileContent: 'ADDRESS=host-gateway\n' });
+    expect(parsed.services[0]?.advanced?.extraHosts).toEqual({ "mail.example.com": "host-gateway" });
+    expect(() => parseComposeFile('services:\n  app:\n    image: app:test\n    extra_hosts:\n      mail: "invalid"\n')).toThrow(/addresses/);
+  });
   it("resolves Docker Compose environment interpolation from .env content", () => {
     const parsed = parseComposeFile(
       `
@@ -1198,6 +1204,56 @@ describe("parseComposeFile — shutdown behavior (stop_signal / stop_grace_perio
     expect(parsed.services[0]?.advanced?.stopGracePeriod).toBe("30");
   });
 
+  // The runtime treats an unreadable duration as unset, so Docker's 10s default
+  // replaces the grace period the author meant. The warning is how they find out.
+  it("warns, without blocking, when stop_grace_period is not a whole duration", () => {
+    const parsed = parseComposeFile(svc("    stop_grace_period: 1m30\n"));
+    const warning = parsed.unsupported.find((u) => u.field === "stop_grace_period");
+    expect(warning?.reason).toContain("is not a duration");
+    expect(warning?.blocking).toBeFalsy();
+    expect(parsed.services).toHaveLength(1);
+  });
+
+  it("warns about a healthcheck timing that is not a whole duration", () => {
+    const parsed = parseComposeFile(
+      svc(
+        '    healthcheck:\n      test: ["CMD", "true"]\n      interval: 1m30\n      timeout: 5s\n',
+      ),
+    );
+    const fields = parsed.unsupported.map((u) => u.field);
+    expect(fields).toContain("healthcheck.interval");
+    expect(fields).not.toContain("healthcheck.timeout");
+  });
+
+  it("does not warn about a bare-number grace period", () => {
+    const parsed = parseComposeFile(svc("    stop_grace_period: 30\n"));
+    expect(parsed.unsupported.map((u) => u.field)).not.toContain("stop_grace_period");
+  });
+
+  it("preserves valid Compose timings through parsing and Docker configuration", () => {
+    for (const [value, ns, seconds] of [
+      ["+90s", 90_000_000_000, 90],
+      [".5s", 500_000_000, 1],
+      ["1.s", 1_000_000_000, 1],
+      ["1d", 86_400_000_000_000, 86400],
+      ["1w", 604_800_000_000_000, 604800],
+      ["1μs", 1000, 1],
+    ] as const) {
+      const parsed = parseComposeFile(
+        svc(
+          `    stop_grace_period: "${value}"\n    healthcheck:\n      test: ["CMD", "true"]\n      interval: "${value}"\n`,
+        ),
+      );
+      const advanced = parsed.services[0]?.advanced;
+      expect(parsed.unsupported, value).toEqual([]);
+      expect(toStopConfig(advanced), value).toEqual({ StopTimeout: seconds });
+      expect(toDockerHealthcheck(advanced?.healthcheck), value).toEqual({
+        Test: ["CMD", "true"],
+        Interval: ns,
+      });
+    }
+  });
+
   it("interpolates stop_signal from the env file", () => {
     const parsed = parseComposeFile(svc("    stop_signal: ${SIG}\n"), {
       envFileContent: "SIG=SIGQUIT\n",
@@ -1468,5 +1524,166 @@ services:
     );
 
     expect(resolved.env.PATH).toBe("/usr/bin:/app/bin");
+  });
+});
+
+/**
+ * GPU. Docker has no "GPU" field: the container only sees a card if the CREATE carried a device
+ * request, and OpenShip used to drop every spelling of it (`devices`/`runtime` were reported as not
+ * modeled, `deploy.resources.reservations` was never read). So a GPU service deployed fine, ran, and
+ * silently fell back to CPU.
+ */
+describe("parseComposeFile — GPU", () => {
+  const svc = (body: string) => `services:\n  app:\n    image: nvidia/cuda\n${body}`;
+  const gpuOf = (body: string) => {
+    const value = parseComposeFile(svc(body)).services[0]?.advanced?.gpus;
+    return Array.isArray(value) ? value[0] : value;
+  };
+
+  it("reads deploy.resources.reservations.devices (the Compose Specification form)", () => {
+    expect(
+      gpuOf(
+        "    deploy:\n      resources:\n        reservations:\n          devices:\n" +
+          "            - driver: nvidia\n              count: 1\n              capabilities: [gpu]\n",
+      ),
+    ).toEqual({ driver: "nvidia", count: 1, capabilities: ["gpu"] });
+  });
+
+  it("treats a missing count and `count: all` as every GPU (Compose's own default)", () => {
+    const body = (count: string) =>
+      "    deploy:\n      resources:\n        reservations:\n          devices:\n" +
+      `            - capabilities: [gpu]\n${count}`;
+    expect(gpuOf(body(""))?.count).toBe("all");
+    expect(gpuOf(body("              count: all\n"))?.count).toBe("all");
+    expect(gpuOf(body("              count: -1\n"))?.count).toBe("all");
+  });
+
+  it("keeps device_ids instead of a count", () => {
+    expect(
+      gpuOf(
+        "    deploy:\n      resources:\n        reservations:\n          devices:\n" +
+          "            - driver: nvidia\n              device_ids: ['0', 'GPU-abc']\n              capabilities: [gpu]\n",
+      ),
+    ).toEqual({ driver: "nvidia", deviceIds: ["0", "GPU-abc"], capabilities: ["gpu"] });
+  });
+
+  it("reads the short `gpus: all` form", () => {
+    expect(gpuOf("    gpus: all\n")).toEqual({
+      driver: "nvidia",
+      count: "all",
+      capabilities: ["gpu"],
+    });
+  });
+
+  it("keeps `runtime: nvidia` distinct from an all-GPU device request", () => {
+    const parsed = parseComposeFile(svc("    runtime: nvidia\n"));
+    expect(parsed.services[0]?.advanced).toMatchObject({ runtime: "nvidia" });
+    expect(parsed.services[0]?.advanced?.gpus).toBeUndefined();
+    expect(parsed.unsupported.map((u) => u.field)).not.toContain("runtime");
+  });
+
+  it("still reports a non-nvidia runtime (it is not a GPU and is still ignored)", () => {
+    const parsed = parseComposeFile(svc("    runtime: runsc\n"));
+    expect(parsed.services[0]?.advanced?.gpus).toBeUndefined();
+    expect(parsed.unsupported.map((u) => u.field)).toContain("runtime");
+  });
+
+  it("ignores reservations.devices entries that are not GPUs", () => {
+    expect(
+      gpuOf(
+        "    deploy:\n      resources:\n        reservations:\n          devices:\n" +
+          "            - driver: tpu\n              capabilities: [tpu]\n",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("memory/CPU reservations alone are not a GPU and are not an error", () => {
+    const parsed = parseComposeFile(
+      svc(
+        "    deploy:\n      resources:\n        reservations:\n          memory: 512M\n          cpus: '0.5'\n",
+      ),
+    );
+    expect(parsed.services[0]?.advanced?.gpus).toBeUndefined();
+  });
+
+  it("keeps the limits next to a GPU reservation", () => {
+    const parsed = parseComposeFile(
+      svc(
+        "    deploy:\n      resources:\n        limits:\n          memory: 2G\n" +
+          "        reservations:\n          devices:\n            - capabilities: [gpu]\n",
+      ),
+    );
+    const adv = parsed.services[0]?.advanced;
+    expect(adv?.resources?.memoryMb).toBe(2048);
+    expect(adv?.gpus).toMatchObject({ count: "all" });
+  });
+
+  it("a service with no GPU key has no `gpus` at all (absent, not empty)", () => {
+    expect(gpuOf("")).toBeUndefined();
+  });
+});
+
+describe("Compose GPU selectors are never broadened or silently discarded", () => {
+  const parse = (body: string) =>
+    parseComposeFile(`services:\n  app:\n    image: nvidia/cuda\n${body}`);
+
+  it.each(["wrong", "0.5", "-2", "65"])(
+    "blocks invalid count %s instead of allocating all devices",
+    (count) => {
+      const parsed = parse(`    gpus:\n      - driver: nvidia\n        count: ${count}\n`);
+      expect(parsed.unsupported).toContainEqual(
+        expect.objectContaining({ field: "gpus", blocking: true }),
+      );
+      expect(parsed.services[0]?.advanced?.gpus).toBeUndefined();
+    },
+  );
+
+  it("preserves explicit zero and every valid device group from both Compose spellings", () => {
+    const parsed = parse(
+      "    deploy:\n      resources:\n        reservations:\n          devices:\n            - driver: nvidia\n              count: 0\n              capabilities: [gpu]\n    gpus:\n      - driver: nvidia\n        device_ids: ['0']\n        options: {mode: passthrough}\n      - driver: nvidia\n        device_ids: ['1']\n",
+    );
+    expect(parsed.unsupported).toEqual([]);
+    expect(parsed.services[0]?.advanced?.gpus).toEqual([
+      { driver: "nvidia", count: 0, capabilities: ["gpu"] },
+      {
+        driver: "nvidia",
+        deviceIds: ["0"],
+        capabilities: ["gpu"],
+        options: { mode: "passthrough" },
+      },
+      { driver: "nvidia", deviceIds: ["1"], capabilities: ["gpu"] },
+    ]);
+  });
+
+  it("preserves legacy device selection from a runtime environment without inventing DeviceRequests", () => {
+    const parsed = parse(
+      "    runtime: nvidia\n    environment:\n      NVIDIA_VISIBLE_DEVICES: '0'\n",
+    );
+    expect(parsed.services[0]?.advanced?.runtime).toBe("nvidia");
+    expect(parsed.services[0]?.advanced?.gpus).toBeUndefined();
+    expect(parsed.services[0]?.environment.NVIDIA_VISIBLE_DEVICES).toBe("0");
+  });
+
+  it.each([
+    "    gpus:\n      - driver: amd\n        count: 1\n",
+    "    gpus:\n      - device_ids: ['0']\n        count: 1\n",
+    "    gpus:\n      - device_ids: []\n",
+    "    gpus:\n      - countt: 1\n",
+    "    gpus: wrong\n",
+    "    deploy:\n      resources:\n        reservations:\n          devices:\n            - driver: nvidia\n              count: 1\n",
+  ])("blocks GPU requests whose semantics cannot be honored", (body) => {
+    expect(parse(body).unsupported).toContainEqual(expect.objectContaining({ blocking: true }));
+  });
+
+  it("interpolates device selectors without turning missing mandatory values into all", () => {
+    const body = "    gpus:\n      - device_ids: ['${GPU_ID:?choose a GPU}']\n";
+    const missing = parse(body);
+    expect(missing.missingRequired).toMatchObject([{ variable: "GPU_ID" }]);
+    expect(missing.unsupported).toContainEqual(expect.objectContaining({ blocking: true }));
+    const configured = parseComposeFile(`services:\n  app:\n    image: nvidia/cuda\n${body}`, {
+      env: { GPU_ID: "GPU-specific" },
+    });
+    expect(configured.unsupported).toEqual([]);
+    expect(configured.services[0]?.advanced?.gpus).toMatchObject({ deviceIds: ["GPU-specific"] });
   });
 });

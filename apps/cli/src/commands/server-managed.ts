@@ -2,14 +2,46 @@ import { Command } from "commander";
 import {
   ResizeManagedServerInputSchema,
   RemoveManagedServerInputSchema,
+  ServerResourceSchemas,
   parseInput,
 } from "@repo/contracts";
 import { getShipClient } from "../lib/ship-client";
 import { confirmOrExit, printResult } from "../lib/cmd-helpers";
+import { readJsonInput } from "../lib/command-input";
 
 export const managedServerCommand = new Command("managed").description(
   "Manage subscription-owned Cloud servers and connected Cloud destinations",
 );
+const outbound = new Command("outbound").description(
+  "Inspect and configure a managed server's outbound connection",
+);
+outbound
+  .command("get")
+  .argument("<id>", "Server ID")
+  .description("Read the current outbound IP, proxy metadata and revision without credentials")
+  .action((id: string) => printResult(() => getShipClient().servers.managedOutbound(id)));
+outbound
+  .command("options")
+  .argument("<id>", "Server ID")
+  .description("List available managed outbound IPs and countries")
+  .action((id: string) => printResult(() => getShipClient().servers.managedOutboundOptions(id)));
+outbound
+  .command("set")
+  .argument("<id>", "Server ID")
+  .argument(
+    "<file>",
+    "Reviewed JSON with mode, expectedRevision, confirm and ip or proxy; - reads stdin",
+  )
+  .description("Apply an outbound connection change for all projects on this server")
+  .option("-y, --yes", "Confirm the reviewed outbound change")
+  .action((id: string, file: string, opts) =>
+    printResult(async () => {
+      const input = parseInput(ServerResourceSchemas.setManagedOutbound.input, readJsonInput(file));
+      await confirmOrExit(opts.yes, `Change outgoing connections for every project on ${id}?`);
+      return getShipClient().servers.setManagedOutbound(id, input);
+    }),
+  );
+managedServerCommand.addCommand(outbound);
 managedServerCommand
   .command("list")
   .alias("ls")
@@ -39,7 +71,8 @@ managedServerCommand
   .description(
     "Create a managed server entry; use billing subscription create to purchase its plan",
   )
-  .action((name: string) => printResult(() => getShipClient().servers.createManaged({ name })));
+  .option("--idempotency-key <key>", "Reuse this server entry after an uncertain create response")
+  .action((name: string, opts) => printResult(() => getShipClient().servers.createManaged({ name, idempotencyKey: opts.idempotencyKey })));
 managedServerCommand
   .command("ensure")
   .argument("<id>", "Managed server ID")

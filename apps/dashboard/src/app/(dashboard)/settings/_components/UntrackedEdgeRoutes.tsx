@@ -145,7 +145,13 @@ export function UntrackedEdgeRoutes() {
             <UiIcon name="server-off" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0">
               <p className="text-[13px] font-medium text-foreground">{copy.unavailable}</p>
-              {scan.reason && <p className="mt-0.5 text-xs text-muted-foreground">{scan.reason}</p>}
+              {scan.reason && (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {scan.reason === "No reverse proxy detected on this machine."
+                    ? (copy.noReverseProxy ?? scan.reason)
+                    : scan.reason}
+                </p>
+              )}
             </div>
           </div>
         )}

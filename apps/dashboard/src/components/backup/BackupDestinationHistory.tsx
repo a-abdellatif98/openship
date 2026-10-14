@@ -78,14 +78,11 @@ export function BackupDestinationHistory({ refreshKey }: { refreshKey: unknown }
 
   return (
     <>
-      <section
-        aria-label={b.recent.title}
-        className="min-w-0 overflow-hidden rounded-2xl border border-border/50 bg-card"
-      >
+      <section aria-label={b.recent.title} className="min-w-0 overflow-hidden rounded-2xl bg-card">
         <div className="flex items-start justify-between gap-4 px-5 py-4">
           <div>
-            <h2 className="text-base font-medium text-foreground">{b.recent.title}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{m.historyDescription}</p>
+            <h2 className="text-sm font-medium text-foreground">{b.recent.title}</h2>
+            <p className="sr-only">{m.historyDescription}</p>
           </div>
           {refreshing && data && (
             <Icon
@@ -126,15 +123,15 @@ export function BackupDestinationHistory({ refreshKey }: { refreshKey: unknown }
           </div>
         ) : data ? (
           <div className="relative overflow-x-auto">
-            <table className="w-full min-w-[760px] table-fixed text-start text-xs">
-              <colgroup>
+            <table className="block w-full table-fixed text-start text-xs md:table">
+              <colgroup className="hidden md:table-column-group">
                 <col className="w-[30%]" />
                 <col />
                 <col className="w-44" />
                 <col className="w-20" />
                 <col className="w-40" />
               </colgroup>
-              <thead className="border-y border-border/40 bg-muted/20 text-muted-foreground">
+              <thead className="hidden border-b border-border/40 text-[11px] text-muted-foreground md:table-header-group">
                 <tr>
                   <th className="px-5 py-3 text-start font-medium" scope="col">
                     {b.recent.backup}
@@ -153,7 +150,7 @@ export function BackupDestinationHistory({ refreshKey }: { refreshKey: unknown }
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/40">
+              <tbody className="block divide-y divide-border/40 md:table-row-group">
                 {data.runs.map((run) => {
                   const name = sourceName(run);
                   const contextName = run.projectName ?? run.mailServerName;
@@ -172,8 +169,11 @@ export function BackupDestinationHistory({ refreshKey }: { refreshKey: unknown }
                     !!run.serviceId &&
                     !!run.projectId;
                   return (
-                    <tr key={run.id} className="hover:bg-muted/20">
-                      <td className="px-5 py-3">
+                    <tr
+                      key={run.id}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] px-5 py-3 hover:bg-muted/20 md:table-row md:p-0"
+                    >
+                      <td className="col-span-2 pb-3 md:px-5 md:py-4">
                         <div className="flex items-center gap-2">
                           <span
                             className="truncate text-sm font-medium text-foreground"
@@ -197,11 +197,11 @@ export function BackupDestinationHistory({ refreshKey }: { refreshKey: unknown }
                                   {source}
                                 </Link>
                               ) : (
-                                <span className="truncate" title={source}>{source}</span>
+                                <span className="truncate" title={source}>
+                                  {source}
+                                </span>
                               ))}
-                            {source && run.destinationName && (
-                              <span aria-hidden="true">·</span>
-                            )}
+                            {source && run.destinationName && <span aria-hidden="true">·</span>}
                             {run.destinationName &&
                               (run.destinationId ? (
                                 <Link
@@ -224,10 +224,10 @@ export function BackupDestinationHistory({ refreshKey }: { refreshKey: unknown }
                           </p>
                         )}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="min-w-0 py-1 md:px-3 md:py-4">
                         <Payloads payloads={run.payloads} />
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
+                      <td className="col-start-1 row-start-3 min-w-0 py-1 text-muted-foreground md:whitespace-nowrap md:px-3 md:py-4">
                         <time
                           dateTime={run.startedAt}
                           className="block truncate"
@@ -242,14 +242,14 @@ export function BackupDestinationHistory({ refreshKey }: { refreshKey: unknown }
                           {trigger}
                         </p>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-3 text-end tabular-nums text-muted-foreground">
+                      <td className="col-start-2 row-start-2 whitespace-nowrap py-1 text-end tabular-nums text-muted-foreground md:px-3 md:py-4">
                         {run.bytesTransferred === null ? "—" : formatBytes(run.bytesTransferred)}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="col-start-2 row-start-3 py-1 md:px-3 md:py-4">
                         <div className="flex items-center justify-end gap-1">
                           {canRestore ? (
                             <Button
-                              variant="outline"
+                              variant="secondary"
                               size="sm"
                               className="min-w-0"
                               disabled={opening !== null}

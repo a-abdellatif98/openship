@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { MailCertificateHealth } from "@repo/core";
 import type { Database } from "../client";
 import { mailServers, servers } from "../schema";
@@ -167,6 +167,16 @@ export function createMailServerRepo(db: Database) {
         .update(mailServers)
         .set({ webmailProjectId: projectId, updatedAt: new Date() })
         .where(eq(mailServers.serverId, serverId));
+    },
+
+    /** Explicit recovery cannot overwrite a link set by another request or recreate a forgotten server. */
+    async reconnectWebmailProject(serverId: string, domain: string, projectId: string): Promise<boolean> {
+      const rows = await db.update(mailServers)
+        .set({ webmailProjectId: projectId, updatedAt: new Date() })
+        .where(and(eq(mailServers.serverId, serverId), eq(mailServers.domain, normalizeDomain(domain)),
+          isNull(mailServers.webmailProjectId)))
+        .returning();
+      return rows.length === 1;
     },
 
     /** Drop the record on uninstall / reset. */

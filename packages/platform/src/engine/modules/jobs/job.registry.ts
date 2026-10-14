@@ -15,6 +15,7 @@
  */
 
 import { repos } from "@repo/db";
+import { env } from "../../config/env";
 import { platform } from "@repo/platform/engine/lib/platform-config";
 import { renewExpiringCerts } from "@repo/platform/engine/lib/ssl-scheduler";
 import { runOrphanSweep } from "@repo/platform/engine/modules/projects/orphan-gc-schedule";
@@ -70,6 +71,12 @@ const ANALYTICS_ROLLUP_RETENTION_DAYS = 400;
 const RESOURCE_USAGE_RETENTION_DAYS = 30;
 
 export const SYSTEM_JOB_DEFS: SystemJobDef[] = [
+  {
+    key: "github:deployment-checks",
+    label: "GitHub deployment Checks",
+    defaultCron: "*/10 * * * * *",
+    run: async () => (await import("../deployments/deployment-checks")).runDeploymentChecksSweep(),
+  },
   {
     key: "cloud:workspace-recovery",
     label: "Cloud workspace operations",
@@ -234,6 +241,28 @@ export const SYSTEM_JOB_DEFS: SystemJobDef[] = [
     },
   },
   {
+    key: "deployments:cloud-build-queue",
+    label: "Cloud build queue",
+    available: () => env.CLOUD_MODE,
+    defaultCron: "* * * * *",
+    run: async () => {
+      const { drainCloudBuildQueue } = await import("../deployments/cloud-build-queue");
+      return drainCloudBuildQueue();
+    },
+  },
+  {
+    key: "deployments:cloud-build-recovery",
+    label: "Cloud build recovery",
+    available: () => env.CLOUD_MODE,
+    defaultCron: "* * * * *",
+    run: async () => {
+      // Command recovery on an unreachable server must not delay normal queue
+      // dispatch on unrelated servers. It has its own independently scheduled job.
+      const { recoverCloudBuildQueue } = await import("../deployments/cloud-build-queue");
+      return recoverCloudBuildQueue();
+    },
+  },
+  {
     key: "deployments:reconcile",
     label: "Deployment reconcile",
     defaultCron: "*/10 * * * *",
@@ -261,6 +290,15 @@ export const SYSTEM_JOB_DEFS: SystemJobDef[] = [
         sslIssued: r.sslIssued ?? 0,
         sslRetrying: r.sslRetrying ?? 0,
       };
+    },
+  },
+  {
+    key: "domains:check-https",
+    label: "Cloud HTTPS health",
+    defaultCron: "2-59/5 * * * *",
+    run: async () => {
+      const { checkCloudDomainHttps } = await import("../domains/cloud-ssl-health");
+      return checkCloudDomainHttps();
     },
   },
   {
@@ -416,7 +454,6 @@ export const SYSTEM_JOB_DEFS: SystemJobDef[] = [
     // Build cache is daemon-wide and has no reliable project label. Keep a 5 GiB
     // LRU budget on each Docker host instead of coupling it to image retention.
     defaultCron: "37 4 * * *",
-    available: () => platform().target !== "cloud",
     run: async () => {
       const r = await runBuildCacheGcSweep();
       return {

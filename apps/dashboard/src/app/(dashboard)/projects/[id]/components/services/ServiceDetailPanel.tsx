@@ -35,12 +35,12 @@ import { ServiceEnvironmentPanel } from "./ServiceEnvironmentPanel";
 import { TerminalLogs } from "../logs/TerminalLogs";
 import { endpoints } from "@/lib/api/endpoints";
 import { useI18n, interpolate } from "@/components/i18n-provider";
-import { useLocalhostForward } from "@/hooks/useLocalhostForward";
 import { UseInProjectModal } from "../UseInProjectModal";
 import { ServiceOverview } from "./ServiceOverview";
 import { ServiceTerminalPanel } from "./ServiceTerminalPanel";
 import { ServiceVolumesPanel } from "./ServiceVolumesPanel";
 import { ServiceDomainsPanel } from "./ServiceDomainsPanel";
+import { ServiceLocalhostAction } from "./ServiceLocalhostAction";
 import type { ServiceDomainIntent } from "./ServicePortsCard";
 import { configuredServiceEndpoints } from "@/lib/service-endpoints";
 
@@ -130,33 +130,6 @@ export function ServiceDetailPanel({
   const serviceOperationBusy = actionLoading !== null || deploying || redeploying || applyingEnvironment;
   const status = getServiceStatus(service, container, containerChecking);
 
-  // Desktop-only "Open": SSH-forward this service's published host port onto
-  // localhost and open it — the same affordance the project card offers. Hidden
-  // unless we're a desktop dashboard managing a remote server (backend 404s
-  // otherwise). Port comes from the live container, else the compose mapping.
-  const { canForward, forward } = useLocalhostForward({ serverId, deployTarget });
-  const [openingLocal, setOpeningLocal] = useState(false);
-  const forwardPort =
-    container?.hostPort ||
-    (() => {
-      for (const p of service.ports ?? []) {
-        const parts = String(p).split(":");
-        const host = parts.length >= 2 ? Number(parts[parts.length - 2]) : NaN;
-        if (Number.isFinite(host)) return host;
-      }
-      return service.exposedPort ? Number(service.exposedPort) : 0;
-    })();
-  const canOpenLocal = canForward && Number.isFinite(forwardPort) && forwardPort > 0;
-  const openOnLocalhost = async () => {
-    if (!forwardPort || openingLocal) return;
-    setOpeningLocal(true);
-    try {
-      await forward(forwardPort, "open");
-    } finally {
-      setOpeningLocal(false);
-    }
-  };
-
   // Backup only applies to compose services (stateful containers) — never
   // monorepo sub-apps (source-built frontends).
   const supportsBackup = serviceKind(service) === "compose";
@@ -214,16 +187,24 @@ export function ServiceDetailPanel({
   // the parked session rather than spawning a fresh shell.
   const [terminalResumeToken, setTerminalResumeToken] = useState<string | null>(null);
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const key = `openship.serviceterm.resume.${service.id}`;
-    setTerminalResumeToken(window.localStorage.getItem(key));
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return;
+      const key = `openship.serviceterm.resume.${service.id}`;
+      setTerminalResumeToken(window.localStorage.getItem(key));
+    } catch {
+      // diagnostics-ignore: localStorage access may fail in restricted/private browsing mode.
+    }
   }, [service.id]);
   const persistResumeToken = (token: string | null) => {
     setTerminalResumeToken(token);
-    if (typeof window === "undefined") return;
-    const key = `openship.serviceterm.resume.${service.id}`;
-    if (token) window.localStorage.setItem(key, token);
-    else window.localStorage.removeItem(key);
+    try {
+      if (typeof window === "undefined" || !window.localStorage) return;
+      const key = `openship.serviceterm.resume.${service.id}`;
+      if (token) window.localStorage.setItem(key, token);
+      else window.localStorage.removeItem(key);
+    } catch {
+      // diagnostics-ignore: localStorage write may fail in restricted/private browsing mode.
+    }
   };
 
   // ── Backup section state ────────────────────────────────────────────
@@ -374,7 +355,10 @@ export function ServiceDetailPanel({
         changeTab("env");
         return;
       }
-      if (action !== "stop" && showCloudPricing(err)) return;
+      if (action !== "stop" && showCloudPricing(err, async () => {
+        await servicesApi[action](projectId, service.id);
+        onRefresh();
+      })) return;
       showToast(
         getApiErrorMessage(err, t.projectDetail.services.detail.toast.deployFailed),
         "error",
@@ -623,20 +607,12 @@ export function ServiceDetailPanel({
               <UiIcon name="plug" className="size-3.5" />{t.projects.connections.useInProject}
             </Button>
           )}
-          {canOpenLocal && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={openOnLocalhost}
-              disabled={openingLocal}
-              title={t.projects.connections.openLocalhost}
-              className="h-9"
-            >
-              <UiIcon name="devices" className={openingLocal ? "size-3.5 animate-pulse" : "size-3.5"} />
-              {t.projects.connections.openLocalhost}
-            </Button>
-          )}
+          <ServiceLocalhostAction
+            service={service}
+            container={container}
+            serverId={serverId}
+            deployTarget={deployTarget}
+          />
           <Button
             type="button"
             variant="ghost"

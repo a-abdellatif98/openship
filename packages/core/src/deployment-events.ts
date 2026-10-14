@@ -65,6 +65,8 @@ export interface PortCheckResult {
   listening: boolean;
   /** False = probe inconclusive (runtime can't exec inside / probe errored) — no advisory. */
   checked: boolean;
+  /** Confirmed Docker listener reachable only within its network namespace. */
+  loopbackOnly?: boolean;
   /** Compose only: which service this result belongs to. */
   serviceId?: string;
   serviceName?: string;
@@ -72,3 +74,25 @@ export interface PortCheckResult {
   skippedReason?: "not-exposed" | "no-exec" | "no-port";
 }
 
+/** Shared diagnosis for persisted checks, live hints and deployment review. */
+export function getPortCheckIssue(
+  check: Partial<PortCheckResult>,
+): "not-listening" | "loopback-only" | null {
+  if (
+    check.checked !== true ||
+    !Number.isInteger(check.port) ||
+    (check.port ?? 0) < 1 ||
+    (check.port ?? 0) > 65535
+  )
+    return null;
+  if (check.listening === false) return "not-listening";
+  return check.listening === true && check.loopbackOnly === true ? "loopback-only" : null;
+}
+
+/** Match the existing dismissal contract, including single apps with a service id. */
+export function getPortCheckTarget(
+  check: Pick<PortCheckResult, "port" | "serviceId">,
+  isCompose: boolean,
+): number | string {
+  return isCompose && check.serviceId ? check.serviceId : check.port;
+}

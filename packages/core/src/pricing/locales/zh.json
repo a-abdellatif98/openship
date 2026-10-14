@@ -34,7 +34,6 @@
     "sharedBuilds": "构建共享服务器资源，无每月时长上限",
     "power": "每个应用最高可达 {powerCpu} vCPU 和 {powerRamGb} GB RAM",
     "projects": "{maxProjects} 个项目",
-    "projectsUnlimited": "项目不限数量",
     "freeSubdomains": "{freeSubdomains} 个免费 {freeDomainSuffix} 子域名",
     "freeSubdomainsUnlimited": "免费 {freeDomainSuffix} 子域名不限数量",
     "gitDeploys": "从 GitHub、GitLab 或任意 Git 远端部署",

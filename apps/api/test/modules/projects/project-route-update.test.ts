@@ -22,6 +22,11 @@ const routeState = vi.hoisted(() => ({
 
 const applyProjectRouting = vi.hoisted(() => vi.fn());
 
+// Route writers are mocked below; Cloud activity admission is outside this suite.
+vi.mock("@repo/platform/engine/lib/cloud-workspace-lock", () => ({
+  withCloudWorkspaceActivity: async (_id: unknown, work: () => Promise<unknown>) => work(),
+}));
+
 vi.mock("@repo/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@repo/db")>();
   return {
@@ -132,6 +137,25 @@ describe("updateProject route persistence", () => {
     releaseRoute();
     await updating;
     expect(settled).toBe(true);
+  });
+
+  it.each([
+    { label: "clear all routing", routingConfig: null },
+    { label: "clear proxy settings", routingConfig: { proxy: {}, cleanUrls: true } },
+    { label: "carry unchanged legacy proxy with a routing edit", routingConfig: { proxy: { gzip: true }, cleanUrls: true } },
+  ])("allows Cloud to $label", async ({ routingConfig }) => {
+    projectRepo.findById.mockResolvedValue({ ...project, workspaceId: "ws1", routingConfig: { proxy: { gzip: true } } });
+    await updateProject(project.id, { routingConfig }, project.organizationId);
+    expect(projectRepo.update).toHaveBeenCalledWith(project.id, expect.objectContaining({ routingConfig }));
+    expect(applyProjectRouting).toHaveBeenCalled();
+  });
+
+  it("persists and applies changed self-hosted proxy settings", async () => {
+    projectRepo.findById.mockResolvedValue({ ...project, serverId: "selfhost", routingConfig: { proxy: { gzip: true } } });
+    const routingConfig = { proxy: { gzip: false } };
+    await updateProject(project.id, { routingConfig }, project.organizationId);
+    expect(projectRepo.update).toHaveBeenCalledWith(project.id, expect.objectContaining({ routingConfig }));
+    expect(applyProjectRouting).toHaveBeenCalled();
   });
 
   it("does not start a live route writer after deletion has claimed the project", async () => {

@@ -492,5 +492,22 @@
         }
       ]
     }
-  ]
+  ],
+  "marketplace": {
+    "features": [
+      {
+        "title": "Postgres foundation",
+        "description": "Build on a relational database and SQL."
+      },
+      {
+        "title": "Application APIs",
+        "description": "Auth, REST, realtime, and storage in one stack."
+      },
+      {
+        "title": "Studio dashboard",
+        "description": "Inspect and manage the backend in your browser."
+      }
+    ],
+    "articleFile": "articles/supabase.md"
+  }
 }

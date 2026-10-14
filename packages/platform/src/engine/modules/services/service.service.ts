@@ -22,6 +22,8 @@ import {
   isValidEnvKey,
   looksLikeSecretKey,
   mergeAdvanced,
+  parseContainerHosts,
+  validateComposeGpuConfig,
   normalizeServiceLabel,
   normalizeAliasStrict,
   resolveCommandArgv,
@@ -677,6 +679,10 @@ export async function createService(
   // strips the `null`-means-remove sentinels the update path accepts, so a
   // caller can send one payload shape to both.
   const advanced = mergeAdvanced(null, data.advanced);
+  validateComposeGpuConfig(advanced);
+  if (advanced.extraHosts !== undefined) {
+    advanced.extraHosts = parseContainerHosts(advanced.extraHosts);
+  }
   if (advanced.files !== undefined) {
     assertValidGeneratedConfigFiles(advanced.files);
   }
@@ -809,6 +815,11 @@ export async function updateService(
   // deep merge would make a partially-specified healthcheck inherit stale fields.
   if ("advanced" in patch) {
     patch.advanced = mergeAdvanced(svc.advanced as ComposeAdvanced | null, patch.advanced);
+    validateComposeGpuConfig(patch.advanced as ComposeAdvanced);
+    const extraHosts = (patch.advanced as ComposeAdvanced).extraHosts;
+    if (extraHosts !== undefined) {
+      (patch.advanced as ComposeAdvanced).extraHosts = parseContainerHosts(extraHosts);
+    }
     if ((patch.advanced as ComposeAdvanced).files !== undefined) {
       assertValidGeneratedConfigFiles((patch.advanced as ComposeAdvanced).files);
     }
@@ -1498,6 +1509,10 @@ export async function syncComposeServices(
       ? unmaskEnv(svc.environment, storedEnvByName.get(svc.name) ?? null)
       : svc.environment;
     const advanced = svc.advanced as ComposeAdvanced | undefined;
+    validateComposeGpuConfig(advanced);
+    if (advanced?.extraHosts !== undefined) {
+      advanced.extraHosts = parseContainerHosts(advanced.extraHosts);
+    }
     const hasExplicitTemplateMarker = Object.hasOwn(advanced ?? {}, "environmentTemplateKeys");
     const markedTemplateKeys = advanced?.environmentTemplateKeys ?? [];
     // Three provenance levels, in priority order:
@@ -1631,6 +1646,7 @@ export interface LiveServiceContainer {
    *  out-of-band recreate. */
   containerId: string | null;
   status: ServiceContainerState;
+  health?: "healthy" | "starting" | "unhealthy" | null;
   ip: string | null;
   hostPort: number | null;
   imageRef: string | null;
@@ -1745,6 +1761,7 @@ export async function getActiveServiceContainers(
                   serviceName: svc.name,
                   containerId: m?.containerId ?? null,
                   status: m?.status ?? "stopped",
+                  health: m?.health ?? null,
                   ip: m?.ip ?? null,
                   hostPort: m?.hostPort ?? hint?.hostPort ?? null,
                   imageRef: m?.image ?? hint?.imageRef ?? null,
@@ -2292,6 +2309,10 @@ async function prepareServiceStart(ctx: RequestContext, projectId: string, servi
         });
       }
       if (!service.enabled) await repos.service.update(serviceId, { enabled: true });
+      // Reserve a stopped container's slot before releasing the organization lock.
+      // A failed/ambiguous start retains the reservation until a confirmed stop.
+      if (existing?.row?.status === "stopped")
+        await repos.service.updateServiceDeployment(existing.row.id, { status: "starting" });
       return existing;
     } catch (error) {
       disposeRuntime(existing?.runtime);

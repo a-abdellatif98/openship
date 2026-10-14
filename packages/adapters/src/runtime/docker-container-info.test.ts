@@ -52,6 +52,7 @@ describe("Docker container information normalization", () => {
 
     expect(containerInfoFromDockerSummary(summary)).toEqual({
       containerId: "container-id",
+      imageId: "sha256:api",
       status,
       ip: "172.18.0.8",
     });

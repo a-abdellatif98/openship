@@ -11,10 +11,32 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { db, eq, repos, schema } from "@repo/db";
+import { db, eq, repos, schema, type DatabaseTransaction } from "@repo/db";
 import { provisionUser } from "@repo/platform/engine/lib/provision-user";
 
 export const LOCAL_EMAIL = "local@openship.local";
+
+/** A wipe keeps installation authority but replaces its users. Rebind only a
+ * missing identity on an ordinary active instance to the imported synthetic
+ * administrator. Handoffs choose their identity through their own protocol. */
+export async function rebindLocalUserAfterInstanceRestore(tx: DatabaseTransaction): Promise<void> {
+  const [controller] = await tx
+    .select()
+    .from(schema.instanceController)
+    .where(eq(schema.instanceController.id, "local"));
+  if (!controller?.desktopUserId || controller.role !== "active" || controller.handoffId) return;
+  const [current] = await tx
+    .select()
+    .from(schema.user)
+    .where(eq(schema.user.id, controller.desktopUserId));
+  if (current) return;
+  const [imported] = await tx.select().from(schema.user).where(eq(schema.user.email, LOCAL_EMAIL));
+  if (imported?.role !== "admin" || !imported.autoProvisioned) return;
+  await tx
+    .update(schema.instanceController)
+    .set({ desktopUserId: imported.id })
+    .where(eq(schema.instanceController.id, "local"));
+}
 
 /** Reset the in-process cache. Use after mutating the local user row
  *  (e.g. the zero-auth → local-auth upgrade flow renames the user). */

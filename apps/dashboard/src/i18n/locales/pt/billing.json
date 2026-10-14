@@ -101,6 +101,7 @@
     }
   },
   "plansRoute": {
+    "requestedPlanUnavailable": "O plano selecionado não está mais disponível. Escolha outro plano abaixo.",
     "loadError": "Falha ao carregar os planos",
     "genericError": "Algo deu errado",
     "tryAgain": "Tentar novamente",
@@ -292,7 +293,8 @@
     "cancelNotice": "A renovação será interrompida no fim do período pago. Sua assinatura permanece em vigor até lá.",
     "confirmCancel": "Interromper renovação",
     "keepPlan": "Manter assinatura",
-    "error": "Não foi possível atualizar sua assinatura. Tente novamente."
+    "error": "Não foi possível atualizar sua assinatura. Tente novamente.",
+    "manage": "Gerenciar assinatura"
   },
   "checkout": {
     "checking": "Confirmando sua compra…",
@@ -343,6 +345,7 @@
     }
   },
   "resourcesGuide": {
+    "concurrentBuilds": "Compilações simultâneas",
     "title": "Como funciona o uso do Cloud",
     "credits": "Créditos Cloud",
     "creditsHint": "Compilações e aplicativos ativos consomem créditos por CPU, memória, atividade de disco e transferência de dados. Cargas maiores consomem créditos mais rápido.",
@@ -582,7 +585,7 @@
     "save": "Salvar",
     "delete": "Excluir servidor",
     "confirmDelete": "Excluir este servidor vazio",
-    "deleteHint": "Primeiro remova todos os projetos e encerre a assinatura. Isso exclui permanentemente o servidor vazio e os dados restantes do disco.",
+    "deleteHint": "Excluir projetos não cancela a assinatura. Interrompa a renovação em Faturamento e aguarde o fim do período pago antes de excluir um servidor com assinatura. A exclusão remove permanentemente o servidor vazio e os dados restantes no disco.",
     "buildCapacityTitle": "Verifique a capacidade do servidor",
     "buildCapacityHint": "Os builds usam a capacidade livre deste servidor. Pare um serviço ocioso ou aumente a capacidade e tente novamente.",
     "openWorkspace": "Abrir servidor",
@@ -824,7 +827,8 @@
     "monthly": "por mês",
     "annual": "por ano",
     "oneTime": "pagamento único",
-    "cancelUnavailable": "O cancelamento deste pagamento não está disponível agora. Atualize ou contate o suporte.",
+    "cancelUnavailable": "Não foi possível verificar o cancelamento. Atualize o status do pagamento.",
+    "cancelUnsupported": "Este pagamento não pode ser cancelado aqui. Conclua-o ou aguarde sua expiração antes de escolher outro plano.",
     "support": "Contatar o suporte",
     "cancelHint": "O link de pagamento será fechado. Depois, você poderá escolher outro plano.",
     "confirmCancel": "Confirmar cancelamento",

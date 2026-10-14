@@ -487,7 +487,11 @@ export class ClusterStorageAdapter {
             ...object.metadata.labels,
             "openship.io/runtime": this.runtimeId,
           };
-          object.spec.backoffLimit = 0;
+          // Keep the pinned job's bounded retry. Its settings informer can still
+          // be cold when other caches have synced, reporting the default false
+          // even after confirmation was saved. Disabling native retry turns that
+          // startup race into a failed removal. Cleanup still waits for the Job's
+          // terminal success through runClusterJob.
           object.spec.template.spec.nodeSelector = { "openship.io/runtime": this.runtimeId };
           await runClusterJob(this.api, object, {
             signal: this.signal,

@@ -6,6 +6,7 @@ import { Icon as UiIcon } from "@repo/ui/icons";
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { buildAuthPageHref } from "@/lib/cloud-auth";
 import { emailOtp, resetPassword } from "@/lib/auth-client";
 import { useToast } from "@/components/toast";
 import { useI18n, interpolate } from "@/components/i18n-provider";
@@ -125,7 +126,7 @@ function ResetPasswordForm() {
         description={t.auth.resetPassword.doneDescription}
         email={done.email}
         actionLabel={t.auth.resetPassword.doneAction}
-        actionHref="/login"
+        actionHref={buildAuthPageHref("/login", searchParams)}
       />
     );
   }
@@ -232,7 +233,7 @@ function ResetPasswordForm() {
       </form>
 
       <p className="mt-8 text-center text-sm text-muted-foreground">
-        <Link href="/login" className="font-medium text-foreground transition-colors hover:underline">
+        <Link href={buildAuthPageHref("/login", searchParams)} className="font-medium text-foreground transition-colors hover:underline">
           {t.auth.resetPassword.backToSignIn}
         </Link>
       </p>

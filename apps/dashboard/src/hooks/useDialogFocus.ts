@@ -7,13 +7,21 @@ export function useDialogFocus(onClose: () => void) {
   const dialog = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
-    // Focus existing content immediately. Shared Modal can mount its portal
-    // after this effect, so defer only when its content is not mounted yet.
-    let frame: number | undefined;
+    // Shared Modal mounts its portal after this effect. A single animation
+    // frame can run before that commit and leave focus behind the backdrop.
+    // Observe only until the ref is attached, then release the observer.
+    let observer: MutationObserver | undefined;
     if (dialog.current) dialog.current.focus();
-    else frame = requestAnimationFrame(() => dialog.current?.focus());
+    else {
+      observer = new MutationObserver(() => {
+        if (!dialog.current) return;
+        observer?.disconnect();
+        dialog.current.focus();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
     return () => {
-      if (frame !== undefined) cancelAnimationFrame(frame);
+      observer?.disconnect();
       if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, []);

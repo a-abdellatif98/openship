@@ -22,6 +22,7 @@ import { clearHostControlCache, syncHostControlOverride } from "@repo/platform/e
 import { invalidateLocalUserCache } from "./local-user";
 import { invalidateInstanceTransportCache, invalidatePlatformTransport } from "@repo/platform/engine/lib/mail";
 import { invalidateMcpSigningKeyCache } from "./mcp-oidc-keys";
+import { invalidateActionOidcKeyCache } from "@repo/platform/engine/modules/actions/oidc-cache";
 import { clearProductModeCache } from "@repo/platform/engine/lib/product-mode";
 import { invalidateSelfAppPublicUrl } from "@repo/platform/engine/lib/public-url";
 import { sshManager } from "@repo/platform/engine/lib/ssh-manager";
@@ -52,6 +53,7 @@ export async function reconcileRuntimeStateAfterImport(): Promise<void> {
   run("instance SMTP", invalidateInstanceTransportCache);
   run("platform SMTP", () => invalidatePlatformTransport());
   run("MCP signing key", invalidateMcpSigningKeyCache);
+  run("Actions OIDC signing key", invalidateActionOidcKeyCache);
   run("SSH connections", () => sshManager.invalidate());
   run("mail reachability", clearMailPortReachabilityCache);
   run("service volume sizes", clearServiceVolumeSizeCache);

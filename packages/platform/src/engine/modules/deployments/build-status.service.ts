@@ -7,6 +7,7 @@ import { snapshotToClass } from "./deployment-class";
 import { STEP_INDEX, STEP_PROGRESS } from "./build-steps";
 import { isMultiServiceProject } from "./compose/index";
 import { serviceKind } from "../../lib/deployable-service";
+import { getCloudBuildQueueStatus } from "./cloud-build-queue-status";
 import { terminalMessages } from "./terminal-messages";
 import { maskServicesEnv } from "../../lib/secret-env";
 import { resolveProjectRouteState } from "../domains/project-route.service";
@@ -43,9 +44,13 @@ export async function getBuildSessionStatus(deploymentId: string) {
   const terminalStatus = dep.status === "cancelled" || buildSessionRow?.status === "cancelled"
     ? "cancelled"
     : terminalBuildStatus(dep.status) ?? terminalBuildStatus(buildSessionRow?.status ?? "");
-  const effectiveStatus = terminalStatus ?? memSession?.status ?? buildSessionRow?.status ?? dep.status;
+  const queue = terminalStatus ? null : await getCloudBuildQueueStatus(project, dep).catch((error) => {
+    observeCaughtError(error, "platform/engine/modules/deployments/build-status.service");
+    return null;
+  });
+  const effectiveStatus = queue ? "queued" : terminalStatus ?? memSession?.status ?? buildSessionRow?.status ?? dep.status;
   const isActive =
-    terminalStatus === undefined &&
+    queue === null && terminalStatus === undefined &&
     memSession != null && !["ready", "failed", "cancelled"].includes(memSession.status);
 
   const logEntries = isActive
@@ -211,6 +216,7 @@ export async function getBuildSessionStatus(deploymentId: string) {
     deployment_id: dep.id,
     project_id: project.id,
     status: effectiveStatus,
+    queue,
     is_active: isActive,
     logs: logsText,
     logEntries: structuredLogs,

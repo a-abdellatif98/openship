@@ -315,11 +315,7 @@ export function BackupSettings(): React.JSX.Element {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">{m.title}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{b.overview.description}</p>
-        </div>
+      <div className="flex justify-end">
         <Button variant="outline" size="sm" onClick={() => void reload()} disabled={refreshing}>
           <Icon name="refresh" className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
           {b.services.refresh}

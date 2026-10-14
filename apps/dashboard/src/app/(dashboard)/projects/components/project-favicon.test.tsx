@@ -9,6 +9,9 @@ import type { Project } from "@/constants/mock";
 import ProjectCard from "./ProjectCard";
 import ProjectGridCard from "./ProjectGridCard";
 
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+
 let root: Root | undefined;
 let container: HTMLDivElement;
 let complete: boolean;
@@ -69,3 +72,24 @@ for (const [name, Card] of [["list", ProjectCard], ["grid", ProjectGridCard]] as
     });
   });
 }
+
+
+it("opens the grid More menu independently and navigates to the selected project screen", async () => {
+  push.mockClear();
+  root = createRoot(container);
+  await act(async () => root!.render(
+    <I18nProvider><ProjectGridCard project={project} /></I18nProvider>,
+  ));
+  const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="App: More"]')!;
+  await act(async () => trigger.click());
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  expect(push).not.toHaveBeenCalled();
+  const domains = Array.from(container.querySelectorAll("button"))
+    .find((button) => button.textContent?.includes("Domains & Routes"))!;
+  await act(async () => domains.click());
+  expect(push).toHaveBeenCalledWith("/projects/project/domains");
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  await act(async () => trigger.click());
+  await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+  expect(trigger.getAttribute("aria-expanded")).toBe("false");
+});

@@ -120,8 +120,8 @@ export async function registerImportedSites(
       try {
         if (site.target.kind === "proxy") {
           // Non-root locations, plus an exact `/`, become proxy locations ahead
-          // of the inclusive primary `/` so both fan-out and nginx exact matching
-          // survive the takeover.
+          // of the inclusive `/` (upstream or 404) so both fan-out and nginx
+          // exact matching survive the takeover.
           const proxyLocations = (site.routes ?? [])
             .filter((r) => r.path !== "/" || r.exact)
             .map((r) => ({
@@ -139,7 +139,9 @@ export async function registerImportedSites(
             // placeholder cert and the branded not-found page — so a live site reads
             // as "no application configured here" (#308).
             terminatesTlsLocally: site.ssl,
-            targetUrl: site.target.url,
+            ...(site.routes?.length && !site.routes.some((route) => route.path === "/" && !route.exact)
+              ? { notFound: true as const }
+              : { targetUrl: site.target.url }),
             ...(proxyLocations.length ? { proxyLocations } : {}),
             // Carry the source vhost's tunables (upload limit, upstream timeouts).
             // Taking the ports over swaps the config the site is served from, so

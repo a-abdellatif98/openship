@@ -35,6 +35,7 @@ import { mailProvider } from "@/lib/mail-providers";
 import type { ServerOption } from "@/components/shared/ServerSelector";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { ConnectionNotice } from "@/components/shared/ConnectionNotice";
+import { usePlatform } from "@/context/PlatformContext";
 import { useModal } from "@/context/ModalContext";
 import { useToast } from "@/context/ToastContext";
 import { useI18n, interpolate } from "@/components/i18n-provider";
@@ -52,6 +53,8 @@ import { resolveMailView } from "../_lib/view-gate";
 import { getMailSectionHeading, useMailRailOwnsTabs } from "../_lib/mail-section";
 import { canonicalMailTab } from "@/lib/mail-tabs";
 import { invalidateMailScope } from "@/lib/mail-scope-bus";
+import { canManageMailServers } from "@/lib/mail-availability";
+import { CloudMailClient } from "./cloud-mail-client";
 
 /** Identity the mail rail is built from: which servers exist and whether each
  *  is installed. Anything else changing here doesn't move the rail. */
@@ -64,6 +67,8 @@ const registrySignature = (servers: MailServerListItem[]) =>
  * here means neither route shell has to — and neither can forget it.
  */
 export function MailConsole() {
+  const platform = usePlatform();
+  if (!canManageMailServers(platform)) return <CloudMailClient />;
   return (
     <Suspense
       fallback={

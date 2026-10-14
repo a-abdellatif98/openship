@@ -15,14 +15,15 @@ import { sharedTestOptions, testAlias } from "./vitest.config";
  * `E2E_SCOPE` splits the suite by cost — unset (the local default)
  * runs everything.
  *
- * `fast` drops scaling and `rollback-build-restore`, which pulls a Node base image and runs a
+ * `fast` drops scaling, PHP version builds and `rollback-build-restore`, which pull base images and run a
  * real `docker build`: ~225s cold, and `fileParallelism: false` means it's 225s
- * of the wall clock nobody else can use. `heavy` runs only that file. Set from
+ * of the wall clock nobody else can use. `heavy` runs the PHP build/rollback and retained-image rebuild files. Set from
  * the workflow rather than from a package.json script, so the scripts stay
  * cross-platform and there is exactly one entry point to run these locally.
  */
-const HEAVY = "test/e2e/rollback-build-restore.e2e.test.ts";
+const HEAVY = ["test/e2e/rollback-build-restore.e2e.test.ts", "test/e2e/php-version.e2e.test.ts"];
 // Three real K3s nodes, registry and Edge; has its own CI/release job.
+const ACTIONS = "test/e2e/actions-runner.e2e.test.ts";
 const SCALING = "test/e2e/scaling-*.e2e.test.ts";
 const SCALING_JOURNEYS = {
   "scaling-application": "test/e2e/scaling-full-cycle.e2e.test.ts",
@@ -40,12 +41,14 @@ const UPDATE = "test/e2e/update-from-previous-release.e2e.test.ts";
 const scope = process.env.E2E_SCOPE;
 if (
   scope &&
-  !["fast", "heavy", "update", "scaling", ...Object.keys(SCALING_JOURNEYS)].includes(scope)
+  !["fast", "heavy", "update", "scaling", "actions", ...Object.keys(SCALING_JOURNEYS)].includes(scope)
 )
   throw new Error(`Unknown E2E_SCOPE: ${scope}`);
 const include =
-  scope === "heavy"
-    ? [HEAVY]
+  scope === "actions"
+    ? [ACTIONS]
+    : scope === "heavy"
+    ? HEAVY
     : scope === "update"
       ? [UPDATE]
       : scope === "scaling"
@@ -85,7 +88,7 @@ export default defineConfig({
     },
     exclude: [
       ...configDefaults.exclude,
-      ...(scope === "fast" ? [HEAVY, SCALING] : []),
+      ...(scope === "fast" ? [...HEAVY, SCALING, ACTIONS] : []),
       // Opt-in only: `E2E_SCOPE=update` is the sole way to run it (see UPDATE above).
       ...(scope === "update" ? [] : [UPDATE]),
     ],

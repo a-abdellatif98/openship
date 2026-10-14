@@ -192,13 +192,38 @@ export interface TableSpec {
 }
 
 const TABLES: ReadonlyArray<TableSpec> = [
+  ...[
+    ["action_runner", schema.actionRunner],
+    ["action_workflow", schema.actionWorkflow],
+    ["action_project", schema.actionProject],
+    ["action_deployment", schema.actionDeployment],
+    ["action_delivery", schema.actionDelivery],
+    ["action_command", schema.actionCommand],
+    ["action_runner_session", schema.actionRunnerSession],
+    ["action_run", schema.actionRun],
+    ["action_job", schema.actionJob],
+    ["action_event", schema.actionEvent],
+    ["action_storage_object", schema.actionStorageObject],
+    ["action_storage_chunk", schema.actionStorageChunk],
+    ["action_budget", schema.actionBudget],
+    ["action_credit_purchase", schema.actionCreditPurchase],
+  ].map(([sqlName, table]) => ({
+    sqlName: sqlName as string,
+    table: table as PgTable,
+    scopes: [{ in: "instance" as const, via: "all-rows" as const }],
+    hasOrganizationId: true,
+  })),
   {
-    sqlName: "external_identity", table: schema.externalIdentity,
-    scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: false,
+    sqlName: "external_identity",
+    table: schema.externalIdentity,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: false,
   },
   {
-    sqlName: "external_namespace", table: schema.externalNamespace,
-    scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: true,
+    sqlName: "external_namespace",
+    table: schema.externalNamespace,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: true,
   },
   // Auth + identity — instance-only (SaaS already has its own user/auth rows).
   {
@@ -310,6 +335,12 @@ const TABLES: ReadonlyArray<TableSpec> = [
     hasOrganizationId: false,
   },
   {
+    sqlName: "action_oidc_key",
+    table: schema.actionOidcKey,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: false,
+  },
+  {
     sqlName: "instance_settings",
     table: schema.instanceSettings,
     scopes: [{ in: "instance", via: "all-rows" }],
@@ -317,18 +348,78 @@ const TABLES: ReadonlyArray<TableSpec> = [
   },
 
   // Infra — instance-only.
-  { sqlName: "compute_cluster", table: schema.computeCluster, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: true },
-  { sqlName: "compute_cluster_member", table: schema.computeClusterMember, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: false },
-  { sqlName: "cluster_runtime", table: schema.clusterRuntime, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: true },
-  { sqlName: "cluster_storage", table: schema.clusterStorage, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: true },
-  { sqlName: "cluster_database", table: schema.clusterDatabase, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: true },
-  { sqlName: "private_network", table: schema.serverCluster, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: true },
-  { sqlName: "managed_network_operation", table: schema.managedNetworkOperation, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: true },
-  { sqlName: "managed_network_preparation", table: schema.managedNetworkPreparation, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: true },
-  { sqlName: "managed_network_claim", table: schema.managedNetworkClaim, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: true },
-  { sqlName: "private_network_config", table: schema.clusterNetwork, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: false },
-  { sqlName: "network_member", table: schema.clusterMember, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: false },
-  { sqlName: "server_network_attachment", table: schema.serverNetworkAttachment, scopes: [{ in: "instance", via: "all-rows" }], hasOrganizationId: false },
+  {
+    sqlName: "compute_cluster",
+    table: schema.computeCluster,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: true,
+  },
+  {
+    sqlName: "compute_cluster_member",
+    table: schema.computeClusterMember,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: false,
+  },
+  {
+    sqlName: "cluster_runtime",
+    table: schema.clusterRuntime,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: true,
+  },
+  {
+    sqlName: "cluster_storage",
+    table: schema.clusterStorage,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: true,
+  },
+  {
+    sqlName: "cluster_database",
+    table: schema.clusterDatabase,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: true,
+  },
+  {
+    sqlName: "private_network",
+    table: schema.serverCluster,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: true,
+  },
+  {
+    sqlName: "managed_network_operation",
+    table: schema.managedNetworkOperation,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: true,
+  },
+  {
+    sqlName: "managed_network_preparation",
+    table: schema.managedNetworkPreparation,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: true,
+  },
+  {
+    sqlName: "managed_network_claim",
+    table: schema.managedNetworkClaim,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: true,
+  },
+  {
+    sqlName: "private_network_config",
+    table: schema.clusterNetwork,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: false,
+  },
+  {
+    sqlName: "network_member",
+    table: schema.clusterMember,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: false,
+  },
+  {
+    sqlName: "server_network_attachment",
+    table: schema.serverNetworkAttachment,
+    scopes: [{ in: "instance", via: "all-rows" }],
+    hasOrganizationId: false,
+  },
   {
     sqlName: "servers",
     table: schema.servers,
@@ -771,23 +862,31 @@ const TABLES: ReadonlyArray<TableSpec> = [
  * whole-instance export that claims to carry "every migration-managed table".
  */
 export const EXCLUDED_TABLES: Record<string, string> = {
-  instance_controller: "installation-local control-plane authority and device connection; never copied or wiped",
+  instance_controller:
+    "installation-local control-plane authority and device connection; never copied or wiped",
   instance_handoff: "durable installation-local handoff journal; never copied or wiped",
-  cloud_server_deletion: "Provider deletion receipts belong to the installation that confirmed cleanup",
-  cloud_support_ticket: "Private Cloud support requests; never export one customer's correspondence to another installation",
+  cloud_server_deletion:
+    "Provider deletion receipts belong to the installation that confirmed cleanup",
+  cloud_support_ticket:
+    "Private Cloud support requests; never export one customer's correspondence to another installation",
   cloud_support_message: "Private Cloud support correspondence and mail delivery state",
-  cloud_analytics_event: "Cloud-only telemetry delivery and deduplication; never migrate into a local installation",
+  cloud_analytics_event:
+    "Cloud-only telemetry delivery and deduplication; never migrate into a local installation",
   cloud_analytics_checkout: "Cloud-only analytics checkout correlation",
   cloud_analytics_workspace: "Cloud-only analytics subscription snapshots",
-  platform_instance: "the receiving installation retains its own identity and encryption-key binding",
+  platform_instance:
+    "the receiving installation retains its own identity and encryption-key binding",
   // Ephemeral / in-flight — re-created on demand, meaningless on another host.
   build_session: "in-flight build state; a migration never resumes a build mid-flight",
+  cloud_build_activity: "Cloud build admission and command ownership belong to the source installation; never transfer live reservations or resume its builds on another instance",
   deployment_check_run: "GitHub check-run mirror, re-created by the next deploy",
   terminal_sessions: "SSH session audit bound to a live WS; open rows are swept at boot",
   service_terminal_sessions: "as terminal_sessions, for container shells",
   verification: "Better Auth one-shot nonces, all short-TTL",
-  domain_dns_challenge: "temporary ACME order and worker lease; start a new TXT challenge after an instance transfer",
-  acme_account: "instance-bound ACME account signing keys; the destination registers its own account without changing installed certificates",
+  domain_dns_challenge:
+    "temporary ACME order and worker lease; start a new TXT challenge after an instance transfer",
+  acme_account:
+    "instance-bound ACME account signing keys; the destination registers its own account without changing installed certificates",
   github_install_state: "short-lived GitHub connection attempts, purged after expiry",
   cloud_handoff_code: "60s one-time cloud-connect codes",
   data_transfer_session: "short-lived whole-instance transfer capability and upload lease",
@@ -808,7 +907,8 @@ export const EXCLUDED_TABLES: Record<string, string> = {
   update_status: "cached upstream scan result; the next `updates:scan` refills it",
   server_container_status: "cached container drift; re-probed from the host",
   server_module_status: "cached module drift; re-probed from the host",
-  network_verification: "network observations and bounded probe runs; re-verify after instance restore",
+  network_verification:
+    "network observations and bounded probe runs; re-verify after instance restore",
 
   // History that is observability only — no config, no pending work, and prunable.
   job_run: "append-only tick log; job DEFINITIONS travel, executions do not",
@@ -963,6 +1063,11 @@ export interface EncryptedColumnSpec {
  * per-install), so it MUST be redacted on any cross-host move.
  */
 export const ENCRYPTED_COLUMNS: ReadonlyArray<EncryptedColumnSpec> = [
+  { table: "action_oidc_key", column: "privateKeyEnc" },
+  { table: "action_credit_purchase", column: "checkoutUrlEnc" },
+  { table: "action_workflow", column: "secrets" },
+  { table: "action_runner_session", column: "registration" },
+  { table: "action_run", column: "configuration", secretPaths: ["secrets"] },
   { table: "two_factor", column: "secret" },
   { table: "two_factor", column: "backupCodes" },
   { table: "cluster_database", column: "secretEncrypted" },
@@ -1004,9 +1109,13 @@ export const ENCRYPTED_COLUMNS: ReadonlyArray<EncryptedColumnSpec> = [
   { table: "instance_settings", column: "tunnelToken" },
   { table: "instance_settings", column: "ghDeviceTokenEncrypted" },
   { table: "deployment", column: "envVars" },
-  ...SERVICE_SECRET_FIELDS.map(column => ({ table: "service", column })),
+  ...SERVICE_SECRET_FIELDS.map((column) => ({ table: "service", column })),
   { table: "deployment", column: "meta", secretPaths: [...DEPLOYMENT_SECRET_FIELDS] },
-  { table: "notification_channel", column: "config", secretPaths: ["hmacSecret", "webhookUrl", "botToken"] },
+  {
+    table: "notification_channel",
+    column: "config",
+    secretPaths: ["hmacSecret", "webhookUrl", "botToken"],
+  },
 ];
 
 /**
@@ -1303,6 +1412,11 @@ export interface RestoreOptions {
    * ingest (remap to SaaS org) and project transfer (remap to target org).
    */
   remapOrgId?: string;
+  /** Receiver-enforced configuration transfer: discard runtime handles and
+   * source-instance paths even if the sender omitted its export scrub. Cloud
+   * ingest always sets this; authorized server snapshot recovery verifies and
+   * reattaches the existing runtime instead. */
+  stripInstanceRefs?: boolean;
   /**
    * merge-mode only: tables listed here INSERT with onConflictDoNothing, so a
    * collision is silently skipped instead of aborting the whole transaction.
@@ -1356,7 +1470,9 @@ export function assertDumpSelfContained(dump: DatabaseDump): void {
     // A crafted dump pointing destinationId at a VICTIM's backup_destination
     // (→ credential adoption on restore) or runId at a foreign run is rejected.
     destinationId: "backup_destination",
+    policyId: "backup_policy",
     runId: "backup_run",
+    forkServiceId: "service",
     // Notifications: channelId references notification_channel, which is
     // INSTANCE-scope-only and never travels on a remap (org/project) dump, so
     // any channelId here could only be a pre-existing cross-tenant channel.
@@ -1380,17 +1496,19 @@ export function assertDumpSelfContained(dump: DatabaseDump): void {
     tokenId: "personal_access_token",
   };
 
-  // Instance-scope parents (servers / mail_servers) NEVER travel in a remappable
+  // Instance-scope execution/storage parents never travel in a remappable
   // scope, and `stripInstanceRefs` nulls their children's references on every
   // cross-instance dump — so on this path a non-null value cannot have come from a
   // legitimate transfer. Rejecting it closes the same attach-to-a-pre-existing-parent
-  // shape the destinationId entry above describes, for the two columns it omitted:
+  // shape the destinationId entry above describes:
   // a crafted dump could otherwise point backup_destination.serverId at a server row
   // that already exists on the receiver and have the restore adopt its SSH
   // credentials. Derived from INSTANCE_SCOPED_REFS so the scrub and this assert
   // cannot disagree about which columns are involved.
   const INSTANCE_REF_PARENT: Record<string, string> = {
     serverId: "servers",
+    clusterId: "compute_cluster",
+    workspaceId: "cloud_workspace",
     mailServerId: "mail_servers",
     forkMailServerId: "mail_servers",
   };
@@ -1403,6 +1521,11 @@ export function assertDumpSelfContained(dump: DatabaseDump): void {
   const dumpedIds: Record<string, Set<string>> = {};
   for (const [sqlName, rows] of Object.entries(dump.tables)) {
     if (!rows) continue;
+    // Supplied rows are not proof of an imported parent: restore skips tables
+    // outside this scope. A shadow server/workspace row must never authorize
+    // attaching a child to an existing destination execution identity.
+    const spec = TABLES.find((table) => table.sqlName === sqlName);
+    if (!spec || !pickResolver(spec, dump.scope)) continue;
     dumpedIds[sqlName] = new Set(
       rows
         .map((r) => (r as { id?: unknown }).id)
@@ -1440,7 +1563,11 @@ export function assertActiveDeploymentOwnership(tables: DatabaseDump["tables"]):
     }),
   );
   for (const row of tables.project ?? []) {
-    const project = row as { id: string; organizationId: string; activeDeploymentId?: string | null };
+    const project = row as {
+      id: string;
+      organizationId: string;
+      activeDeploymentId?: string | null;
+    };
     if (project.activeDeploymentId == null) continue;
     if (!deploymentBelongsToProject(project, deploymentsById.get(project.activeDeploymentId))) {
       throw new Error(
@@ -1461,12 +1588,18 @@ export function assertDumpSchemaCompatible(dump: DatabaseDump): void {
   for (const [name, rows] of Object.entries(dump.tables)) {
     const table = TABLE_BY_SQL_NAME.get(LEGACY_NETWORK_TABLES[name] ?? name);
     if (!table) {
-      throw new Error(`This export contains an unsupported table (${name}). Update the destination before importing.`);
+      throw new Error(
+        `This export contains an unsupported table (${name}). Update the destination before importing.`,
+      );
     }
     const columns = new Set(Object.keys(getTableColumns(table)));
-    const unknown = new Set(rows.flatMap((row) => Object.keys(row).filter((key) => !columns.has(key))));
+    const unknown = new Set(
+      rows.flatMap((row) => Object.keys(row).filter((key) => !columns.has(key))),
+    );
     if (unknown.size) {
-      throw new Error(`This export contains unsupported fields in ${name}: ${[...unknown].join(", ")}. Update the destination before importing.`);
+      throw new Error(
+        `This export contains unsupported fields in ${name}: ${[...unknown].join(", ")}. Update the destination before importing.`,
+      );
     }
   }
 }
@@ -1501,6 +1634,19 @@ export async function restoreSubgraphInTransaction(
   // Remap path (cloud ingest / project transfer) is the only place an untrusted
   // caller supplies a dump for a DIFFERENT org — reject cross-tenant FKs there.
   if (opts.remapOrgId) assertDumpSelfContained(dump);
+  if (opts.stripInstanceRefs) {
+    // An untrusted sender can omit the export scrub. The receiver must not
+    // accept recorded host/container identities or API-host filesystem paths
+    // as proof of execution ownership. Clone before scrubbing: callers may
+    // still need the original transfer receipt/digest for reconciliation.
+    dump = {
+      ...dump,
+      tables: Object.fromEntries(Object.entries(dump.tables).map(([name, rows]) => [
+        name, rows.map((row) => ({ ...row })),
+      ])),
+    };
+    stripInstanceRefsInPlace(dump.tables);
+  }
 
   // Kept for the day the schema declares its FKs DEFERRABLE — but DO NOT rely on
   // it. Postgres applies this only to constraints declared DEFERRABLE, and none of
@@ -1620,7 +1766,8 @@ export async function restoreSubgraphInTransaction(
     if (droppedCols.size > 0) {
       // Version skew, not a fault — the receiver's schema predates these
       // columns. Log once per table so it's diagnosable without failing.
-      errorDiagnostics.warn("db/dump",
+      errorDiagnostics.warn(
+        "db/dump",
         `[restore] ${spec.sqlName}: dropped ${droppedCols.size} unknown column(s) not in this build's schema: ${[...droppedCols].join(", ")}`,
       );
     }
@@ -1635,9 +1782,20 @@ export async function restoreSubgraphInTransaction(
     const skipOnConflict =
       spec.scopes.some((s) => s.via === "from-root-project") ||
       (opts.mode === "merge" && !!opts.mergeConflictSkip?.includes(spec.sqlName));
-    const updateOnConflict = opts.mode === "merge" && opts.mergeConflictUpdate?.includes(spec.sqlName);
+    const updateOnConflict =
+      opts.mode === "merge" && opts.mergeConflictUpdate?.includes(spec.sqlName);
 
     try {
+      const sequences = Object.values(columns).filter((column) =>
+        ["PgSerial", "PgSmallSerial", "PgBigSerial53", "PgBigSerial64"].includes(column.columnType),
+      );
+      // Explicit IDs do not advance PostgreSQL sequences. Block concurrent
+      // inserts while importing generated IDs and advancing their allocator;
+      // otherwise the next artifact upload can collide with a restored row.
+      if (sequences.length)
+        await tx.execute(
+          sql`LOCK TABLE ${sql.identifier(spec.sqlName)} IN SHARE ROW EXCLUSIVE MODE`,
+        );
       // Chunked: one INSERT per `insertChunkSize(spec.table)` rows, so a large
       // table cannot exceed the 65535 bind-parameter cap.
       const chunk = insertChunkSize(spec.table);
@@ -1649,28 +1807,58 @@ export async function restoreSubgraphInTransaction(
             ...(encryptedCols?.map((col) => col.column) ?? []),
             ...(opts.mergePreserveColumns?.[spec.sqlName] ?? []),
           ]);
-          const set = Object.fromEntries(Object.entries(columns)
-            .filter(([key]) => key !== "id" && !secretNames.has(key) && batch.some((row) => key in row))
-            .map(([key, column]) => [key, sql`excluded.${sql.identifier(column.name)}`]));
-          written = await tx.insert(spec.table).values(batch as never)
-            .onConflictDoUpdate({ target: columns.id, set }).returning();
+          const set = Object.fromEntries(
+            Object.entries(columns)
+              .filter(
+                ([key]) => key !== "id" && !secretNames.has(key) && batch.some((row) => key in row),
+              )
+              .map(([key, column]) => [key, sql`excluded.${sql.identifier(column.name)}`]),
+          );
+          written = await tx
+            .insert(spec.table)
+            .values(batch as never)
+            .onConflictDoUpdate({ target: columns.id, set })
+            .returning();
         } else if (skipOnConflict) {
           written = await tx
             .insert(spec.table)
             .values(batch as never)
-            .onConflictDoNothing().returning();
+            .onConflictDoNothing()
+            .returning();
           // Presence in the dump does not prove that a conflicting shared
           // parent belongs to the destination tenant. Check AFTER the insert,
           // including conflicts created concurrently, before attaching children.
-          if (opts.remapOrgId && spec.hasOrganizationId && columns.id && columns.organizationId && written.length < batch.length) {
-            const existing = await tx.select({ id: columns.id, organizationId: columns.organizationId })
-              .from(spec.table).where(inArray(columns.id, batch.map(row => row.id))).for("share");
-            const owned = new Set(existing.filter(row => row.organizationId === opts.remapOrgId).map(row => row.id));
-            if (batch.some(row => !owned.has(row.id)))
-              throw new PkCollisionError(spec.sqlName, new Error("Existing shared parent cannot be reused in this organization."));
+          if (
+            opts.remapOrgId &&
+            spec.hasOrganizationId &&
+            columns.id &&
+            columns.organizationId &&
+            written.length < batch.length
+          ) {
+            const existing = await tx
+              .select({ id: columns.id, organizationId: columns.organizationId })
+              .from(spec.table)
+              .where(
+                inArray(
+                  columns.id,
+                  batch.map((row) => row.id),
+                ),
+              )
+              .for("share");
+            const owned = new Set(
+              existing.filter((row) => row.organizationId === opts.remapOrgId).map((row) => row.id),
+            );
+            if (batch.some((row) => !owned.has(row.id)))
+              throw new PkCollisionError(
+                spec.sqlName,
+                new Error("Existing shared parent cannot be reused in this organization."),
+              );
           }
         } else {
-          written = await tx.insert(spec.table).values(batch as never).returning();
+          written = await tx
+            .insert(spec.table)
+            .values(batch as never)
+            .returning();
         }
         if (opts.writtenIds) {
           const ids = opts.writtenIds.get(spec.sqlName) ?? new Set<string>();
@@ -1678,6 +1866,15 @@ export async function restoreSubgraphInTransaction(
           opts.writtenIds.set(spec.sqlName, ids);
         }
         if (opts.writtenRows) opts.writtenRows.count += written.length;
+      }
+      for (const column of sequences) {
+        const sequence = sql`pg_get_serial_sequence(${spec.sqlName}, ${column.name})`;
+        // nextval prevents moving an existing allocator backwards during a
+        // merge. Sequence gaps are harmless, including after a rolled-back import.
+        await tx.execute(sql`SELECT setval(${sequence}, GREATEST(
+          (SELECT COALESCE(MAX(${sql.identifier(column.name)}), 1) FROM ${sql.identifier(spec.sqlName)}),
+          nextval(${sequence})
+        ), true)`);
       }
     } catch (err) {
       if (err instanceof PkCollisionError) throw err;

@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
   { label: "Features", href: "/features" },
+  { label: "Apps", href: "/apps" },
   { label: "Emails", href: "/mail" },
   { label: "Docs", href: "/docs" },
-  { label: "Roadmap", href: "/roadmap" },
+  { label: "Blog", href: "/blog" },
   { label: "Changelog", href: "/changelog" },
   { label: "Pricing", href: "/pricing" },
 ];
@@ -15,6 +17,7 @@ const NAV_ITEMS = [
 const GITHUB_URL = "https://github.com/oblien/openship";
 
 export function Navbar() {
+  const pathname = usePathname();
   const [dark, setDark] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -63,7 +66,8 @@ export function Navbar() {
 
         {/* ── Center pill nav ─────────────────────────────────── */}
         <nav
-          className="absolute left-1/2 top-5 hidden -translate-x-1/2 items-center gap-0.5 rounded-full px-1.5 py-1.5 backdrop-blur-xl md:flex"
+          aria-label="Main navigation"
+          className="absolute left-1/2 top-5 hidden -translate-x-1/2 items-center gap-0.5 rounded-full px-1.5 py-1.5 backdrop-blur-xl xl:flex"
           style={{
             background: dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.72)",
             border: dark ? "1px solid rgba(255,255,255,.10)" : "1px solid var(--th-on-05)",
@@ -75,7 +79,10 @@ export function Navbar() {
             <Link
               key={item.label}
               href={item.href}
-              className="nav-pill-item rounded-full px-4 py-2 text-[14px] font-medium transition-all"
+              aria-current={
+                pathname === item.href || pathname?.startsWith(item.href + "/") ? "page" : undefined
+              }
+              className="nav-pill-item rounded-full px-3 py-2 text-[14px] font-medium transition-all aria-[current=page]:bg-[var(--th-sf-04)]"
               style={{
                 color: dark ? "rgba(255,255,255,.55)" : "var(--th-text-secondary)",
               }}
@@ -87,7 +94,7 @@ export function Navbar() {
             href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="nav-pill-item flex items-center gap-1.5 rounded-full px-4 py-2 text-[14px] font-medium transition-all"
+            className="nav-pill-item flex items-center gap-1.5 rounded-full px-3 py-2 text-[14px] font-medium transition-all"
             style={{
               color: dark ? "rgba(255,255,255,.55)" : "var(--th-text-secondary)",
             }}
@@ -124,13 +131,20 @@ export function Navbar() {
           {/* ── Hamburger (mobile only) ──────────────────────── */}
           <button
             onClick={() => setMobileOpen((v) => !v)}
-            className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full md:hidden"
+            className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full xl:hidden"
             style={{
               background: dark ? "rgba(255,255,255,.10)" : "var(--th-sf-04)",
             }}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke={dark ? "#fff" : "var(--th-text-heading)"} strokeWidth={2}>
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke={dark ? "#fff" : "var(--th-text-heading)"}
+              strokeWidth={2}
+            >
               {mobileOpen ? (
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               ) : (
@@ -143,16 +157,14 @@ export function Navbar() {
 
       {/* ── Mobile slide-out panel ──────────────────────────── */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 md:hidden" aria-modal="true">
+        <div className="fixed inset-0 z-40 xl:hidden" aria-modal="true">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/30 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
           {/* Panel */}
-          <nav
-            className="absolute right-0 top-0 flex h-full w-[280px] flex-col gap-1 bg-[var(--th-bg-page)] px-6 pt-24 shadow-2xl"
-          >
+          <nav className="absolute right-0 top-0 flex h-full w-[280px] flex-col gap-1 bg-[var(--th-bg-page)] px-6 pt-24 shadow-2xl">
             {NAV_ITEMS.map((item) => (
               <Link
                 key={item.label}
@@ -198,4 +210,3 @@ export function Navbar() {
     </header>
   );
 }
-

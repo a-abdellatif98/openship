@@ -35,9 +35,8 @@ import {
   waitForCloudDockerWorkspace,
 } from "./workspace-ready";
 import { cloudDockerProjectPaths } from "./docker-paths";
-import { ensureCloudProjectVolume } from "./docker-volume";
+import { ensureCloudProjectVolume, resolveCloudProjectVolumeName } from "./docker-volume";
 import { prepareManagedSource } from "./source";
-import { scopeVolumeBinds } from "../volume-namespace";
 import { pickHostPort } from "../host-port";
 import { scanPorts } from "../../system/port-scan";
 export { CLOUD_SERVER_IMAGE as CLOUD_DOCKER_IMAGE } from "./server-connection";
@@ -54,6 +53,7 @@ export interface CloudDockerOptions {
   /** Explicit opt-in for a desktop/self-hosted source transfer; SaaS denies it. */
   allowHostSource?: boolean;
   provisionLock: ProvisionLock;
+  buildCacheProtection?: import("../docker").DockerConnectionOptions["buildCacheProtection"];
   bridgeLock?: ProvisionLock;
   resolveRegistryAuth: (ref: string) => Promise<DockerRegistryAuth | undefined>;
 }
@@ -87,6 +87,7 @@ export class CloudDockerRuntime extends DockerRuntime {
         executor,
         cloudConnection: () => connection.connectDocker(),
         resolveRegistryAuth: options.resolveRegistryAuth,
+        buildCacheProtection: options.buildCacheProtection,
       },
       null,
       options.provisionLock,
@@ -222,6 +223,9 @@ export class CloudDockerRuntime extends DockerRuntime {
       throw new AppError("Image belongs to another project", 404, "IMAGE_NOT_FOUND");
     return image;
   }
+  protected override async inspectDeploymentImage(ref: string) {
+    return this.accessibleImage(ref);
+  }
   override async removeImage(ref: string) {
     try {
       if ((await this.accessibleImage(ref)).Config?.Labels?.["openship.project"] !== this.projectId)
@@ -301,13 +305,27 @@ export class CloudDockerRuntime extends DockerRuntime {
     return super.removeVolume(name);
   }
   private async ownedVolumeBinds(slug: string, volumes: string[]) {
-    const scoped = scopeVolumeBinds(slug, volumes, true);
-    for (const spec of scoped) {
-      const source = spec.split(":")[0]!;
-      if (isHostPathSource(source)) continue;
-      await ensureCloudProjectVolume(this.docker, source, this.projectId);
+    const scoped: string[] = [];
+    for (const spec of volumes) {
+      const parts = spec.split(":");
+      if (parts.length > 1 && !isHostPathSource(parts[0]!)) {
+        parts[0] = await resolveCloudProjectVolumeName(
+          this.docker,
+          this.projectId,
+          slug,
+          parts[0]!,
+        );
+        await ensureCloudProjectVolume(this.docker, parts[0], this.projectId);
+      }
+      scoped.push(parts.join(":"));
     }
     return scoped;
+  }
+  protected override async serviceVolumeBinds(config: MultiServiceDeployConfig): Promise<string[]> {
+    this.assertProject(config.projectId);
+    // Cloud has already resolved and verified the concrete names. Reapplying a
+    // slug prefix here would mount a different, unclaimed empty volume.
+    return config.volumes;
   }
   private async canSpend(): Promise<void> {
     await this.connection.beforeWork();
@@ -704,7 +722,7 @@ export class CloudDockerRuntime extends DockerRuntime {
         .update(`${config.serviceName}:${target}`)
         .digest("hex")
         .slice(0, 24);
-      volumes.push(`openship-${config.slug}-data-${key}:${target}`);
+      volumes.push(`data-${key}:${target}`);
     }
     return volumes;
   }
@@ -846,6 +864,7 @@ export class CloudDockerRuntime extends DockerRuntime {
     this.assertProject(projectId);
     if ((await this.listProjectContainerIds(projectId)).length)
       throw new Error("Remove the project's containers before cleaning its storage");
+    await this.clearManagedProjectBuildCache(projectId);
     if (options?.wipeVolumes) {
       // Include detached volumes left by interrupted deployments. Inventory is
       // label-scoped; retained data is removed only on the explicit wipe path.

@@ -34,7 +34,6 @@
     "sharedBuilds": "عمليات البناء تشارك موارد خادمك، دون حد زمني شهري",
     "power": "حتى {powerCpu} vCPU و{powerRamGb} GB RAM لكل تطبيق",
     "projects": "{maxProjects} مشروع",
-    "projectsUnlimited": "مشاريع غير محدودة",
     "freeSubdomains": "{freeSubdomains} نطاق فرعي مجاني على {freeDomainSuffix}",
     "freeSubdomainsUnlimited": "نطاقات فرعية مجانية غير محدودة على {freeDomainSuffix}",
     "gitDeploys": "النشر من GitHub أو GitLab أو أي مستودع Git",

@@ -89,7 +89,7 @@ const FOLDER_MAP: Record<FolderSlug, string> = {
 // keywords are case-insensitive but Dovecot normalizes on read.
 export const SNOOZE_KEYWORD = '$Snoozed';
 
-function folderToMailbox(folder: FolderSlug): string {
+export function folderToMailbox(folder: FolderSlug): string {
   return FOLDER_MAP[folder] ?? 'INBOX';
 }
 

@@ -17,6 +17,11 @@
  */
 
 import type { ImageCatalogEntry } from "@/lib/api/images";
+import { getAppTemplate } from "@repo/core";
+
+// The app and companion-service entry points must use the same reviewed image
+// and its required command. Keep these defaults in the canonical app template.
+const minio = getAppTemplate("minio")!.services!.find((service) => service.name === "minio")!;
 
 function si(slug: string): string {
   // simpleicons.org auto-coloring CDN. Falls back to monochrome silently
@@ -274,6 +279,18 @@ export const LOCAL_SERVICE_CATALOG: ImageCatalogEntry[] = [
     ports: [11434],
     defaultVolumes: ["ollama_data:/root/.ollama"],
   },
+  {
+    id: "ollama-gpu",
+    name: "Ollama (NVIDIA GPU)",
+    image: "ollama/ollama:latest",
+    logo: si("ollama"),
+    category: "vector",
+    description:
+      "Ollama with every NVIDIA GPU on the server. Needs a GPU server with the NVIDIA Container Toolkit.",
+    ports: [11434],
+    defaultVolumes: ["ollama_data:/root/.ollama"],
+    gpus: { driver: "nvidia", count: "all", capabilities: ["gpu"] },
+  },
 
   /* ── Queues & Streams ─────────────────────────────────────────────── */
   {
@@ -314,16 +331,17 @@ export const LOCAL_SERVICE_CATALOG: ImageCatalogEntry[] = [
   {
     id: "minio",
     name: "MinIO",
-    image: "minio/minio:latest",
+    image: minio.image,
+    commandArgv: minio.commandArgv ? [...minio.commandArgv] : undefined,
     logo: si("minio"),
     category: "storage",
     description: "S3-compatible object storage. Self-hosted alternative to AWS S3.",
     ports: [9000, 9001],
     defaultEnv: [
       { key: "MINIO_ROOT_USER", value: "minioadmin" },
-      { key: "MINIO_ROOT_PASSWORD", value: "minioadmin" },
+      { key: "MINIO_ROOT_PASSWORD", generate: "secret" },
     ],
-    defaultVolumes: ["minio_data:/data"],
+    defaultVolumes: minio.volumes ? [...minio.volumes] : undefined,
   },
 
   /* ── Auth & Identity ──────────────────────────────────────────────── */
@@ -343,10 +361,11 @@ export const LOCAL_SERVICE_CATALOG: ImageCatalogEntry[] = [
   {
     id: "authentik",
     name: "Authentik",
-    image: "ghcr.io/goauthentik/server:latest",
+    image: "ghcr.io/goauthentik/server:2026.8.3",
+    commandArgv: ["server"],
     logo: gh("goauthentik"),
     category: "auth",
-    description: "Modern open-source identity provider with SAML, OAuth2, LDAP.",
+    description: "Authentik server. Requires a separate worker and PostgreSQL service.",
     ports: [9000],
     defaultEnv: [
       { key: "AUTHENTIK_SECRET_KEY", value: "" },
@@ -354,7 +373,6 @@ export const LOCAL_SERVICE_CATALOG: ImageCatalogEntry[] = [
       { key: "AUTHENTIK_POSTGRESQL__USER", value: "authentik" },
       { key: "AUTHENTIK_POSTGRESQL__PASSWORD", value: "" },
       { key: "AUTHENTIK_POSTGRESQL__NAME", value: "authentik" },
-      { key: "AUTHENTIK_REDIS__HOST", value: "redis" },
     ],
   },
 

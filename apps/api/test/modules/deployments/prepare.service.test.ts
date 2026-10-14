@@ -16,6 +16,27 @@ describe("resolveProjectInfo", () => {
     await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
+  async function nativeServicesProject(compose: string) {
+    const path = await mkdtemp(join(tmpdir(), "openship-native-source-"));
+    tempDirs.push(path);
+    await Promise.all([
+      writeFile(
+        join(path, "package.json"),
+        JSON.stringify({ devDependencies: { vite: "^6.0.0" } }),
+      ),
+      writeFile(join(path, "vite.config.ts"), "export default {};\n"),
+      writeFile(join(path, "Dockerfile"), "FROM node:22-alpine\n"),
+      writeFile(
+        join(path, "openship.json"),
+        JSON.stringify({
+          services: [{ name: "production-web", image: "nginx:1.27" }],
+        }),
+      ),
+      writeFile(join(path, "compose.yaml"), compose),
+    ]);
+    return path;
+  }
+
   it("reads the listed Dockerfile path on case-sensitive sources", async () => {
     const reads: string[] = [];
     const info = await resolveFromReader(
@@ -174,6 +195,76 @@ describe("resolveProjectInfo", () => {
     expect(compose.services).toEqual([
       expect.objectContaining({ name: "postgres", image: "postgres:16-alpine" }),
     ]);
+  });
+
+  it("parses a Compose project's services when its root also looks like a Vite app (#1020)", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "openship-compose-behind-vite-"));
+    tempDirs.push(tempDir);
+    await writeFile(
+      join(tempDir, "package.json"),
+      JSON.stringify({
+        name: "app",
+        scripts: { build: "vite build" },
+        devDependencies: { vite: "^6.0.0" },
+      }),
+    );
+    await writeFile(join(tempDir, "vite.config.ts"), "export default {};\n");
+    await writeFile(join(tempDir, "Dockerfile"), "FROM node:22-alpine\n");
+    await writeFile(
+      join(tempDir, "compose.yaml"),
+      ["services:", "  app:", "    build: .", "  caddy:", "    image: caddy:2"].join("\n"),
+    );
+
+    const scan = await resolveProjectInfo({ source: "local", path: tempDir });
+    expect(scan.stack).toBe("docker");
+    expect(scan.services).toBeUndefined();
+
+    const compose = await resolveProjectInfo({
+      source: "local",
+      path: tempDir,
+      expectCompose: true,
+    });
+    expect(compose.projectType).toBe("services");
+    expect(compose.services?.map((service) => service.name)).toEqual(["app", "caddy"]);
+  });
+
+  it.each([
+    {
+      name: "unsupported development networking",
+      compose: "services:\n  dev-db:\n    image: postgres:16\n    network_mode: host\n",
+    },
+    {
+      name: "required development credentials",
+      compose:
+        "services:\n  dev-db:\n    image: postgres:16\n    environment:\n      POSTGRES_PASSWORD: ${DEV_PASSWORD:?Set a local password}\n",
+    },
+  ])(
+    "keeps native services authoritative despite $name in an unused Compose file",
+    async ({ compose }) => {
+      const path = await nativeServicesProject(compose);
+      const initial = await resolveProjectInfo({ source: "local", path });
+      const redeploy = await resolveProjectInfo({ source: "local", path, expectCompose: true });
+
+      expect(redeploy.projectType).toBe("services");
+      expect(redeploy.services?.map((service) => service.name)).toEqual(["production-web"]);
+      expect(redeploy.services).toEqual(initial.services);
+      expect(redeploy.missingRequiredEnv).toBeUndefined();
+      expect(redeploy.unsupportedCompose).toBeUndefined();
+    },
+  );
+
+  it("still validates an explicitly selected Compose file when native services are present", async () => {
+    const path = await nativeServicesProject(
+      "services:\n  dev-db:\n    image: postgres:16\n    network_mode: host\n",
+    );
+    await expect(
+      resolveProjectInfo({
+        source: "local",
+        path,
+        composePath: "compose.yaml",
+        expectCompose: true,
+      }),
+    ).rejects.toThrow("network_mode: host is not supported");
   });
 
   it("reports a required Compose variable as a value to collect, not a load failure", async () => {

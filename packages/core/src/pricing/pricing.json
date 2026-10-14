@@ -40,25 +40,45 @@
   },
   "payg": {
     "version": 1,
-    "creditPackagesCents": [500, 2000, 5000, 10000],
+    "creditPackagesCents": [
+      500,
+      2000,
+      5000,
+      10000
+    ],
     "tiers": [
       {
         "id": "tier_1",
         "level": 1,
         "minimumFundingCents": 500,
-        "pool": { "cpuCores": 2, "memoryMb": 8192, "diskGb": 64, "servers": 2 }
+        "pool": {
+          "cpuCores": 2,
+          "memoryMb": 8192,
+          "diskGb": 64,
+          "servers": 2
+        }
       },
       {
         "id": "tier_2",
         "level": 2,
         "minimumFundingCents": 2000,
-        "pool": { "cpuCores": 4, "memoryMb": 16384, "diskGb": 128, "servers": 4 }
+        "pool": {
+          "cpuCores": 4,
+          "memoryMb": 16384,
+          "diskGb": 128,
+          "servers": 4
+        }
       },
       {
         "id": "tier_3",
         "level": 3,
         "minimumFundingCents": 5000,
-        "pool": { "cpuCores": 8, "memoryMb": 32768, "diskGb": 256, "servers": 8 }
+        "pool": {
+          "cpuCores": 8,
+          "memoryMb": 32768,
+          "diskGb": 256,
+          "servers": 8
+        }
       }
     ]
   },
@@ -88,7 +108,8 @@
         "buildMinutesPerMonth": 0,
         "freeSubdomains": 10,
         "customDomains": null,
-        "seats": null
+        "seats": null,
+        "concurrentBuilds": 0
       },
       "features": [
         "staticOnly",
@@ -135,8 +156,8 @@
           "worker"
         ],
         "services": true,
-        "runningServices": null,
-        "maxProjects": null,
+        "runningServices": 4,
+        "maxProjects": 3,
         "maxResourceTier": "low",
         "maxServiceResources": {
           "cpuCores": 1,
@@ -146,7 +167,8 @@
         "buildMinutesPerMonth": null,
         "freeSubdomains": 10,
         "customDomains": null,
-        "seats": null
+        "seats": null,
+        "concurrentBuilds": 1
       },
       "features": [
         "everythingIn",
@@ -156,7 +178,7 @@
         "anyWorkload",
         "runningServices",
         "power",
-        "projectsUnlimited",
+        "projects",
         "communitySupport"
       ],
       "billing": {
@@ -187,7 +209,7 @@
         "monthly": "STRIPE_PRICE_STARTER_MONTHLY",
         "annual": "STRIPE_PRICE_STARTER_ANNUAL"
       },
-      "popular": false,
+      "popular": true,
       "contactSales": null,
       "support": "email",
       "inherits": "hobby",
@@ -198,8 +220,8 @@
           "worker"
         ],
         "services": true,
-        "runningServices": null,
-        "maxProjects": null,
+        "runningServices": 15,
+        "maxProjects": 10,
         "maxResourceTier": "medium",
         "maxServiceResources": {
           "cpuCores": 2,
@@ -209,7 +231,8 @@
         "buildMinutesPerMonth": null,
         "freeSubdomains": 25,
         "customDomains": null,
-        "seats": null
+        "seats": null,
+        "concurrentBuilds": 4
       },
       "features": [
         "everythingIn",
@@ -218,7 +241,7 @@
         "sharedBuilds",
         "runningServices",
         "power",
-        "projectsUnlimited",
+        "projects",
         "emailSupport"
       ],
       "billing": {
@@ -249,7 +272,7 @@
         "monthly": "STRIPE_PRICE_PRO_MONTHLY",
         "annual": "STRIPE_PRICE_PRO_ANNUAL"
       },
-      "popular": true,
+      "popular": false,
       "contactSales": null,
       "support": "priority",
       "inherits": "starter",
@@ -260,8 +283,8 @@
           "worker"
         ],
         "services": true,
-        "runningServices": null,
-        "maxProjects": null,
+        "runningServices": 40,
+        "maxProjects": 25,
         "maxResourceTier": "high",
         "maxServiceResources": {
           "cpuCores": 4,
@@ -271,7 +294,8 @@
         "buildMinutesPerMonth": null,
         "freeSubdomains": 100,
         "customDomains": null,
-        "seats": null
+        "seats": null,
+        "concurrentBuilds": 8
       },
       "features": [
         "everythingIn",
@@ -280,7 +304,7 @@
         "sharedBuilds",
         "runningServices",
         "power",
-        "projectsUnlimited",
+        "projects",
         "prioritySupport"
       ],
       "billing": {
@@ -322,8 +346,8 @@
           "worker"
         ],
         "services": true,
-        "runningServices": null,
-        "maxProjects": null,
+        "runningServices": 100,
+        "maxProjects": 100,
         "maxResourceTier": "xlarge",
         "maxServiceResources": {
           "cpuCores": 8,
@@ -333,7 +357,8 @@
         "buildMinutesPerMonth": null,
         "freeSubdomains": null,
         "customDomains": null,
-        "seats": null
+        "seats": null,
+        "concurrentBuilds": 20
       },
       "features": [
         "everythingIn",
@@ -342,7 +367,7 @@
         "sharedBuilds",
         "runningServices",
         "power",
-        "projectsUnlimited",
+        "projects",
         "freeSubdomainsUnlimited",
         "prioritySupport"
       ],
@@ -392,7 +417,8 @@
         "buildMinutesPerMonth": null,
         "freeSubdomains": null,
         "customDomains": null,
-        "seats": null
+        "seats": null,
+        "concurrentBuilds": null
       },
       "features": [
         "everythingIn",
@@ -420,6 +446,37 @@
       }
     }
   ],
+  "actions": {
+    "version": 2,
+    "currency": "usd",
+    "depositsCents": [
+      500,
+      2000,
+      5000,
+      10000
+    ],
+    "runners": [
+      {
+        "id": "linux_2",
+        "cpuCores": 2,
+        "memoryMb": 4096,
+        "diskGb": 40
+      },
+      {
+        "id": "linux_4",
+        "cpuCores": 4,
+        "memoryMb": 8192,
+        "diskGb": 80
+      },
+      {
+        "id": "linux_8",
+        "cpuCores": 8,
+        "memoryMb": 16384,
+        "diskGb": 160
+      }
+    ],
+    "maxParallel": 2
+  },
   "creditPacks": [
     {
       "id": "pack_400",

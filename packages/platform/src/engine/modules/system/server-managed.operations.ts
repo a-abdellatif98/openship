@@ -17,6 +17,7 @@ import type {
 import type { ResourceServices } from "../../../resource-operations";
 import type { ExecutionContext } from "../../../context";
 import { env } from "../../config/env";
+import { serverOutboundControls } from "./server-outbound.operations";
 import {
   managedConnection,
   mutateManagedServer,
@@ -149,6 +150,7 @@ async function readWorkload(connection: ManagedConnection, id: string) {
 }
 
 const controls: ResourceServices<typeof ManagedServerResourceSchemas> = {
+  ...serverOutboundControls,
   async managedInfo(ctx, id) {
     const { provider, binding } = await managedConnection(ctx, id);
     const ws = provider.workspace;

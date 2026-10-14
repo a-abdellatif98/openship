@@ -45,6 +45,8 @@ describe("shared Cloud resource gateway", () => {
   it.each([
     ["/api/system/servers/cloud-server", "GET"],
     ["/api/system/servers/cloud-server/network-settings", "GET"],
+    ["/api/system/servers/cloud-server/managed/outbound", "GET"],
+    ["/api/system/servers/cloud-server/managed/outbound/options", "GET"],
     ["/api/system/servers/cloud-server/usage", "GET"],
     ["/api/analytics/server/cloud-server?domain=api.example.test", "GET"],
     ["/api/projects/cloud-project/services/cloud-service/restart", "POST"],
@@ -62,6 +64,14 @@ describe("shared Cloud resource gateway", () => {
     const response = await request("/api/projects/cloud-project/services", "POST", { name: "web", image: "nginx:alpine" });
     expect(response.status).toBe(200);
     expect(h.fetch).toHaveBeenCalledOnce();
+  });
+  it("routes an explicit outbound change through the owning Cloud API", async () => {
+    const input = { mode: "managed", ip: "1.1.1.1", expectedRevision: "a".repeat(64), confirm: true };
+    const response = await request("/api/system/servers/cloud-server/managed/outbound", "PATCH", input);
+    expect(response.status).toBe(200);
+    expect(h.fetch).toHaveBeenCalledOnce();
+    expect(h.fetch.mock.calls[0].slice(0, 2)).toEqual([owner.orgId, "/api/system/servers/cloud-server/managed/outbound"]);
+    expect(JSON.parse(h.fetch.mock.calls[0][2].body)).toEqual(input);
   });
 
   it("previews DNS on a discovered Cloud server without creating an execution link", async () => {

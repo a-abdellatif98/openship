@@ -133,6 +133,7 @@ beforeEach(async () => {
     resources: { cpus: 2, memory_mb: 8192, disk_size_mb: 32768 },
     base_os: { distribution: "Alpine", version: "3.22" },
     config: { secret: "DO_NOT_FORWARD" },
+    updated_at: "2026-10-11T10:00:00.000Z",
   };
   network = {
     allow_internet: true,
@@ -194,6 +195,26 @@ beforeEach(async () => {
         if (patch.allow_internet === false) network.egress = [];
         return { success: true };
       }),
+      setCustomProxy: vi.fn(async (proxy: any) => {
+        network.outbound_mode = "custom";
+        network.outbound_ip = proxy.host;
+        network.outbound_proxy = { ...proxy, has_credentials: !!proxy.username };
+        vm.updated_at = new Date(Date.parse(vm.updated_at) + 1000).toISOString();
+        return { success: true };
+      }),
+      clearCustomProxy: vi.fn(async () => {
+        network.outbound_mode = "managed";
+        network.outbound_ip = "8.8.4.4";
+        network.outbound_proxy = null;
+        vm.updated_at = new Date(Date.parse(vm.updated_at) + 1000).toISOString();
+        return { success: true, outbound: { ip: "8.8.4.4", mode: "managed" } };
+      }),
+      applyOutboundIp: vi.fn(async ({ ip }: { ip: string }) => {
+        network.outbound_mode = "managed";
+        network.outbound_ip = ip;
+        network.outbound_proxy = null;
+        return { ip, mode: "managed" };
+      }),
     },
     apiAccess: {
       status: vi.fn(async () => ({ enabled: true, is_running: true, token: "DO_NOT_FORWARD" })),
@@ -236,6 +257,10 @@ beforeEach(async () => {
     logs: { get: vi.fn(async () => ({ success: true, logs: "guest booted" })) },
   };
   h.client = {
+    listOutboundIps: vi.fn(async () => [
+      { ip: "8.8.4.4", countryCode: "US" },
+      { ip: "1.1.1.1", countryCode: "AU" },
+    ]),
     workspaces: { get: vi.fn(async () => vm), invalidateRuntime: vi.fn() },
     workspace: vi.fn(() => handle),
   };
@@ -287,6 +312,19 @@ describe("managed server controls through real HTTP, policy and SQL ownership", 
     expect((await request("managed/runtime-api")).status).toBe(200);
     for (const path of ["runtime-api/credential", "ssh/connection", "runtime-api/enable"])
       expect((await request(`managed/${path}`, "POST", { confirm: true })).status).toBe(403);
+    const outbound = await request("managed/outbound");
+    expect(outbound.status).toBe(200);
+    expect(
+      (
+        await request("managed/outbound", "PATCH", {
+          mode: "managed",
+          ip: "1.1.1.1",
+          expectedRevision: outbound.body.revision,
+          confirm: true,
+        })
+      ).status,
+    ).toBe(403);
+    expect(handle.network.applyOutboundIp).not.toHaveBeenCalled();
     expect(handle.apiAccess.getToken).not.toHaveBeenCalled();
     expect(handle.ssh.connection).not.toHaveBeenCalled();
   });
@@ -448,6 +486,223 @@ describe("managed server controls through real HTTP, policy and SQL ownership", 
     const recovered = await request("managed/runtime-api/credential", "POST", { confirm: true });
     expect(recovered.status).toBe(200);
     expect(recovered.body.revision).not.toBe(input.expectedRevision);
+  });
+  it("reads owned outbound settings/options without credentials, writes or starting the server", async () => {
+    const result = await request("managed/outbound");
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({
+      mode: "managed",
+      ip: "192.0.2.2",
+      proxy: null,
+      revision: expect.any(String),
+    });
+    expect(result.response.headers.get("cache-control")).toContain("no-store");
+    expect((await request("managed/outbound/options")).body.ips).toHaveLength(2);
+    expect(h.canWork).not.toHaveBeenCalled();
+    expect(handle.network.update).not.toHaveBeenCalled();
+    const foreign = await seedOwner();
+    h.client.listOutboundIps.mockClear();
+    expect((await request("managed/outbound/options", "GET", undefined, foreign)).status).toBe(404);
+    expect(h.client.listOutboundIps).not.toHaveBeenCalled();
+  });
+  it("changes only the proxy and fences a second edit that changes just its hidden password", async () => {
+    const before = (await request("managed/outbound")).body;
+    const proxy = {
+      host: "8.8.8.8",
+      port: 8080,
+      protocol: "https",
+      username: "proxy-user",
+      password: "private-proxy-password",
+    };
+    const input = { mode: "custom", proxy, expectedRevision: before.revision, confirm: true };
+    const first = await request("managed/outbound", "PATCH", input);
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    expect(first.body.proxy).toEqual({
+      host: proxy.host,
+      port: 8080,
+      protocol: "https",
+      hasCredentials: true,
+    });
+    expect(first.body.revision).not.toBe(before.revision);
+    expect(handle.network.setCustomProxy).toHaveBeenCalledExactlyOnceWith(proxy);
+    expect(network.egress).toEqual(["*"]);
+    expect(network.ingress_ports).toEqual([80, "*", 9990]);
+    expect(network.private_links).toEqual([{ id: "keep" }]);
+    expect(handle.network.update).not.toHaveBeenCalled();
+    const changed = { ...input, proxy: { ...proxy, password: "replacement-password" } };
+    expect((await request("managed/outbound", "PATCH", changed)).body.code).toBe(
+      "SERVER_OUTBOUND_CHANGED",
+    );
+    const second = await request("managed/outbound", "PATCH", {
+      ...changed,
+      expectedRevision: first.body.revision,
+    });
+    expect(second.status, JSON.stringify(second.body)).toBe(200);
+    expect(second.body.revision).not.toBe(first.body.revision);
+    await flushAudit();
+    const events = await db
+      .select()
+      .from(schema.auditEvent)
+      .where(eq(schema.auditEvent.organizationId, actor.orgId));
+    expect(JSON.stringify([first.body, second.body, events])).not.toMatch(
+      /proxy-user|private-proxy-password|replacement-password|DO_NOT_FORWARD/,
+    );
+  });
+  it("rejects a lost custom-proxy reply on retry instead of applying the secret twice", async () => {
+    const before = (await request("managed/outbound")).body;
+    const input = {
+      mode: "custom",
+      proxy: { host: "8.8.8.8", port: 8080, protocol: "http" },
+      expectedRevision: before.revision,
+      confirm: true,
+    };
+    const apply = handle.network.setCustomProxy.getMockImplementation();
+    handle.network.setCustomProxy.mockImplementationOnce(async (proxy: unknown) => {
+      await apply(proxy);
+      throw new Error("lost response with private-proxy-password");
+    });
+    const failed = await request("managed/outbound", "PATCH", input);
+    expect(failed.status).toBe(502);
+    expect(JSON.stringify(failed.body)).not.toContain("private-proxy-password");
+    expect((await request("managed/outbound", "PATCH", input)).body.code).toBe(
+      "SERVER_OUTBOUND_CHANGED",
+    );
+    expect(handle.network.setCustomProxy).toHaveBeenCalledTimes(1);
+    expect((await request("managed/outbound")).body.proxy.host).toBe("8.8.8.8");
+  });
+  it("validates pool membership and makes managed-IP retries harmless after a lost response", async () => {
+    const before = (await request("managed/outbound")).body;
+    const input = {
+      mode: "managed",
+      ip: "8.8.8.8",
+      expectedRevision: before.revision,
+      confirm: true,
+    };
+    expect((await request("managed/outbound", "PATCH", input)).body.code).toBe(
+      "SERVER_OUTBOUND_IP_UNAVAILABLE",
+    );
+    expect(handle.network.applyOutboundIp).not.toHaveBeenCalled();
+    const apply = handle.network.applyOutboundIp.getMockImplementation();
+    handle.network.applyOutboundIp.mockImplementationOnce(async (value: unknown) => {
+      await apply(value);
+      throw new Error("lost response");
+    });
+    const selected = { ...input, ip: "1.1.1.1" };
+    expect((await request("managed/outbound", "PATCH", selected)).status).toBe(502);
+    const retry = await request("managed/outbound", "PATCH", selected);
+    expect(retry.status).toBe(200);
+    expect(retry.body).toMatchObject({ mode: "managed", ip: "1.1.1.1" });
+    expect(handle.network.applyOutboundIp).toHaveBeenCalledTimes(1);
+    expect(handle.network.update).not.toHaveBeenCalled();
+  });
+  it("returns to managed egress without rotating the address again on retry", async () => {
+    network.outbound_mode = "custom";
+    network.outbound_proxy = {
+      host: "8.8.8.8",
+      port: 8080,
+      protocol: "http",
+      has_credentials: true,
+    };
+    const before = (await request("managed/outbound")).body;
+    const input = { mode: "managed", expectedRevision: before.revision, confirm: true };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await request("managed/outbound", "PATCH", input);
+      expect(result.status).toBe(200);
+      expect(result.body).toMatchObject({ mode: "managed", proxy: null, ip: "8.8.4.4" });
+    }
+    expect(handle.network.clearCustomProxy).toHaveBeenCalledOnce();
+    expect(handle.network.update).not.toHaveBeenCalled();
+  });
+  it("refuses private proxy targets, incomplete credentials, unverified versions and stale edits", async () => {
+    const before = (await request("managed/outbound")).body;
+    const input = {
+      mode: "custom",
+      proxy: { host: "8.8.8.8", port: 8080, protocol: "http" },
+      expectedRevision: before.revision,
+      confirm: true,
+    };
+    for (const host of [
+      "127.0.0.1",
+      "169.254.169.254",
+      "10.0.0.1",
+      "100.64.0.1",
+      "example.test",
+      "999.999.999.999",
+    ]) {
+      expect(
+        (await request("managed/outbound", "PATCH", { ...input, proxy: { ...input.proxy, host } }))
+          .status,
+      ).toBe(400);
+    }
+    expect(
+      (
+        await request("managed/outbound", "PATCH", {
+          ...input,
+          proxy: { ...input.proxy, username: "only-user" },
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await request("managed/outbound", "PATCH", {
+          ...input,
+          proxy: { ...input.proxy, username: "user", password: "invalid private password" },
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (await request("managed/outbound", "PATCH", { ...input, ingress_ports: [1] })).status,
+    ).toBe(400);
+    delete vm.updated_at;
+    expect((await request("managed/outbound")).body.revision).toBeNull();
+    expect(
+      (
+        await request("managed/outbound", "PATCH", {
+          mode: "managed",
+          expectedRevision: before.revision,
+          confirm: true,
+        })
+      ).body.code,
+    ).toBe("SERVER_OUTBOUND_UNAVAILABLE");
+    expect((await request("managed/outbound", "PATCH", input)).body.code).toBe(
+      "SERVER_OUTBOUND_UNAVAILABLE",
+    );
+    expect(handle.network.setCustomProxy).not.toHaveBeenCalled();
+  });
+  it("does not claim success for rejected preflight, unavailable proxy entitlement or unconfirmed readback", async () => {
+    const before = (await request("managed/outbound")).body;
+    const input = {
+      mode: "custom",
+      proxy: { host: "8.8.8.8", port: 8080, protocol: "http" },
+      expectedRevision: before.revision,
+      confirm: true,
+    };
+    handle.network.setCustomProxy.mockRejectedValueOnce(
+      Object.assign(new Error("secret-password"), { code: "preflight_failed" }),
+    );
+    const rejected = await request("managed/outbound", "PATCH", input);
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.code).toBe("MANAGED_PROXY_REJECTED");
+    expect(JSON.stringify(rejected.body)).not.toContain("secret-password");
+    handle.network.setCustomProxy.mockRejectedValueOnce(
+      Object.assign(new Error("secret-password"), { code: "plan_required" }),
+    );
+    expect((await request("managed/outbound", "PATCH", input)).status).toBe(402);
+    handle.network.setCustomProxy.mockResolvedValueOnce({ success: true });
+    expect((await request("managed/outbound", "PATCH", input)).body.code).toBe(
+      "SERVER_OUTBOUND_UNCONFIRMED",
+    );
+    expect(network.outbound_mode).toBe("managed");
+    const apply = handle.network.setCustomProxy.getMockImplementation();
+    handle.network.setCustomProxy.mockImplementationOnce(async (proxy: unknown) => {
+      const result = await apply(proxy);
+      // Saved proxy metadata is not evidence that the VM changed its connection.
+      network.outbound_ip = before.ip;
+      return result;
+    });
+    expect((await request("managed/outbound", "PATCH", input)).body.code).toBe(
+      "SERVER_OUTBOUND_UNCONFIRMED",
+    );
   });
   it("rejects arbitrary config, proxy credentials, invalid paths and unbounded requests", async () => {
     expect(
@@ -683,6 +938,18 @@ describe("managed server controls through real HTTP, policy and SQL ownership", 
           : app.request(String(url), init),
     });
     for (const servers of [native.servers, client.servers]) {
+      const outbound = await servers.managedOutbound(serverId);
+      expect(outbound).toMatchObject({ mode: "managed", revision: expect.any(String) });
+      expect((await servers.managedOutboundOptions(serverId)).ips).toHaveLength(2);
+      const ip = outbound.ip === "1.1.1.1" ? "8.8.4.4" : "1.1.1.1";
+      expect(
+        await servers.setManagedOutbound(serverId, {
+          mode: "managed",
+          ip,
+          expectedRevision: outbound.revision!,
+          confirm: true,
+        }),
+      ).toMatchObject({ mode: "managed", ip });
       expect(await servers.managedInfo(serverId)).toMatchObject({ workspaceId: vmId });
       expect((await servers.get(serverId)).capabilities).not.toHaveProperty("managedControls");
       expect(await servers.getNetworkSettings(serverId)).toEqual({

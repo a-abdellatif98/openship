@@ -261,7 +261,7 @@ describe("mail certificate completion", () => {
     mailDomainRow();
     h.applyMailCertificate.mockRejectedValueOnce(new Error("Postfix reload failed"));
     await expect(manageDomainSsl(HOST, { action: "renew" })).rejects.toThrow("Postfix reload failed");
-    expect(h.recordSslFailure).toHaveBeenCalledWith("dom_mail", "Postfix reload failed");
+    expect(h.recordSslFailure).toHaveBeenCalledWith("dom_mail", "Postfix reload failed", "operation");
     expect(h.updateSsl).toHaveBeenCalledWith("dom_mail", expect.objectContaining({ sslExpiresAt: new Date(ISSUED.expiresAt) }));
   });
 

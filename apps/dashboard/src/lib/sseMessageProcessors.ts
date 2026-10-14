@@ -267,6 +267,10 @@ export const createBuildMessageProcessor = (
           break;
 
         case "error":
+          // The attach endpoint has no in-memory session while Cloud work is
+          // queued (or after replica handoff). EOF reconnects; status polling
+          // remains authoritative. Never swallow a coded worker failure.
+          if (message.error === "Session not found" && !message.errorCode) break;
           const errorMsg = message.error || message.message || "Container error occurred";
           callbacks.onFailure?.(errorMsg, message.errorCode, message.errorDetails);
           break;

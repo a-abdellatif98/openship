@@ -194,6 +194,51 @@ describe("Settings repairs the stored GitHub token (#944)", () => {
   });
 });
 
+describe("selecting a detected host CLI identity", () => {
+  it("offers explicit CLI selection even with a connected Cloud App and no device client", async () => {
+    const state: GitHubConnectionState = {
+      primary: "openship-app",
+      sources: {
+        openshipApp: { connected: true, login: "app-user", hasInstallations: true },
+        ghCli: { available: true, login: "operator", method: "host-cli" },
+      },
+    };
+    const status = {
+      state,
+      capabilities: {
+        ...capabilities,
+        methods: capabilities.methods.map((method) => method.kind === "device"
+          ? { ...method, available: false, configured: false } : method),
+      },
+    };
+    api.getStatusDeduped.mockResolvedValue(status);
+    api.getStatus.mockResolvedValue(status);
+    api.getUserHome.mockResolvedValue({ state });
+    api.connect.mockResolvedValue({ connected: true });
+    await render(state);
+    await click("Change method");
+    expect(container.textContent).toContain("Use gh CLI");
+    expect(container.textContent).toContain("Logged in as @operator");
+    expect(container.textContent).not.toContain("Browser sign-in with a device code");
+    expect(api.connect).not.toHaveBeenCalled();
+    await click("Use gh CLI");
+    expect(api.connect).toHaveBeenCalledExactlyOnceWith("cli");
+    expect(api.push).not.toHaveBeenCalled();
+  });
+
+  it.each(["device", "token"] as const)("does not label a saved %s credential as a host CLI", async (method) => {
+    const state: GitHubConnectionState = {
+      ...connected,
+      sources: { ...connected.sources, ghCli: { ...connected.sources.ghCli, method } },
+    };
+    api.getStatusDeduped.mockResolvedValue({ state, capabilities });
+    await render(state);
+    await click("Change method");
+    expect(container.textContent).not.toContain("Use gh CLI");
+    expect(api.connect).not.toHaveBeenCalled();
+  });
+});
+
 describe("Library connection status after App fallback (#944)", () => {
   it("shows the App first and reuses the fallback status without another cloud request", async () => {
     await act(async () => root.render(

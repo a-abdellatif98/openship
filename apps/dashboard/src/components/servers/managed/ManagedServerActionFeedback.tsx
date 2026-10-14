@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import type { CloudWorkspaceSummary } from "@repo/contracts";
 import { useI18n } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { ServerResizeDetails } from "./ServerResizeDetails";
 import type { ManagedServerActions } from "./useManagedServerActions";
+import { workspaceBillingHref } from "@/components/billing/BillingWorkspaceContext";
 
 /** Action errors and confirmations stay visible whichever server tab is open. */
 export function ManagedServerActionFeedback({
@@ -42,6 +44,11 @@ export function ManagedServerActionFeedback({
           <h2 className="text-base font-medium text-danger">{copy.delete}</h2>
           <p className="text-sm text-muted-foreground">{copy.deleteHint}</p>
           <div className="flex flex-wrap gap-2">
+            <Button asChild variant="secondary">
+              <Link href={workspaceBillingHref("/billing/overview", server.id)}>
+                {t.billing.subscription.manage}
+              </Link>
+            </Button>
             <Button
               variant="destructive"
               disabled={actions.busy || pending || server.projectCount > 0}

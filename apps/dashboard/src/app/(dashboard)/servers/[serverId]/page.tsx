@@ -3,7 +3,7 @@
 import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCloudResourceKey } from "@/context/CloudResourceContext";
 
-import { Icon as UiIcon, type IconName } from "@repo/ui/icons";
+import { Icon as UiIcon } from "@repo/ui/icons";
 
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import { BlurIp } from "@/components/BlurIp";
@@ -35,6 +35,7 @@ import {
 } from "./_components/connection-banner";
 
 import { RateLimitSettings } from "./_components/rate-limit-settings";
+import { GpuCard } from "./_components/gpu-card";
 import { ExposedPortsCard } from "./_components/exposed-ports-card";
 import { PortForwardingCard } from "./_components/port-forwarding-card";
 import { ServerGitHubConnect } from "@/components/github/ServerGitHubConnect";
@@ -49,45 +50,19 @@ import { ManagedServerPlan } from "@/components/servers/managed/ManagedServerPla
 import { ManagedServerActivity } from "@/components/servers/managed/ManagedServerActivity";
 import { ManagedServerActionFeedback } from "@/components/servers/managed/ManagedServerActionFeedback";
 import { ManagedServerStatus } from "@/components/servers/managed/ManagedServerStatus";
+import { ManagedServerConnectionNotice } from "@/components/servers/managed/ManagedServerConnectionNotice";
 import { useManagedServerActions } from "@/components/servers/managed/useManagedServerActions";
 import { ServerUsage } from "@/components/servers/ServerUsage";
 import { ManagedServerNetwork } from "@/components/servers/managed/ManagedServerNetwork";
+import { ManagedServerOutbound } from "@/components/servers/managed/ManagedServerOutbound";
 import { ManagedServerSsh } from "@/components/servers/managed/ManagedServerSsh";
 import { ManagedServerRuntime } from "@/components/servers/managed/ManagedServerRuntime";
 import { ManagedServerSettings } from "@/components/servers/managed/ManagedServerSettings";
 import { ManagedServerWorkloads } from "@/components/servers/managed/ManagedServerWorkloads";
+import { SERVER_TABS as TABS, serverTabNavigation, type ServerTab as Tab } from "./_components/server-tabs";
 
 
-type Tab = "overview" | "activity" | "migrations" | "components" | "github" | "security" | "networking" | "ports" | "terminal" | "ssh" | "runtimeApi" | "settings" | "workloads";
 type ManualActionMode = "remove" | null;
-
-interface TabDef {
-  key: Tab;
-  /** Narrower than ElementType so these feed the shared <Tabs> directly. */
-  icon: IconName;
-  /** Desktop-only tabs are filtered out in non-desktop deployments. */
-  desktopOnly?: boolean;
-}
-
-// Mail management lives in /emails - that page picks any server and reads
-// its mail-install state at runtime. We don't repeat that UI here.
-const TABS: TabDef[] = [
-  { key: "overview",   icon: "grid" },
-  { key: "activity",   icon: "history" },
-  { key: "migrations", icon: "migration" },
-  { key: "components", icon: "server-settings" },
-  { key: "github",     icon: "git-branch" },
-  { key: "security",   icon: "shield" },
-  { key: "networking", icon: "network" },
-  { key: "workloads", icon: "layers" },
-  { key: "ssh", icon: "key" },
-  { key: "runtimeApi", icon: "code" },
-  { key: "settings", icon: "server-settings" },
-  // Port forwarding is meaningful only in desktop mode (the orchestrator IS
-  // the user's machine); hidden elsewhere.
-  { key: "ports",      icon: "port-forwarding", desktopOnly: true },
-  { key: "terminal",   icon: "terminal" },
-];
 
 export default function ServerDetailPage({
   params,
@@ -128,8 +103,9 @@ function ServerDetail({ serverId }: { serverId: string }) {
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const managed = server?.managed;
+  const connectionIssue = managed?.connectionIssue;
   const hostConfiguration = server?.capabilities?.hostConfiguration ?? !managed;
-  const ready = !managed || ["ready", "running", "active"].includes(managed.state);
+  const ready = !managed || (!connectionIssue && ["ready", "running", "active"].includes(managed.state));
   const canInspect = !!server && (server.capabilities?.exec ?? !managed) && ready;
   const canMonitor = (server?.capabilities?.monitor ?? !managed) && ready;
   const canTerminal = (server?.capabilities?.terminal ?? !managed) && ready;
@@ -157,6 +133,8 @@ function ServerDetail({ serverId }: { serverId: string }) {
     return tab.key === "overview" || hostConfiguration;
   });
   const activeTab = visibleTabs.some(tab => tab.key === requestedTab) ? requestedTab : "overview";
+  const navigation = serverTabNavigation(visibleTabs, activeTab, !!managed);
+  const fullWidth = activeTab === "migrations" || (managed && activeTab === "terminal");
   // Follow real tab links and browser navigation as well as the initial URL.
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -297,10 +275,10 @@ function ServerDetail({ serverId }: { serverId: string }) {
 
   useEffect(() => { void fetchData(); }, [fetchData]);
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || connectionIssue) return;
     const timer = setInterval(() => { if (document.visibilityState === "visible") void fetchData(); }, 3_000);
     return () => clearInterval(timer);
-  }, [pending, fetchData]);
+  }, [pending, connectionIssue, fetchData]);
 
   const runHealthCheck = useCallback(async () => {
     if (!serverId || !canInspect || healthCheckPending.current) return;
@@ -609,7 +587,7 @@ function ServerDetail({ serverId }: { serverId: string }) {
 
   // Edit view shares the same route as the detail page (?edit=true) and reuses
   // the credentials form so add/edit stay in sync.
-  if (editing) {
+  if (editing && !connectionIssue) {
     return (
       <PageContainer>
           <div className="flex items-center gap-3 mb-6">
@@ -688,14 +666,15 @@ function ServerDetail({ serverId }: { serverId: string }) {
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => router.push(`/servers/${serverId}?edit=true`)}
+              disabled={!!connectionIssue}
               aria-label={t.servers.detail.edit}
-              className="inline-flex size-9 items-center justify-center gap-2 bg-muted/50 text-foreground text-sm font-medium rounded-xl hover:bg-muted transition-colors sm:w-auto sm:px-4"
+              className="inline-flex size-9 items-center justify-center gap-2 bg-muted/50 text-foreground text-sm font-medium rounded-xl hover:bg-muted transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-4"
             >
               <UiIcon name="sliders" className="size-4" />
               <span className="hidden sm:inline">{t.servers.detail.edit}</span>
             </button>
             <Button variant="ghost" size="icon" disabled={refreshing || checking} aria-label={t.servers.networks.refresh} onClick={() => { void fetchData(); void runHealthCheck(); monitor.reconnect(); }}><UiIcon name="refresh" className={`size-4 ${refreshing || checking ? "animate-spin" : ""}`} /></Button>
-            {!server.isLocal && <DropdownMenu triggerLabel={t.servers.detail.removeServer} actions={[{ id: "remove", label: t.servers.detail.removeServer, icon: <UiIcon name="trash" className="size-4" />, variant: "danger", onClick: handleDelete }]} />}
+            {!server.isLocal && !connectionIssue && <DropdownMenu triggerLabel={t.servers.detail.removeServer} actions={[{ id: "remove", label: t.servers.detail.removeServer, icon: <UiIcon name="trash" className="size-4" />, variant: "danger", onClick: handleDelete }]} />}
           </div>
           <div className="col-span-2 col-start-2 flex min-w-0 flex-wrap items-center gap-2 [.is-desktop_&]:col-start-1">
             {managed ? <><p className="text-sm text-muted-foreground">{t.billing.workspaces.managedBy}</p><ManagedServerStatus workspace={managed} /></> : <>
@@ -734,12 +713,14 @@ function ServerDetail({ serverId }: { serverId: string }) {
             a hand-rolled copy of it). `href` keeps the tabs deep-linkable and
             cmd-clickable; a plain click still switches client-side. */}
         <Tabs
-          className="mb-6"
-          value={activeTab}
+          className={navigation.secondary.length > 1 ? "mb-3" : "mb-6"}
+          value={navigation.selected}
           onChange={(key) => changeTab(key)}
-          tabs={visibleTabs.map(({ key, icon, desktopOnly }) => ({
+          tabs={navigation.primary.map(({ key, icon, desktopOnly }) => ({
             key,
-            label: key === "networking" ? t.servers.tabsNav.networking : t.servers.detail.tabs[key],
+            label: key === "networking" ? t.servers.tabsNav.networking
+              : key === "ssh" && managed ? t.servers.managedControls.navigation.ssh
+              : t.servers.detail.tabs[key],
             icon,
             href: tabHref(key),
             hidden: desktopOnly && !isDesktop,
@@ -747,10 +728,19 @@ function ServerDetail({ serverId }: { serverId: string }) {
             count: key === "ports" && isDesktop ? tunnels.length : undefined,
           }))}
         />
+        {navigation.secondary.length > 1 && <Tabs className="mb-6" size="sm" value={activeTab} onChange={changeTab}
+          tabs={navigation.secondary.map(({ key }) => ({ key, href: tabHref(key),
+            label: key === "networking" ? t.servers.managedControls.navigation.connection
+              : key === "security" ? t.servers.managedControls.navigation.listeners
+              : key === "settings" ? t.servers.managedControls.navigation.general
+              : t.servers.detail.tabs[key],
+          }))} />}
 
         {/* Main Grid — the Migrations tab spans full width (its flow renders its
             own right column: connection card → migrate config / live progress). */}
-        <div className={`grid grid-cols-1 gap-6 items-start ${activeTab === "migrations" ? "" : "@min-[60rem]/server-detail:grid-cols-[minmax(0,1fr)_340px]"}`}>
+        {connectionIssue ? (
+          <ManagedServerConnectionNotice issue={connectionIssue} refresh={() => void fetchData()} busy={refreshing} />
+        ) : <div className={`grid grid-cols-1 gap-6 items-start ${fullWidth ? "" : "@min-[60rem]/server-detail:grid-cols-[minmax(0,1fr)_340px]"}`}>
           {/* Left column */}
           <div className="min-w-0 space-y-5">
             {loadError && <p role="alert" className="rounded-xl bg-danger/5 p-4 text-sm text-danger">{loadError}</p>}
@@ -771,6 +761,7 @@ function ServerDetail({ serverId }: { serverId: string }) {
                 onReconnectMonitor={monitor.reconnect}
                 showComponents={canInspect}
               />}
+              {server.gpu && <GpuCard key={`${serverId}:${server.gpu.override ?? "auto"}`} server={server} onChanged={updated => setServer(current => current ? { ...current, ...updated } : updated)} />}
               <ServerUsage key={`${serverId}:${managed?.state ?? "connected"}`} serverId={serverId} resources={managed?.resources} showProjects metrics={!canMonitor} />
             </>}
 
@@ -814,7 +805,10 @@ function ServerDetail({ serverId }: { serverId: string }) {
                 {hostConfiguration && <RateLimitSettings serverId={serverId} />}
               </div>
             )}
-            {activeTab === "networking" && <ManagedServerNetwork key={serverId} serverId={serverId} />}
+            {activeTab === "networking" && <>
+              {managed && <ManagedServerOutbound serverId={serverId} />}
+              <ManagedServerNetwork key={serverId} serverId={serverId} />
+            </>}
 
             {activeTab === "ports" && isDesktop && serverId && (
               <PortForwardingCard
@@ -847,12 +841,12 @@ function ServerDetail({ serverId }: { serverId: string }) {
 
           {/* Right sidebar — connection summary. Hidden on the Migrations tab,
               whose flow renders its own right column. */}
-          {activeTab !== "migrations" && (
+          {!fullWidth && (
             <div className="space-y-4 @min-[60rem]/server-detail:sticky @min-[60rem]/server-detail:top-6 @min-[60rem]/server-detail:self-start">
               {managed ? <ManagedServerPlan server={managed} actions={managedActions} /> : <><ServerConnectionCard server={{ ...server, sshHost: server.sshHost ?? "" }} /><ServerInfrastructure serverId={serverId} /></>}
             </div>
           )}
-        </div>
+        </div>}
 
         {!managed && <ServerDeletionModal
           isOpen={removeOpen}

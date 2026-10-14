@@ -47,6 +47,25 @@ describe("reconcileProjectRoutes host-port ownership gate", () => {
     convergeTarget.mockReset().mockResolvedValue({ released: 0, retained: [] });
     withTargetLock.mockClear();
   });
+  it("registers a path-only vhost and reserves only its explicit loopback upstreams", async () => {
+    const routing = { registerRoute: vi.fn(async (_route: unknown) => {}), removeRoute: vi.fn() };
+    await reconcileProjectRoutes(project, {
+      routing: routing as never, hostPortTarget: target, edgeProxy,
+      registers: [{
+        hostname: "api.onvo.me", isCustomDomain: true, notFound: true,
+        proxyLocations: [{ pathPrefix: "/v3", targetUrl: "http://127.0.0.1:23001" }],
+        observedLoopbackPublishes: [{ serviceId: "svc-api", containerPort: 9000, hostPort: 23001 }],
+      }],
+    });
+    expect(routing.registerRoute).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "api.onvo.me", notFound: true,
+      proxyLocations: [{ pathPrefix: "/v3", targetUrl: "http://127.0.0.1:23001" }],
+    }));
+    expect(routing.registerRoute.mock.calls[0]![0]).not.toHaveProperty("targetUrl");
+    expect(reserveObserved.mock.calls[0]![0].publishes).toEqual([
+      { serviceId: "svc-api", containerPort: 9000, hostPort: 23001 },
+    ]);
+  });
 
   it("fails closed before any edge mutation when a claim conflicts", async () => {
     const conflict = new Error("host port belongs to another project");

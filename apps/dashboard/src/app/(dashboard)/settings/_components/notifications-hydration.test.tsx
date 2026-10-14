@@ -71,6 +71,10 @@ vi.mock("@/context/ToastContext", () => ({
   useToast: () => ({ showToast: mocks.showToast }),
 }));
 
+vi.mock("@/components/notifications/NotificationDeliveryHistory", () => ({
+  NotificationDeliveryHistory: () => null,
+}));
+
 import { I18nProvider } from "@/components/i18n-provider";
 import { AuthProvider } from "@/context/AuthContext";
 import { PlatformProvider } from "@/context/PlatformContext";

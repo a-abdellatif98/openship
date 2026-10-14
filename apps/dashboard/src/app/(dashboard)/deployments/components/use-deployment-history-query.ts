@@ -5,17 +5,19 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { DEPLOYMENT_HISTORY_STATUSES, type DeploymentHistoryFilter } from "@repo/core";
 
 interface HistoryQuery {
+  days: number;
   page: number;
   filter: DeploymentHistoryFilter | "all";
   searchQuery: string;
   selectedProjectId: string;
 }
-const DEFAULT_QUERY: HistoryQuery = { page: 1, filter: "all", searchQuery: "", selectedProjectId: "all" };
+const DEFAULT_QUERY: HistoryQuery = { days: 30, page: 1, filter: "all", searchQuery: "", selectedProjectId: "all" };
 
 function readQuery(params: Pick<URLSearchParams, "get">): HistoryQuery {
   const status = params.get("status") ?? "all";
   const page = Number(params.get("page") ?? 1);
   return {
+    days: [7, 30, 90].includes(Number(params.get("days"))) ? Number(params.get("days")) : 30,
     page: Number.isSafeInteger(page) && page > 0 ? page : 1,
     filter: Object.hasOwn(DEPLOYMENT_HISTORY_STATUSES, status) ? status as DeploymentHistoryFilter : "all",
     searchQuery: (params.get("q") ?? "").slice(0, 200),
@@ -37,7 +39,7 @@ export function useDeploymentHistoryQuery(isProject: boolean) {
     // Read the current URL so rapid filter edits compose before React rerenders.
     const next = typeof update === "function" ? update(readQuery(url.searchParams)) : update;
     for (const [key, value, defaultValue] of [
-      ["status", next.filter, "all"], ["project", next.selectedProjectId, "all"],
+      ["days", String(next.days), "30"], ["status", next.filter, "all"], ["project", next.selectedProjectId, "all"],
       ["q", next.searchQuery, ""], ["page", String(next.page), "1"],
     ] as const) {
       if (value === defaultValue) url.searchParams.delete(key);

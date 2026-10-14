@@ -98,7 +98,7 @@ describe("pricing catalog (pricing.json)", () => {
   });
 
   it("ships exactly one popular tier", () => {
-    expect(PRICING.plans.filter((p) => p.popular).map((p) => p.id)).toEqual(["pro"]);
+    expect(PRICING.plans.filter((p) => p.popular).map((p) => p.id)).toEqual(["starter"]);
   });
 
   it("keeps prices monotonically increasing with the value ladder", () => {
@@ -106,12 +106,12 @@ describe("pricing catalog (pricing.json)", () => {
     const cents = paid.map((p) => p.price.monthly!);
     expect([...cents].sort((a, b) => a - b)).toEqual(cents);
     // Every allowance that is a number on both tiers must not shrink as price grows.
-    const dims = ["buildMinutesPerMonth", "runningServices", "maxProjects", "freeSubdomains"] as const;
+    const dims = ["buildMinutesPerMonth", "runningServices", "maxProjects", "freeSubdomains", "concurrentBuilds"] as const;
     for (let i = 1; i < paid.length; i++) {
       for (const dim of dims) {
         const lo = paid[i - 1]!.limits[dim];
         const hi = paid[i]!.limits[dim];
-        if (lo === null || hi === null) continue;
+        if (lo == null || hi == null) continue;
         expect(hi, `${paid[i]!.id}.${dim} must be >= ${paid[i - 1]!.id}.${dim}`).toBeGreaterThanOrEqual(lo);
       }
       // Disks cannot shrink: a paid upgrade must still accommodate every disk
@@ -174,6 +174,7 @@ describe("pricing catalog (pricing.json)", () => {
       "services", // plan-guard: assertPlanAllowsServices
       "runningServices", // Oblien max_workspaces + plan-guard
       "maxProjects", // plan-guard: assertProjectQuota
+      "concurrentBuilds", // cloud-build-queue admission
       "maxResourceTier", // saved preset ceiling, plan-guard
       "maxServiceResources", // explicit per-service CPU/RAM, plan-guard
       "computeMinutesPerMonth", // legacy display field, null on paid plans
@@ -839,9 +840,9 @@ describe("stripe price ids", () => {
 });
 
 describe("locale coverage matches the dashboard", () => {
-  it("covers exactly the dashboard's 9 locales", () => {
+  it("covers exactly the dashboard's 10 locales", () => {
     // Divergence would show a translated dashboard next to English prices.
-    expect([...PRICING_LOCALES].sort()).toEqual(["ar", "de", "en", "es", "fr", "ja", "pt", "tr", "zh"]);
+    expect([...PRICING_LOCALES].sort()).toEqual(["ar", "de", "en", "es", "fr", "ja", "pt", "ru", "tr", "zh"]);
   });
 });
 

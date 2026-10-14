@@ -12,7 +12,7 @@ import { ConnectionCard } from "./ConnectionCard";
 import { ConnectedServicesCard } from "./ConnectedServicesCard";
 import { UsedByCard } from "./UsedByCard";
 import { TrafficChart } from "./general/TrafficChart";
-import { useProjectInfo, useAnalyticsData, invalidateProjectCaches } from "@/hooks/useProjectEndpoints";
+import { useProjectInfo, useAnalyticsData, retryProjectRequests } from "@/hooks/useProjectEndpoints";
 import { useI18n, interpolate } from "@/components/i18n-provider";
 import type { Dictionary } from "@/i18n";
 import { hasSeparateApplication } from "@/lib/project-application";
@@ -40,7 +40,7 @@ export const OverviewTab = () => {
   // project-wide request and cache with Monitoring's default All scope.
   const projectInfoQuery = useProjectInfo(id);
   const analytics = useAnalyticsData(projectData.id === id && hasDomain ? id : null);
-  const showAnalyticsError = !!analytics.error && !analytics.isLoading;
+  const showAnalyticsError = !!analytics.error;
   const analyticsData = analytics.data;
   const services = servicesData.services;
   const serviceCount = servicesData.isLoading
@@ -277,9 +277,14 @@ export const OverviewTab = () => {
 
       {/* ── Monitoring (only with a domain — no domain ⇒ no traffic) ── */}
       {hasDomain && showAnalyticsError && (
-        <AnalyticsError error={analytics.error!} onRetry={() => invalidateProjectCaches(id)} />
+        <AnalyticsError
+          error={analytics.error!}
+          onRetry={() => retryProjectRequests(id)}
+          retrying={analytics.isRefreshing}
+          hasData={!!analyticsData}
+        />
       )}
-      {hasDomain && !showAnalyticsError && (
+      {hasDomain && (!showAnalyticsError || analyticsData) && (
         <>
       {/* Compact stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

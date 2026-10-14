@@ -12,8 +12,11 @@ import {
   composeMountIssues,
   composeMountToSpec,
   composePortToSpec,
+  parseComposeDurationNs,
   parseComposeNamespace,
+  parseContainerHosts,
   parseEnvFile,
+  readComposeGpuConfig,
 } from "@repo/core";
 import type { ComposeAdvanced, ComposeHealthcheck, ComposeNamespaceField } from "@repo/core";
 
@@ -593,6 +596,10 @@ function parseAdvanced(
   const resources = parseServiceResources(svc, env);
   if (resources) advanced.resources = resources;
 
+  const gpu = readComposeGpuConfig(svc, (value) => interpolateComposeString(value, env));
+  Object.assign(advanced, gpu.config);
+  unsupported.push(...gpu.issues.map((issue) => ({ service: serviceName, ...issue })));
+
   const networkMode = parseNamespaceField(
     svc.network_mode,
     "network_mode",
@@ -604,6 +611,8 @@ function parseAdvanced(
 
   const pidMode = parseNamespaceField(svc.pid, "pid", env, serviceName, unsupported);
   if (pidMode) advanced.pidMode = pidMode;
+  const extraHosts = parseContainerHosts(svc.extra_hosts, (value) => interpolateComposeString(value, env));
+  if (extraHosts !== undefined) advanced.extraHosts = extraHosts;
 
   // Entrypoint (#575), on exactly the terms `parseCommand` uses for `command`:
   // list → argv verbatim, string → shell-word-split (no implicit `sh -c`).
@@ -632,6 +641,26 @@ function parseAdvanced(
         ? String(rawGrace)
         : undefined;
   if (grace) advanced.stopGracePeriod = grace;
+
+  // The runtime applies a duration it can't read as unset, so Docker's default
+  // takes over: 10 seconds for a grace period meant to be longer. Say so at
+  // parse time instead of letting the first stop discover it.
+  const durations = [
+    ["stop_grace_period", advanced.stopGracePeriod],
+    ["healthcheck.interval", advanced.healthcheck?.interval],
+    ["healthcheck.timeout", advanced.healthcheck?.timeout],
+    ["healthcheck.start_period", advanced.healthcheck?.startPeriod],
+  ] as const;
+  for (const [field, value] of durations) {
+    if (value === undefined || parseComposeDurationNs(value) !== undefined) continue;
+    unsupported.push({
+      service: serviceName,
+      field,
+      reason:
+        `${field} is not a duration like "90s" or "1m30s", so it is ignored and ` +
+        `Docker's default applies.`,
+    });
+  }
 
   return Object.keys(advanced).length > 0 ? advanced : undefined;
 }
@@ -741,6 +770,11 @@ function requestsSomething(value: unknown): boolean {
   return true;
 }
 
+function isNvidiaRuntime(value: unknown, env: Record<string, string>): boolean {
+  if (typeof value !== "string") return false;
+  return interpolateComposeString(value, env).trim().toLowerCase() === "nvidia";
+}
+
 function collectUnsupported(
   serviceName: string,
   svc: Record<string, unknown>,
@@ -749,6 +783,10 @@ function collectUnsupported(
 ): void {
   for (const [key, reason] of Object.entries(UNSUPPORTED_SERVICE_KEYS)) {
     if (!requestsSomething(svc[key])) continue;
+    // `runtime: nvidia` is retained as HostConfig.Runtime. Any other runtime
+    // (`runsc`, `kata`, ...) still falls back to the daemon default and is reported.
+    if (key === "runtime" && isNvidiaRuntime(svc[key], env)) continue;
+    // `gpus` is modeled (readComposeGpuConfig) and is not in this table; nothing to skip here.
     unsupported.push({ service: serviceName, field: key, reason });
   }
 
@@ -765,7 +803,7 @@ function collectUnsupported(
         field: "deploy",
         reason:
           `deploy.${rest.join("/")} is not modeled — Openship runs one container per ` +
-          `service (only deploy.resources.limits is honored).`,
+          `service (only deploy.resources.limits and the GPU in deploy.resources.reservations.devices are honored).`,
       });
     }
   }

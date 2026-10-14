@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { baseDictionary } from "@/i18n";
 import DeployMailPage from "./page";
+import { ApiError } from "@/lib/api/client";
 
 const h = vi.hoisted(() => ({
   status: vi.fn(),
@@ -147,6 +148,53 @@ describe("mail-backed webmail deployment", () => {
     await act(async () => finish({ deploymentId: "webmail-deployment" }));
     expect(button(copy.starting).disabled).toBe(true);
     expect(h.push).toHaveBeenCalledOnce();
+  });
+
+  it("requires choosing the existing app before reconnecting and passes its ID without relocating it", async () => {
+    h.status.mockResolvedValue({ domain: "example.com", installed: true, webmailRecoveryCandidates: [
+      { projectId: "existing-webmail", name: "Webmail example.com", hostname: "mail.example.com", serverId: "mail-server" },
+    ] });
+    await render();
+    expect(container.textContent).toContain(copy.reconnectBody);
+    expect(container.textContent).toContain(copy.reconnectChoose);
+    expect(button(copy.deployButton).disabled).toBe(true);
+    expect(h.deploy).not.toHaveBeenCalled();
+    await act(async () => container.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
+    expect(button(copy.reconnectButton).disabled).toBe(false);
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="'+copy.domainTitle+'"]')?.disabled).toBe(true);
+    expect(button("Select Cloud production").disabled).toBe(true);
+    await click(copy.reconnectButton);
+    expect(h.deploy).toHaveBeenCalledWith({ mailServerId: "mail-server", hostname: "mail.example.com", target: { kind: "self", serverId: "mail-server" }, replaceLegacy: false, reconnectProjectId: "existing-webmail" });
+    expect(h.push).toHaveBeenCalledWith("/build/webmail-deployment");
+  });
+
+  it("lets the operator choose among multiple existing apps rather than guessing a link", async () => {
+    h.status.mockResolvedValue({ domain: "example.com", webmailRecoveryCandidates: [
+      { projectId: "one", name: "First app", hostname: "mail.example.com", serverId: "mail-server" },
+      { projectId: "two", name: "Second app", hostname: "mail.example.com", serverId: "mail-server" },
+    ] });
+    await render();
+    const choices = [...container.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+    expect(choices.every(choice => !choice.checked)).toBe(true);
+    expect(button(copy.deployButton).disabled).toBe(true);
+    await act(async () => choices[1]!.click());
+    await click(copy.reconnectButton);
+    expect(h.deploy.mock.calls[0]?.[0].reconnectProjectId).toBe("two");
+  });
+
+  it("refreshes a changed mail link after a rejected reconnect without starting another deployment", async () => {
+    h.status.mockResolvedValueOnce({ domain: "example.com", webmailRecoveryCandidates: [
+      { projectId: "existing-webmail", name: "Existing webmail", hostname: "mail.example.com", serverId: "mail-server" },
+    ] });
+    h.deploy.mockRejectedValueOnce(new ApiError(409, "Conflict", { code: "WEBMAIL_LINK_CHANGED", error: "Refresh status" }));
+    await render();
+    await act(async () => container.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
+    await click(copy.reconnectButton);
+    expect(h.status).toHaveBeenCalledTimes(2);
+    expect(h.deploy).toHaveBeenCalledOnce();
+    expect(h.push).not.toHaveBeenCalled();
+    expect(container.querySelector('input[type="radio"]')).toBeNull();
+    expect(container.querySelector("input")?.value).toBe("inbox.example.com");
   });
 
   it("defaults a new installation to its actual mail server", async () => {

@@ -6,7 +6,10 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   row: vi.fn(),
   live: vi.fn(),
+  queue: vi.fn(),
 }));
+
+vi.mock("@repo/platform/engine/modules/deployments/cloud-build-queue-status", () => ({ getCloudBuildQueueStatus: mocks.queue }));
 
 vi.mock("@repo/db", () => ({
   repos: {
@@ -32,6 +35,7 @@ vi.mock("@repo/platform/engine/modules/domains/project-route.service", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.queue.mockResolvedValue(null);
   mocks.load.mockResolvedValue({
     dep: { id: "dep-1", organizationId: "org-1", status: "cancelled" },
     project: { id: "project-1" },
@@ -151,4 +155,14 @@ describe("build status uses the durable outcome (#919)", () => {
       buildDurationMs: 3500,
     });
   });
+});
+
+
+it("projects a queued Cloud build without an in-memory session as waiting", async () => {
+  const queue = { position: 2, reason: "concurrency", simultaneousBuilds: 1, activeBuilds: 1, workspaceId: "ws" };
+  mocks.load.mockResolvedValue({ dep: { id: "dep-1", organizationId: "org-1", status: "queued" }, project: { id: "project-1" } });
+  mocks.row.mockResolvedValue({ status: "pending", startedAt: null, logs: [] });
+  mocks.session.mockReturnValue(null);
+  mocks.queue.mockResolvedValue(queue);
+  expect(await getBuildSessionStatus("dep-1")).toMatchObject({ status: "queued", queue, is_active: false, buildStartedAt: null, progress: 0, completionPending: false });
 });

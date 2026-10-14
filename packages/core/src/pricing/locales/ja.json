@@ -34,7 +34,6 @@
     "sharedBuilds": "ビルドはサーバーを共有し、月ごとの時間上限はありません",
     "power": "アプリ 1 つあたり最大 {powerCpu} vCPU と {powerRamGb} GB RAM",
     "projects": "プロジェクト {maxProjects} 個",
-    "projectsUnlimited": "プロジェクトは無制限",
     "freeSubdomains": "無料の {freeDomainSuffix} サブドメイン {freeSubdomains} 個",
     "freeSubdomainsUnlimited": "無料の {freeDomainSuffix} サブドメインが無制限",
     "gitDeploys": "GitHub、GitLab、任意の Git リモートからデプロイ",

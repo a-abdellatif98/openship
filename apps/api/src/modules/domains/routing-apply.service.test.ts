@@ -246,6 +246,21 @@ describe("Cloud Docker route tables", () => {
       },
     ]);
   });
+  it("publishes a project-owned path-only domain with no catch-all cloud rule", async () => {
+    domainRepo.listByProject.mockResolvedValue([{
+      projectId: "stack", hostname: "api.onvo.me", serviceId: null, targetPort: null, domainType: "custom",
+    }]);
+    await apply({
+      ...base,
+      compositeRoutes: [{
+        hostname: "api.onvo.me", isCustomDomain: true,
+        locations: [{ pathPrefix: "/v3", serviceId: "api" }],
+      }],
+    });
+    expect(publish).toHaveBeenCalledWith("api.onvo.me", undefined, true, {
+      routes: [{ match: { path: "/v3", type: "prefix" }, action: { kind: "proxy", workspace: "shared-vm", port: 30003 } }],
+    });
+  });
   it("keeps the old composite table if any path target is missing, while updating other hosts", async () => {
     await expect(
       apply({
@@ -432,6 +447,24 @@ describe("applyProjectRouting — upstream resolution", () => {
         verificationToken: expect.any(String),
       }),
     );
+  });
+  it("reapplies project-owned path-only routes from live containers without exposing a root endpoint", async () => {
+    projectRepo.findById.mockResolvedValue({
+      ...project(),
+      compositeRoutes: [{ hostname: "api.onvo.me", isCustomDomain: true,
+        locations: [{ pathPrefix: "/v3", serviceId: "svc_1", port: 3001 }] }],
+    });
+    serviceRepo.listByProject.mockResolvedValue([{
+      id: "svc_1", projectId: "proj_1", name: "api", enabled: true, exposed: false, ports: ["3001"], kind: "compose",
+    }]);
+    domainRepo.listByProject.mockResolvedValue([{
+      projectId: "proj_1", hostname: "api.onvo.me", serviceId: null, domainType: "custom", targetPort: null,
+    }]);
+    await applyProjectRouting("proj_1");
+    expect(emittedRegister()).toEqual({
+      hostname: "api.onvo.me", isCustomDomain: true, notFound: true,
+      proxyLocations: [{ pathPrefix: "/v3", targetUrl: "http://172.19.0.2:3001" }],
+    });
   });
 
   it("routes service and composite hosts to a started replacement before its DB commit", async () => {

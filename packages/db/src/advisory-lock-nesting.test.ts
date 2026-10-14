@@ -158,3 +158,23 @@ test("keeps independent database factories on their own connections", async () =
   expect(first.connect).toHaveBeenCalledOnce();
   expect(second.connect).toHaveBeenCalledOnce();
 });
+
+test("detached workers do not retain admission locks or deadlock the minimum pool", async () => {
+  const { locks, clients, connect } = fixture();
+  const releaseWorker = deferred();
+  const enteredWorker = deferred();
+  let worker!: Promise<void>;
+  await locks.withAdvisoryLock("admission", async () => {
+    worker = locks.runOutsideAdvisoryLock(() => locks.withAdvisoryLock("execution", async () => {
+      enteredWorker.resolve();
+      await releaseWorker.promise;
+    }));
+  });
+  await enteredWorker.promise;
+  expect(connect).toHaveBeenCalledTimes(2);
+  expect(clients[0]!.release).toHaveBeenCalledOnce();
+  expect(clients[1]!.release).not.toHaveBeenCalled();
+  releaseWorker.resolve();
+  await worker;
+  expect(clients[1]!.release).toHaveBeenCalledOnce();
+});

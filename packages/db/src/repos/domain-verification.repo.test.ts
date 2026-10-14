@@ -31,6 +31,8 @@ describe("persisted domain verification and retry eligibility", () => {
         activeDeploymentId: "deployment",
       },
       { id: "draft", name: "Draft", slug: "draft", organizationId: "org", groupId: "g-draft" },
+      { id: "cloud-live", name: "Cloud", slug: "cloud", organizationId: "org", groupId: "g-cloud",
+        serverId: "cloud-server", workspaceId: "workspace", activeDeploymentId: "cloud-deployment" },
       {
         id: "other",
         name: "Other",
@@ -57,6 +59,25 @@ describe("persisted domain verification and retry eligibility", () => {
       createdAt: minutesAgo(120),
       ...patch,
     });
+
+  it("rechecks active Cloud HTTPS with fair batching and skips inactive or externally managed domains", async () => {
+    const state = { projectId: "cloud-live", verified: true, status: "active", sslStatus: "active", lastCheckedAt: minutesAgo(10) };
+    await add("cloud-due", state);
+    await add("cloud-fresh", { ...state, lastCheckedAt: minutesAgo(1) });
+    await add("cloud-manual", { ...state, manualSsl: true });
+    await add("cloud-external", { ...state, externalIngress: true });
+    await add("cloud-free", { ...state, domainType: "free" });
+    await add("cloud-wildcard", { ...state, hostname: "*.example.com" });
+    await add("cloud-removing", { ...state, status: "removing" });
+    await add("cloud-retrying", { ...state, verifyAttempts: 10 });
+    await add("cloud-disabled-service", { ...state, serviceId: "missing-or-disabled" });
+    await add("local-due", { ...state, projectId: "live" });
+    await add("draft-due", { ...state, projectId: "draft" });
+    expect((await repo.findDueCloudSslChecks(minutesAgo(5), 1)).map(row => row.id)).toEqual(["cloud-due"]);
+    expect(await repo.findDueCloudSslChecks(minutesAgo(5), 1, "local-due")).toEqual([]);
+    await repo.updateSsl("cloud-due", { sslStatus: "active", sslExpiresAt: new Date(Date.now() + 86_400_000) });
+    expect(await repo.findDueCloudSslChecks(minutesAgo(5))).toEqual([]);
+  });
 
   it("records the first failed check as failed with its reason and time", async () => {
     await add("failed");
@@ -179,12 +200,36 @@ describe("persisted domain verification and retry eligibility", () => {
       verifyAttempts: 0,
       lastVerifyError: null,
     });
-    await repo.recordSslFailure("working", "No certificate on the server", true);
+    await repo.recordSslFailure("working", "No certificate on the server", "invalid");
     expect(await repo.findById("working")).toMatchObject({
       verified: true,
       sslStatus: "error",
       verifyAttempts: 1,
       lastVerifyError: "No certificate on the server",
+    });
+  });
+
+  it.each(["none", "provisioning", "active", "error", "external"])(
+    "preserves %s TLS when its observation is unavailable",
+    async (sslStatus) => {
+      await add("unreachable", { verified: true, status: "active", sslStatus });
+      await repo.recordSslFailure("unreachable", "Observer network unavailable", "unknown");
+      expect(await repo.findById("unreachable")).toMatchObject({
+        verified: true, status: "active", sslStatus, verifyAttempts: 1,
+        lastVerifyError: "Observer network unavailable",
+      });
+    },
+  );
+
+  it.each([false, true])("records pending TLS without clearing unverified DNS failures (%s)", async (verified) => {
+    await add("pending-tls", {
+      verified, status: verified ? "active" : "failed", sslStatus: "error",
+      verifyAttempts: 1, lastVerifyError: "Previous failure",
+    });
+    await repo.updateSsl("pending-tls", { sslStatus: "provisioning" });
+    expect(await repo.findById("pending-tls")).toMatchObject({
+      verified, status: verified ? "active" : "failed", sslStatus: "provisioning",
+      verifyAttempts: verified ? 0 : 1, lastVerifyError: verified ? null : "Previous failure",
     });
   });
 

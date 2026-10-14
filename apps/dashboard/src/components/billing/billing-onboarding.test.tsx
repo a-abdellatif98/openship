@@ -184,6 +184,81 @@ describe("Cloud billing before the first subscription", () => {
 });
 
 describe("existing server billing", () => {
+  it("confirms cancellation once for the selected server and shows when access ends", async () => {
+    const state = {
+      ...paid,
+      workspace: { id: "cws-production", name: "Production", provisioned: true },
+      capabilities: {
+        ...paid.capabilities!,
+        cancellation: true,
+        resumption: true,
+      },
+    };
+    let finish!: (value: unknown) => void;
+    mocks.post.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await render(<BillingSidebar state={state} showSubscriptionControls />);
+    await act(async () => button(copy.subscription.cancel).click());
+    expect(mocks.post).not.toHaveBeenCalled();
+    const confirm = button(copy.subscription.confirmCancel);
+    await act(async () => {
+      confirm.click();
+      confirm.click();
+    });
+    expect(mocks.post).toHaveBeenCalledExactlyOnceWith("billing/cancel", {
+      workspaceId: "cws-production",
+    });
+    expect(confirm.disabled).toBe(true);
+    await act(async () =>
+      finish({
+        data: {
+          cancelAt: state.subscription!.currentPeriod.end,
+          subscription: { ...state.subscription, cancelAtPeriodEnd: true },
+        },
+      }),
+    );
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Renewal stopped",
+    );
+    expect(button(copy.subscription.resume).disabled).toBe(false);
+  });
+
+  it("does not report cancellation after a failed response and retries the same server", async () => {
+    const state = {
+      ...paid,
+      workspace: { id: "cws-production", name: "Production", provisioned: true },
+      capabilities: { ...paid.capabilities!, cancellation: true },
+    };
+    mocks.post.mockRejectedValueOnce(new Error("Cloud billing unavailable"));
+    await render(<BillingSidebar state={state} showSubscriptionControls />);
+    await act(async () => button(copy.subscription.cancel).click());
+    await act(async () => button(copy.subscription.confirmCancel).click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Cloud billing unavailable",
+    );
+    expect(container.querySelector('[role="status"]')?.textContent).not.toContain(
+      "Renewal stopped",
+    );
+    mocks.post.mockResolvedValueOnce({
+      data: {
+        cancelAt: state.subscription!.currentPeriod.end,
+        subscription: { ...state.subscription, cancelAtPeriodEnd: true },
+      },
+    });
+    await act(async () => button(copy.subscription.confirmCancel).click());
+    expect(mocks.post.mock.calls).toEqual([
+      ["billing/cancel", { workspaceId: "cws-production" }],
+      ["billing/cancel", { workspaceId: "cws-production" }],
+    ]);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Renewal stopped",
+    );
+  });
+
   it("uses one Stripe portal action for payment methods and invoices in the selected server", async () => {
     mocks.post.mockRejectedValueOnce(new Error("Portal temporarily unavailable"));
     await render(<BillingWorkspaceProvider workspaceId="cws-production"><BillingPaymentsPanel portalAvailable /></BillingWorkspaceProvider>);
@@ -633,18 +708,21 @@ describe("customer credit limits", () => {
       max_total_vcpus: 7, max_total_ram_mb: 10240, max_total_disk_gb: 192 } }} />);
     const valueFor = (label: string) => [...container.querySelectorAll("dt")].find(item => item.textContent === label)?.parentElement?.querySelector("dd")?.textContent;
     expect(valueFor(copy.header.vcpus)).toBe("7");
+    expect(valueFor(copy.resourcesGuide.projects)).toBe("10");
+    expect(valueFor(copy.capacity.runningServices)).toBe("15");
+    expect(visibleText()).not.toContain("No set limit");
     expect(valueFor(copy.header.ram)).toBe("10 GB");
     expect(valueFor(copy.resourcesGuide.storage)).toBe("192 GB");
-    expect(valueFor(copy.resourcesGuide.buildTime)).toBe(copy.resourcesGuide.buildIncluded);
+    expect(valueFor(copy.resourcesGuide.buildTime)).toBeUndefined();
     expect(container.textContent).not.toContain(copy.resourcesGuide.poolHint);
     expect(container.textContent).not.toContain("3,000 min");
     expect(visibleText()).not.toMatch(/credits/i);
-    expect(visibleText()).toContain("2 vCPU · 8 GB");
+    expect(visibleText()).not.toContain(copy.resourcesGuide.perService);
   });
-  it("shows saved preset ceilings and fixed build allowances without using new catalog limits", async () => {
+  it("keeps fixed build allowances but omits per-service ceilings from plan cards", async () => {
     await render(<PlanResources plan={{ ...hobby, limits: { ...hobby.limits,
       maxServiceResources: undefined, buildMinutesPerMonth: 3000 } }} />);
-    expect(visibleText()).toContain("1 vCPU · 1 GB");
+    expect(visibleText()).not.toContain("1 vCPU · 1 GB");
     expect(visibleText()).not.toContain("2 vCPU · 8 GB");
     expect(visibleText()).toContain("3,000 min / month");
     expect(visibleText()).not.toContain(copy.resourcesGuide.buildIncluded);

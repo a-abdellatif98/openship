@@ -3,6 +3,7 @@ import { ValidationError, type ProjectCompositeRoute } from "@repo/core";
 import type { ExecutionContext } from "../../../context";
 import { resolveServicePort } from "../../lib/deployable-service";
 import { publicEndpointHostname } from "../../lib/public-endpoints";
+import { ensureRouteDomainRecord } from "../../lib/routing-domains";
 import {
   ensurePendingServiceDomain,
   resolveServiceDomainOwnership,
@@ -10,6 +11,7 @@ import {
 import { updateService } from "../services/service.service";
 import type { DiscoveredService } from "./docker-reconcile";
 import type { MigrationRouteSpec, MigrationServiceRoutes } from "./migration-input";
+import type { ExistingRoute } from "./proxy-route-scan";
 import { perService, serviceUid } from "./select-services";
 
 /** Container identity wins; legacy names and repo-only services remain supported. */
@@ -36,6 +38,32 @@ interface RouteEntry {
   endpoint: ServicePublicEndpoint;
   hostname: string;
   path: string;
+}
+
+/** A real source catch-all needs a decision before replacing it with paths only. */
+export function findOmittedMigrationRootRoutes(
+  routes: MigrationServiceRoutes | undefined,
+  sourceRoutes: Pick<ExistingRoute, "domains" | "path" | "exact">[],
+): string[] {
+  const pathsByHostname = new Map<string, boolean>();
+  for (const selected of Object.values(routes ?? {})) {
+    for (const spec of Array.isArray(selected) ? selected : [selected]) {
+      const hostname = publicEndpointHostname({
+        domainType: spec.domainType,
+        customDomain: spec.customDomain,
+        domain: spec.domain,
+      });
+      if (!hostname) continue;
+      const root = (!spec.targetPath || spec.targetPath === "/") && !spec.exact;
+      pathsByHostname.set(hostname, root || pathsByHostname.get(hostname) === true);
+    }
+  }
+  return [...new Set(sourceRoutes.flatMap((route) =>
+    route.path === "/" && !route.exact
+      ? route.domains.map(hostname => hostname.trim().toLowerCase())
+          .filter(hostname => pathsByHostname.get(hostname) === false)
+      : [],
+  ))];
 }
 
 /** Validate the whole selection before writing any part of it. */
@@ -87,9 +115,18 @@ export function planMigrationRoutes(services: Service[], routes: MigrationServic
   for (const [hostname, entries] of byHostname) {
     const root = entries.find((entry) => entry.path === "/" && !entry.spec.exact);
     if (!root) {
-      throw new ValidationError(
-        `${hostname} has only path-specific routes. Include its root service to preserve that routing during migration.`,
-      );
+      domains.push(entries[0]);
+      composites.push({
+        hostname,
+        isCustomDomain: entries[0].spec.domainType === "custom",
+        locations: entries.map((entry) => ({
+          pathPrefix: entry.path,
+          serviceId: entry.service.id,
+          port: entry.endpoint.port,
+          ...(entry.spec.exact ? { exact: true } : {}),
+        })),
+      });
+      continue;
     }
     domains.push(root);
     const endpoints = endpointsByService.get(root.service.id) ?? [];
@@ -149,7 +186,32 @@ export async function saveMigrationRoutes(
       { applyLiveRoutes: false },
     );
   }
+  const domainByHostname = new Map(
+    (await repos.domain.listByProject(projectId)).map((domain) => [domain.hostname.toLowerCase(), domain]),
+  );
   for (const root of plan.domains) {
+    if (root.path !== "/" || root.spec.exact) {
+      // A path-only hostname belongs to the project topology. Giving a service
+      // an endpoint here would also publish an unintended catch-all at `/`.
+      await ensureRouteDomainRecord({
+        projectId,
+        domainByHostname,
+        route: {
+          hostname: root.hostname,
+          domainType: root.spec.domainType,
+          createIfMissing: true,
+          tls: true,
+          requiresSslTooling: false,
+          provisionSsl: false,
+          terminatesTlsLocally: root.spec.domainType === "custom",
+          isCloud: root.spec.domainType === "free",
+        },
+      });
+      const paths = plan.composites.find(route => route.hostname === root.hostname)!.locations
+        .map(location => `${location.exact ? "exact " : ""}${location.pathPrefix}`);
+      log(`saved path-only route ${root.hostname}: ${paths.join(", ")}; unmatched paths return 404`);
+      continue;
+    }
     if (root.spec.domainType === "custom")
       await ensurePendingServiceDomain({
         projectId,

@@ -135,23 +135,24 @@ export default function BackupsPage() {
         <BackupDestinationLoadError error={error} retry={() => void load()} busy={loading} />
       )}
       {loading && !data ? (
-        <div aria-busy="true" className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div aria-busy="true" className="space-y-5">
+          <div className="h-24 animate-pulse rounded-2xl bg-muted/50" />
           <div className="h-72 animate-pulse rounded-2xl bg-muted/50" />
-          <div className="h-52 animate-pulse rounded-2xl bg-muted/50" />
         </div>
       ) : data ? (
-        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="space-y-6">
+          <BackupStorageSummary destinations={items} showDestinationCount compact />
           <div className="min-w-0 space-y-5">
             <BackupDestinationHistory refreshKey={data} />
             <section
               aria-label={t.projectSettings.backup.destinations.title}
-              className="rounded-2xl border border-border/50 bg-card"
+              className="overflow-hidden rounded-2xl bg-card"
             >
               <div className="px-5 py-4">
-                <h2 className="text-base font-medium text-foreground">
+                <h2 className="text-sm font-medium text-foreground">
                   {t.projectSettings.backup.destinations.title}
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">{m.destinationsDescription}</p>
+                <p className="sr-only">{m.destinationsDescription}</p>
               </div>
               {items.length === 0 ? (
                 <div className="flex items-center gap-4 px-5 pb-6 pt-3">
@@ -164,7 +165,7 @@ export default function BackupsPage() {
                   </div>
                 </div>
               ) : (
-                <ul className="divide-y divide-border/40 border-t border-border/40">
+                <ul className="divide-y divide-border/40">
                   {items.map((row) => {
                     const icon = KIND_ICONS[row.kind] ?? "cloud";
                     const actions: MenuAction[] = [];
@@ -193,14 +194,14 @@ export default function BackupsPage() {
                     return (
                       <li
                         key={row.id}
-                        className="group relative flex items-start gap-3 px-5 py-4 transition-colors hover:bg-muted/20 last:rounded-b-2xl"
+                        className="group relative flex items-start gap-3 px-5 py-4 transition-colors hover:bg-muted/20"
                       >
                         <Link
                           href={`/backups/${row.id}`}
                           aria-label={row.name}
                           className="absolute inset-0 z-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         />
-                        <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted/50 text-muted-foreground">
+                        <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-background text-muted-foreground">
                           <UiIcon name={icon} className="size-5" />
                         </div>
                         <div className="min-w-0 flex-1">
@@ -287,9 +288,6 @@ export default function BackupsPage() {
               )}
             </section>
           </div>
-          <aside className="space-y-5 xl:sticky xl:top-6">
-            <BackupStorageSummary destinations={items} showDestinationCount />
-          </aside>
         </div>
       ) : null}
 

@@ -5,11 +5,20 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/components/i18n-provider";
 import { baseDictionary } from "@/i18n";
 import { CloudResourceContext } from "@/context/CloudResourceContext";
+import { ApiError } from "@/lib/api/client";
 import { ManagedServerSsh } from "./ManagedServerSsh";
 import { ManagedServerRuntime } from "./ManagedServerRuntime";
 import { ManagedServerWorkloads } from "./ManagedServerWorkloads";
 import { ManagedServerNetwork } from "./ManagedServerNetwork";
+import { ManagedServerOutbound } from "./ManagedServerOutbound";
 import { ManagedServerSettings } from "./ManagedServerSettings";
+import { ManagedServerConnectionNotice } from "./ManagedServerConnectionNotice";
+import { ManagedServerActionFeedback } from "./ManagedServerActionFeedback";
+import type { CloudWorkspaceSummary } from "@repo/contracts";
+import type { ManagedServerActions } from "./useManagedServerActions";
+
+const cloud = vi.hoisted(() => ({ connecting: false, loading: false, startConnect: vi.fn() }));
+vi.mock("@/context/CloudContext", () => ({ useCloud: () => cloud }));
 
 const api = vi.hoisted(() => ({
   managedSshStatus: vi.fn(),
@@ -29,6 +38,9 @@ const api = vi.hoisted(() => ({
   managedBootLogs: vi.fn(),
   getServerNetworkSettings: vi.fn(),
   updateServerNetworkSettings: vi.fn(),
+  managedOutbound: vi.fn(),
+  managedOutboundOptions: vi.fn(),
+  setManagedOutbound: vi.fn(),
 }));
 vi.mock("@/lib/api/system", () => ({ systemApi: api }));
 const copy = baseDictionary.servers.managedControls;
@@ -63,6 +75,13 @@ const manual = {
   source: "manual",
   projectId: null,
   manageable: true,
+};
+const outbound = {
+  mode: "managed",
+  ip: "1.1.1.1",
+  countryCode: "AU",
+  proxy: null,
+  revision: "c".repeat(64),
 };
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
@@ -100,6 +119,112 @@ async function fill(node: HTMLInputElement | HTMLTextAreaElement, value: string)
 }
 const submit = async (form: HTMLFormElement) =>
   act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+it("offers the selected server's subscription management before deletion", async () => {
+  const server: CloudWorkspaceSummary = {
+    id: "cws-production",
+    serverId: "server-production",
+    name: "Production",
+    planTierId: "hobby",
+    subscriptionStatus: "active",
+    projectCount: 0,
+    state: "running",
+    resources: null,
+    operation: null,
+    createdAt: "2026-10-01T00:00:00Z",
+  };
+  const remove = vi.fn();
+  const actions = {
+    busy: false,
+    error: null,
+    preview: null,
+    remove,
+  } as unknown as ManagedServerActions;
+  await render(
+    <ManagedServerActionFeedback
+      server={server}
+      actions={actions}
+      deleting
+      onCancelDelete={vi.fn()}
+    />,
+  );
+  const link = host.querySelector<HTMLAnchorElement>(
+    'a[href="/billing/overview?workspaceId=cws-production"]',
+  );
+  expect(link?.textContent).toBe(baseDictionary.billing.subscription.manage);
+  expect(host.textContent).toContain(
+    baseDictionary.billing.workspaces.deleteHint,
+  );
+  expect(remove).not.toHaveBeenCalled();
+  await render(
+    <ManagedServerActionFeedback
+      server={{ ...server, id: "cws-staging", projectCount: 1 }}
+      actions={actions}
+      deleting
+      onCancelDelete={vi.fn()}
+    />,
+  );
+  expect(
+    host.querySelector(
+      'a[href="/billing/overview?workspaceId=cws-production"]',
+    ),
+  ).toBeNull();
+  expect(
+    host.querySelector('a[href="/billing/overview?workspaceId=cws-staging"]'),
+  ).not.toBeNull();
+  expect(button(baseDictionary.billing.workspaces.confirmDelete).disabled).toBe(
+    true,
+  );
+});
+
+it("starts the existing Cloud sign-in flow and labels an account mismatch separately", async () => {
+  const refresh = vi.fn();
+  await render(<ManagedServerConnectionNotice issue="not_connected" refresh={refresh} />);
+  expect(host.textContent).toContain(copy.cloudConnection.titles.not_connected);
+  await act(async () => button(copy.cloudConnection.signIn).click());
+  expect(cloud.startConnect).toHaveBeenCalledOnce();
+  await render(<ManagedServerConnectionNotice issue="account_mismatch" refresh={refresh} />);
+  expect(host.textContent).toContain(copy.cloudConnection.titles.account_mismatch);
+  await act(async () => button(copy.retry).click());
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(api.setManagedOutbound).not.toHaveBeenCalled();
+});
+
+it.each([null, "404 Not Found", "<html>404 Not Found</html>"])("explains a missing Cloud control route (%s) and retries it without replaying a mutation", async body => {
+  api.managedOutbound.mockRejectedValueOnce(new ApiError(404, "Not Found", body));
+  await render(<ManagedServerOutbound serverId="server-a" />);
+  expect(host.textContent).toContain(copy.controlUnavailable.title);
+  expect(host.textContent).toContain(copy.controlUnavailable.description);
+  expect(host.textContent).not.toContain("API 404");
+  expect(api.setManagedOutbound).not.toHaveBeenCalled();
+  await act(async () => button(copy.retry).click());
+  expect(host.textContent).not.toContain(copy.controlUnavailable.title);
+  expect(api.managedOutbound).toHaveBeenCalledTimes(2);
+  expect(api.setManagedOutbound).not.toHaveBeenCalled();
+});
+it("preserves a structured server-not-found response", async () => {
+  api.managedOutbound.mockRejectedValueOnce(new ApiError(404, "Not Found", { error: "Server not found", code: "SERVER_NOT_FOUND" }));
+  await render(<ManagedServerOutbound serverId="server-a" />);
+  expect(host.textContent).toContain("Server not found");
+  expect(host.textContent).not.toContain(copy.controlUnavailable.title);
+});
+it("explains unavailable outbound choices without showing a raw route 404", async () => {
+  api.managedOutboundOptions.mockRejectedValueOnce(new ApiError(404, "Not Found", null));
+  await render(<ManagedServerOutbound serverId="server-a" />);
+  expect(host.textContent).toContain(copy.controlUnavailable.description);
+  expect(host.textContent).not.toContain("API 404");
+  expect(api.setManagedOutbound).not.toHaveBeenCalled();
+});
+it("removes the edit form when the Cloud write route is unavailable and never replays it on refresh", async () => {
+  api.setManagedOutbound.mockRejectedValueOnce(new ApiError(404, "Not Found", null));
+  await render(<ManagedServerOutbound serverId="server-a" />);
+  await select(copy.outbound.address, "8.8.4.4 · US");
+  await act(async () => button(copy.outbound.apply).click());
+  expect(host.textContent).toContain(copy.controlUnavailable.description);
+  expect(host.querySelector("form")).toBeNull();
+  await act(async () => button(copy.retry).click());
+  expect(api.setManagedOutbound).toHaveBeenCalledOnce();
+});
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -108,6 +233,13 @@ beforeEach(() => {
   api.managedRuntimeCredential.mockResolvedValue(credential);
   api.managedWorkloads.mockResolvedValue({ workloads: [], truncated: false });
   api.getServerNetworkSettings.mockResolvedValue(network);
+  api.managedOutbound.mockResolvedValue(outbound);
+  api.managedOutboundOptions.mockResolvedValue({
+    ips: [
+      { ip: "1.1.1.1", countryCode: "AU" },
+      { ip: "8.8.4.4", countryCode: "US" },
+    ],
+  });
   api.managedInfo.mockResolvedValue({
     workspaceId: "vm-a",
     image: "oblien/docker:29",
@@ -318,6 +450,88 @@ it("shows wildcard ingress accurately and keeps unavailable rules read-only", as
   expect(host.textContent).toContain(copy.network.allPorts);
   expect(host.querySelector("textarea")!.disabled).toBe(true);
   expect(host.textContent).toContain(copy.network.rulesUnavailable);
+});
+async function select(label: string, option: string) {
+  const node = [...host.querySelectorAll("label")].find((node) => node.textContent === label)!;
+  await act(async () => document.getElementById(node.htmlFor)!.click());
+  const choice = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((node) =>
+    node.textContent?.trim().startsWith(option),
+  )!;
+  expect(choice, option).toBeDefined();
+  await act(async () => choice.click());
+}
+const field = (label: string) => {
+  const node = [...host.querySelectorAll("label")].find((node) => node.textContent === label)!;
+  return document.getElementById(node.htmlFor) as HTMLInputElement;
+};
+it("applies a selected outbound IP once and keeps the current IP until provider confirmation", async () => {
+  const pending = deferred<typeof outbound>();
+  api.setManagedOutbound.mockReturnValue(pending.promise);
+  await render(<ManagedServerOutbound serverId="server-a" />);
+  expect(api.setManagedOutbound).not.toHaveBeenCalled();
+  await select(copy.outbound.address, "8.8.4.4 · US");
+  await act(async () => button(copy.outbound.apply).click());
+  await submit(host.querySelector("form")!);
+  expect(api.setManagedOutbound).toHaveBeenCalledExactlyOnceWith("server-a", {
+    mode: "managed",
+    ip: "8.8.4.4",
+    expectedRevision: outbound.revision,
+    confirm: true,
+  });
+  expect(host.textContent).toContain("1.1.1.1");
+  expect(button(copy.outbound.applying).disabled).toBe(true);
+  await act(async () => pending.resolve({ ...outbound, ip: "8.8.4.4", revision: "d".repeat(64) }));
+  expect(host.textContent).toContain(copy.saved);
+});
+it("requires both proxy credentials, clears them after a failure, and retains the non-secret draft", async () => {
+  api.setManagedOutbound.mockRejectedValue(new Error("Proxy preflight failed"));
+  await render(<ManagedServerOutbound serverId="server-a" />);
+  await select(copy.outbound.connection, copy.outbound.custom);
+  await fill(field(copy.outbound.host), "8.8.8.8");
+  await act(async () => host.querySelector<HTMLButtonElement>('[role="switch"]')!.click());
+  await fill(field(copy.outbound.username), "proxy-user");
+  expect(button(copy.outbound.apply).disabled).toBe(true);
+  await fill(field(copy.outbound.password), "private-proxy-password");
+  await submit(host.querySelector("form")!);
+  expect(api.setManagedOutbound).toHaveBeenCalledExactlyOnceWith("server-a", {
+    mode: "custom",
+    proxy: {
+      host: "8.8.8.8",
+      port: 8080,
+      protocol: "http",
+      username: "proxy-user",
+      password: "private-proxy-password",
+    },
+    expectedRevision: outbound.revision,
+    confirm: true,
+  });
+  expect(field(copy.outbound.password).value).toBe("");
+  expect(field(copy.outbound.host).value).toBe("8.8.8.8");
+  expect(host.textContent).toContain("Proxy preflight failed");
+  expect(host.textContent).not.toContain(copy.saved);
+  expect(api.updateServerNetworkSettings).not.toHaveBeenCalled();
+});
+it("clears the outbound draft on an account switch and ignores the previous request", async () => {
+  const pending = deferred<typeof outbound>();
+  api.setManagedOutbound.mockReturnValue(pending.promise);
+  await render(<ManagedServerOutbound serverId="server-a" />);
+  await select(copy.outbound.address, "8.8.4.4 · US");
+  await submit(host.querySelector("form")!);
+  await render(<ManagedServerOutbound serverId="server-b" />, "account-b");
+  await act(async () => pending.resolve({ ...outbound, ip: "8.8.4.4" }));
+  expect(host.textContent).not.toContain(copy.saved);
+  expect(api.managedOutbound).toHaveBeenLastCalledWith("server-b");
+});
+it("offers a read-only retry after a failed pool read without hiding custom proxy controls", async () => {
+  api.managedOutboundOptions.mockRejectedValueOnce(new Error("Connection lost"));
+  await render(<ManagedServerOutbound serverId="server-a" />);
+  expect(host.textContent).toContain(copy.outbound.optionsFailed);
+  await act(async () => button(copy.retry).click());
+  expect(host.textContent).not.toContain(copy.outbound.optionsFailed);
+  expect(api.managedOutboundOptions).toHaveBeenCalledTimes(2);
+  expect(api.setManagedOutbound).not.toHaveBeenCalled();
+  await select(copy.outbound.connection, copy.outbound.custom);
+  expect(field(copy.outbound.host)).toBeDefined();
 });
 it("lists native workloads without offering direct controls for managed application/system processes", async () => {
   api.managedWorkloads.mockResolvedValue({

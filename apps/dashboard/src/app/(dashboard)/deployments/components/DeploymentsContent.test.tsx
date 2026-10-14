@@ -28,7 +28,6 @@ vi.mock("@/components/i18n-provider", () => ({
 }));
 vi.mock("./DeploymentMenu", () => ({ DeploymentMenu: () => null }));
 vi.mock("./CommitDetailsModal", () => ({ CommitDetailsModal: () => null }));
-vi.mock("@/components/import-project/Frameworks", () => ({ getFrameworkConfig: () => ({}) }));
 
 function pageResponse(page = 1, total = 45, projectId = "project") {
   return {

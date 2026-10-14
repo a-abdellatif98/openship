@@ -7,7 +7,10 @@ import { ValidationError } from "@repo/core";
 const issues = () => getPlatformKernel().issues;
 export async function listIssues(c: Context) {
   const result = await operationData(c, issues().list(operationContext(c), { status: c.req.query("status") === "resolved" ? "resolved" : "open" }));
-  return c.json({ data: result.issues, counts: result.counts, status: result.status });
+  return c.json({ data: result.issues, counts: result.counts, status: result.status, canClearHistory: result.canClearHistory });
+}
+export async function clearHistory(c: Context) {
+  return c.json({ data: await operationData(c, issues().clearHistory(operationContext(c))) });
 }
 export async function issuesSummary(c: Context) {
   return c.json({ data: await operationData(c, issues().summary(operationContext(c))) });

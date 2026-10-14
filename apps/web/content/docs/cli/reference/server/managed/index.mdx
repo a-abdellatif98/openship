@@ -16,10 +16,11 @@ openship server managed [options] [command]
 
 | Subcommand | Purpose |
 | --- | --- |
+| [`outbound`](/docs/cli/reference/server/managed#openship-server-managed-outbound) | Inspect and configure a managed server's outbound connection |
 | [`list\|ls`](/docs/cli/reference/server/managed#openship-server-managed-list) | List managed servers visible to this connection |
 | [`available`](/docs/cli/reference/server/managed#openship-server-managed-available) | List Cloud servers available to link to this installation |
 | [`connect <id>`](/docs/cli/reference/server/managed#openship-server-managed-connect) | Connect an existing Cloud server using the verified installation binding |
-| [`create <name>`](/docs/cli/reference/server/managed#openship-server-managed-create) | Create a managed server entry; use billing subscription create to purchase its plan |
+| [`create [options] <name>`](/docs/cli/reference/server/managed#openship-server-managed-create) | Create a managed server entry; use billing subscription create to purchase its plan |
 | [`ensure <id>`](/docs/cli/reference/server/managed#openship-server-managed-ensure) | Ensure this subscribed server is provisioned through its lifecycle worker |
 | [`resize-preview <id>`](/docs/cli/reference/server/managed#openship-server-managed-resize-preview) | Inspect pending capacity changes, their revision and affected projects |
 | [`resize [options] <id>`](/docs/cli/reference/server/managed#openship-server-managed-resize) | Apply the exact reviewed capacity revision through the existing server worker |
@@ -58,6 +59,10 @@ openship server managed create [options] <name>
 | --- | --- |
 | `name` | New managed server name |
 
+| Option | Meaning |
+| --- | --- |
+| `--idempotency-key <key>` | Reuse this server entry after an uncertain create response |
+
 ## openship server managed ensure
 
 Ensure this subscribed server is provisioned through its lifecycle worker
@@ -77,6 +82,61 @@ List managed servers visible to this connection
 ```text
 openship server managed list|ls [options]
 ```
+
+## openship server managed outbound
+
+Inspect and configure a managed server's outbound connection
+
+```text
+openship server managed outbound [options] [command]
+```
+
+| Subcommand | Purpose |
+| --- | --- |
+| [`get <id>`](/docs/cli/reference/server/managed#openship-server-managed-outbound-get) | Read the current outbound IP, proxy metadata and revision without credentials |
+| [`options <id>`](/docs/cli/reference/server/managed#openship-server-managed-outbound-options) | List available managed outbound IPs and countries |
+| [`set [options] <id> <file>`](/docs/cli/reference/server/managed#openship-server-managed-outbound-set) | Apply an outbound connection change for all projects on this server |
+
+## openship server managed outbound get
+
+Read the current outbound IP, proxy metadata and revision without credentials
+
+```text
+openship server managed outbound get [options] <id>
+```
+
+| Argument | Meaning |
+| --- | --- |
+| `id` | Server ID |
+
+## openship server managed outbound options
+
+List available managed outbound IPs and countries
+
+```text
+openship server managed outbound options [options] <id>
+```
+
+| Argument | Meaning |
+| --- | --- |
+| `id` | Server ID |
+
+## openship server managed outbound set
+
+Apply an outbound connection change for all projects on this server
+
+```text
+openship server managed outbound set [options] <id> <file>
+```
+
+| Argument | Meaning |
+| --- | --- |
+| `id` | Server ID |
+| `file` | Reviewed JSON with mode, expectedRevision, confirm and ip or proxy; - reads stdin |
+
+| Option | Meaning |
+| --- | --- |
+| `-y, --yes` | Confirm the reviewed outbound change |
 
 ## openship server managed remove
 

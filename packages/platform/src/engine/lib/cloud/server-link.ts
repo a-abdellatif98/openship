@@ -2,7 +2,7 @@ import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics"
 import { Value } from "@sinclair/typebox/value";
 import { AppError, safeErrorMessage } from "@repo/core";
 import { repos, type CloudWorkspace, type LinkedCloudServer } from "@repo/db";
-import { CloudWorkspaceSchema, ServerDetailSchema, ManagedServerDeletionSchema, type ManagedServerDeletion, type CloudWorkspaceSummary, type ServerDetail } from "@repo/contracts";
+import { CloudWorkspaceSchema, ServerDetailSchema, ManagedServerDeletionSchema, type CreateManagedServerInput, type ManagedServerDeletion, type CloudWorkspaceSummary, type ServerDetail } from "@repo/contracts";
 import { env } from "../../config/env";
 import { requireCloudWorkspace, requireWorkspaceServer } from "../cloud-workspace-scope";
 import { cloudFetchAsOrgOwner, readCloudJson, readCloudSession, resolveOrgCloudUserId, sameCloudIdentity, type CloudIdentity } from "./transport";
@@ -12,7 +12,7 @@ import { cloudFetchAsOrgOwner, readCloudJson, readCloudSession, resolveOrgCloudU
 export async function linkedCloudIdentity(organizationId: string): Promise<CloudIdentity> {
   const userId = await resolveOrgCloudUserId(organizationId);
   const session = userId ? await readCloudSession(userId) : null;
-  if (!session) throw new AppError("Connect Openship Cloud to get a managed server", 409, "CLOUD_NOT_CONNECTED");
+  if (!session) throw new AppError("Sign in to the Openship Cloud account that owns this linked server", 409, "CLOUD_NOT_CONNECTED");
   return { apiUrl: session.apiUrl, userId: session.userId, organizationId: session.organizationId };
 }
 
@@ -20,6 +20,10 @@ export async function remoteCloudRequest<T>(organizationId: string, path: string
   const response = await cloudFetchAsOrgOwner(organizationId, path, init, identity);
   if (!response) throw new AppError("The connected Cloud account is unavailable or has changed. Reconnect the account that owns this server.", 503, "CLOUD_CONNECTION_UNAVAILABLE");
   const body = await readCloudJson<Record<string, unknown>>(response);
+  // Older Cloud APIs return the router's plain-text 404 for these new controls.
+  // A structured resource/permission 404 must retain its original meaning.
+  if (response.status === 404 && !body && /\/managed\/outbound(?:\/options)?$/.test(path))
+    throw new AppError("Outbound connection controls are not available on this Cloud API version yet", 501, "CLOUD_SERVER_CONTROL_UNAVAILABLE");
   if (!response.ok) throw new AppError(typeof body?.error === "string" ? body.error : "Cloud could not complete the server operation", response.status,
     typeof body?.code === "string" ? body.code : "CLOUD_SERVER_REQUEST_FAILED");
   if (!body) throw new AppError("Cloud returned an invalid server response", 502, "INVALID_CLOUD_RESPONSE");
@@ -72,6 +76,11 @@ export async function linkedServerSummary(row: CloudWorkspace): Promise<CloudWor
     return {
       id: row.id, serverId: server.id, name: row.name, projectCount: projects.length,
       planTierId: "unknown", subscriptionStatus: "unavailable", state: "unreachable", resources: null,
+      connectionIssue: error instanceof AppError && (error.code === "CLOUD_NOT_CONNECTED" || error.statusCode === 401)
+        ? "not_connected"
+        : error instanceof AppError && error.code === "CLOUD_SERVER_CONNECTION_CHANGED"
+          ? "account_mismatch"
+          : "unavailable",
       operation: row.operation ? {
         id: row.operation.id, kind: row.operation.kind, status: row.operation.status,
         requestedAt: row.operation.requestedAt, nextAttemptAt: row.operation.nextAttemptAt,
@@ -139,7 +148,7 @@ export async function connectCloudServer(organizationId: string, serverId: strin
   return saveLink(organizationId, identity, result.managed);
 }
 
-export async function createLinkedCloudServer(organizationId: string, input: { name: string }) {
+export async function createLinkedCloudServer(organizationId: string, input: CreateManagedServerInput) {
   const identity = await linkedCloudIdentity(organizationId);
   const result = await remoteCloudRequest<CloudWorkspaceSummary>(organizationId, "/api/system/servers/managed", {
     method: "POST", body: JSON.stringify(input),

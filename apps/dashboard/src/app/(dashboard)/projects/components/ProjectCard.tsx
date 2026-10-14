@@ -6,6 +6,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { type Project } from "@/constants/mock";
 import { AppLogo } from "@/components/AppLogo";
+import { ProjectStackIcon } from "@/components/shared/ProjectStackIcon";
 import { getFrameworkConfig } from "@/components/import-project/Frameworks";
 import { getProjectStatus, projectCardHref, projectDisplayDomain } from "@/utils/project-status";
 import { ProjectStatusBadge } from "@/components/shared/ProjectStatusBadge";
@@ -131,7 +132,7 @@ const ProjectCard: React.FC<Props> = ({ project, preferAppLogo, updateAvailable,
               onError={favicon.onError}
             />
           ) : (
-            fw.icon("var(--foreground)")
+            <ProjectStackIcon framework={project.framework} />
           )}
         </div>
 

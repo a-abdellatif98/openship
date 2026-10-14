@@ -177,6 +177,22 @@ async function seedRow(client: PGlite, table: string, id: string): Promise<void>
       col.column_name === "id" ? `'${id}'` : fillerFor(table, col.column_name, col.data_type),
     );
   }
+  // `servers` has a row-level CHECK (0156 `servers_connection_check`) that a SSH row needs
+  // `ssh_host`, a nullable column the NOT NULL introspection above never fills. The recent
+  // window slides forward with every new migration, so the first one added after 0156 moved
+  // the window's start past it and this seed began failing for a reason unrelated to the new
+  // migration. Fill it whenever the column exists at this point in the chain.
+  if (table === "servers" && !names.includes(`"ssh_host"`)) {
+    const hasSshHost = await client.query<{ n: number }>(
+      `select count(*)::int as n from information_schema.columns
+        where table_schema = 'public' and table_name = 'servers' and column_name = 'ssh_host'`,
+    );
+    if ((hasSshHost.rows[0]?.n ?? 0) > 0) {
+      names.push(`"ssh_host"`);
+      values.push(`'192.0.2.1'`);
+    }
+  }
+
   // `id` may carry a default (so it's excluded above) — force ours in anyway, because
   // the assertions find the row by it.
   if (!names.includes(`"id"`)) {
@@ -265,7 +281,7 @@ describe("migration chain applies to an existing, populated database", () => {
       await client.exec(
         "UPDATE project SET cloud_static_hosting = 'server', active_deployment_id = 'retained-release'",
       );
-      const projects = (await client.query("SELECT * FROM project")).rows;
+      const projects = (await client.query<Record<string, unknown>>("SELECT * FROM project")).rows;
       const applied = (
         await client.query("SELECT * FROM drizzle.__drizzle_migrations ORDER BY id")
       ).rows;
@@ -278,7 +294,13 @@ describe("migration chain applies to an existing, populated database", () => {
       expect(await db.select().from(schema.instanceController)).toEqual([]);
       expect(await db.select().from(schema.instanceHandoff)).toEqual([]);
       expect((await client.query("SELECT * FROM project")).rows).toEqual(
-        projects.map((project) => ({ ...project, external_config: null })),
+        projects.map((project) => ({
+          ...project,
+          github_checks: null,
+          runtime_version: null,
+          runtime_image: null,
+          external_config: null,
+        })),
       );
       expect(
         (await client.query("SELECT * FROM drizzle.__drizzle_migrations ORDER BY id")).rows.slice(
@@ -479,8 +501,10 @@ describe("migration chain applies to an existing, populated database", () => {
         const { cloud_workspace_id: _native, cloud_archive_strategy: _archive, ...previous } = old as typeof old & Record<string, unknown>;
         expect(row).toEqual({
           ...previous,
+          runtime_version: null, runtime_image: null,
           cloud_promotion: null,
           cloud_static_hosting: "pages",
+          github_checks: null,
           external_config: null,
           server_id: previous.workspace_id
             ? managed.find((server) => server.workspace_id === previous.workspace_id)!.id
@@ -498,6 +522,7 @@ describe("migration chain applies to an existing, populated database", () => {
         workspace_id: null,
         purpose: "deployment",
         ssh_host_key: null,
+        gpu_override: null,
       })));
       // Repeated startup retains execution IDs and cannot detach a managed project.
       await migrate(db, { migrationsFolder: MIGRATIONS_DIR });

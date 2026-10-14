@@ -2,7 +2,8 @@ import Link from "next/link";
 
 const footerLinks = {
   Product: [
-    { label: "Features", href: "/#features" },
+    { label: "Features", href: "/features" },
+    { label: "Apps", href: "/apps" },
     { label: "Install", href: "/download" },
     { label: "Pricing", href: "/pricing" },
     { label: "Docs", href: "/docs" },
@@ -15,7 +16,7 @@ const footerLinks = {
     { label: "Security", href: "/docs/security/permissions" },
   ],
   Company: [
-    { label: "Resources", href: "/resources" },
+    { label: "Blog", href: "/blog" },
     { label: "Trust & Security", href: "/trust" },
     { label: "About", href: "/about" },
     { label: "Contact", href: "/contact" },
@@ -45,7 +46,8 @@ export function Footer() {
               </span>
             </Link>
             <p className="th-text-muted mt-4 max-w-xs text-sm leading-relaxed">
-              Open-source deployment platform. CLI, web dashboard, or desktop app. Install, connect, deploy.
+              Open-source deployment platform. CLI, web dashboard, or desktop app. Install, connect,
+              deploy.
             </p>
           </div>
 

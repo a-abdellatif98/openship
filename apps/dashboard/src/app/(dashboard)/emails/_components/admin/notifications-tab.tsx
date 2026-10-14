@@ -23,7 +23,7 @@ import { Icon as UiIcon } from "@repo/ui/icons";
  *     only be attributed via To/Cc: mail that arrived by Bcc or through an alias is
  *     invisible to a mailbox rule. Domain scope has no such gap.
  *
- * Channels are not created here — they live in Settings → Notifications, org-wide,
+ * Channels are not created here — they live in Monitoring → Notifications, org-wide,
  * because everything else that notifies (jobs, deploys, health) shares them. Every
  * dead end that a missing channel produces therefore carries a link to that screen
  * instead of a sentence describing where it is.
@@ -61,7 +61,7 @@ interface NotificationsTabProps {
 const SCOPES: InboundScope[] = ["mailbox", "domain", "all"];
 
 /** Where notification channels are added and verified — org-wide, not per server. */
-const CHANNELS_HREF = "/settings?tab=notifications";
+const CHANNELS_HREF = "/monitoring?tab=notifications";
 
 export function NotificationsTab({ serverId, primaryDomain }: NotificationsTabProps) {
   const { showModal, hideModal } = useModal();
@@ -347,7 +347,7 @@ export function NotificationsTab({ serverId, primaryDomain }: NotificationsTabPr
 }
 
 /**
- * The trip to Settings → Notifications.
+ * The trip to Monitoring → Notifications.
  *
  * One component for every place that dead-ends on a missing channel, so they all
  * land on the same screen and none of them describes the route in prose instead of

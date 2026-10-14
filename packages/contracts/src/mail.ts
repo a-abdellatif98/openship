@@ -188,6 +188,13 @@ export const MailWebmailSummarySchema = Type.Object({
   projectId: Type.Optional(nullableText),
   legacy: Type.Optional(Type.Boolean()),
 });
+export const MailWebmailRecoveryCandidateSchema = Type.Object({
+  projectId: text,
+  name: text,
+  hostname: text,
+  serverId: text,
+});
+export type MailWebmailRecoveryCandidate = Static<typeof MailWebmailRecoveryCandidateSchema>;
 export const MailSetupStatusSchema = Type.Object({
   active: Type.Boolean(),
   serverId: optionalText,
@@ -200,6 +207,7 @@ export const MailSetupStatusSchema = Type.Object({
   ptrAcknowledged: Type.Optional(Type.Boolean()),
   credentials: Type.Optional(MailCredentialsSchema),
   webmail: Type.Optional(MailWebmailSummarySchema),
+  webmailRecoveryCandidates: Type.Optional(Type.Array(MailWebmailRecoveryCandidateSchema)),
   observationError: Type.Optional(text),
   engine: Type.Optional(
     Type.Object({

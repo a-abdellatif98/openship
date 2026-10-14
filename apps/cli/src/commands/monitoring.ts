@@ -1,6 +1,6 @@
 import { Command, Option } from "commander";
 import { getShipClient } from "../lib/ship-client";
-import { printResult } from "../lib/cmd-helpers";
+import { confirmOrExit, printResult } from "../lib/cmd-helpers";
 
 export const monitoringCommand = new Command("monitoring")
   .description("Inspect issues and workload health using the platform's monitoring operations");
@@ -10,6 +10,13 @@ monitoringCommand.command("issues")
   .action(opts => printResult(() => getShipClient().issues.list({ status: opts.status })));
 monitoringCommand.command("summary").description("Show open issue counts")
   .action(() => printResult(() => getShipClient().issues.summary()));
+monitoringCommand.command("clear-history")
+  .description("Clear resolved incidents in the selected organization; preserves active issues (self-hosted owner/admin)")
+  .option("-y, --yes", "Confirm permanent removal of resolved incident history")
+  .action(opts => printResult(async () => {
+    await confirmOrExit(opts.yes, "Permanently clear resolved monitoring history in this organization?");
+    return getShipClient().issues.clearHistory();
+  }));
 monitoringCommand.command("health").description("Show workload health, scan freshness and watcher capabilities")
   .action(() => printResult(() => getShipClient().issues.health()));
 monitoringCommand.command("scan").description("Run an authorized current workload health scan")

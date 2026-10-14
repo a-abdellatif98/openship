@@ -473,11 +473,16 @@ export function createNotificationDeliveryRepo(db: Database) {
           and(eq(notificationDelivery.status, "sending"), eq(notificationDelivery.attempts, attempt))));
     },
 
-    /** User clicks the in-app bell row. */
+    /** Inbox acknowledgement is independent of delivery progress. Only an
+     * already-sent delivery may transition to seen; pending/failed deliveries
+     * retain their worker state, and repeated views preserve the first clock. */
     async markSeen(id: string, userId: string, organizationId: string): Promise<void> {
       await db
         .update(notificationDelivery)
-        .set({ status: "seen", seenAt: new Date() })
+        .set({
+          status: sql`CASE WHEN ${notificationDelivery.status} = 'sent' THEN 'seen' ELSE ${notificationDelivery.status} END`,
+          seenAt: sql`coalesce(${notificationDelivery.seenAt}, NOW())`,
+        })
         .where(
           and(
             eq(notificationDelivery.id, id),

@@ -25,6 +25,7 @@ export function ServerRowContent({ server, active = false }: { server: ServerInf
         <span className="truncate text-sm font-medium text-foreground">
           {server.name || server.sshHost || server.id}
           {server.isLocal && <span className="ms-2 rounded bg-info/10 px-1.5 py-0.5 text-xs text-info">{t.deploy.targetStep.thisServerBadge}</span>}
+          {server.gpu?.available && <span className="ms-2 rounded bg-success/10 px-1.5 py-0.5 text-xs text-success">{t.deploy.targetStep.gpuBadge}</span>}
         </span>
         <span className="truncate text-xs font-normal text-muted-foreground">
           {managed ? (

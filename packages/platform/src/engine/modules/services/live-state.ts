@@ -69,6 +69,7 @@ export interface LiveServiceMatch {
    *  must target. Null when nothing on the host matches. */
   containerId: string | null;
   status: LiveServiceStatus;
+  health?: "healthy" | "starting" | "unhealthy" | null;
   ip: string | null;
   hostPort: number | null;
   image: string | null;
@@ -122,6 +123,15 @@ export function canonicalServiceContainerName(slug: string, serviceName: string)
   return `openship-${slug}-${serviceName}`;
 }
 
+/** Keep a process being up distinct from an actual healthcheck verdict. */
+export function liveContainerHealth(status?: string): NonNullable<LiveServiceMatch["health"]> | null {
+  const health = /\(\s*(healthy|unhealthy|health:\s*starting)\s*\)/i
+    .exec(status ?? "")?.[1]
+    ?.toLowerCase();
+  if (health?.startsWith("health:")) return "starting";
+  return health === "healthy" || health === "unhealthy" ? health : null;
+}
+
 /**
  * Map one container's live docker state onto the UI vocabulary.
  *
@@ -132,11 +142,11 @@ export function canonicalServiceContainerName(slug: string, serviceName: string)
  */
 export function liveContainerStatus(c: Pick<LiveContainerLike, "state" | "status">): LiveServiceStatus {
   const state = (c.state ?? "").toLowerCase().trim();
-  const health = /\(\s*(healthy|unhealthy|health:\s*starting)\s*\)/i.exec(c.status ?? "")?.[1]?.toLowerCase();
+  const health = liveContainerHealth(c.status);
   if (state === "restarting") return "restarting";
   if (state === "running") {
     if (health === "unhealthy") return "failed";
-    if (health?.startsWith("health:")) return "starting";
+    if (health === "starting") return "starting";
     return "running";
   }
   if (state === "dead") return "failed";
@@ -173,6 +183,7 @@ function toMatch(c: LiveContainerLike, matchedBy: LiveMatchKind, duplicates: str
   return {
     containerId: c.id,
     status: liveContainerStatus(c),
+    health: liveContainerHealth(c.status),
     ip: c.ip ?? null,
     hostPort: firstHostPort(c),
     image: c.image ?? null,

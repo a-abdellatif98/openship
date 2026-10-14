@@ -238,6 +238,10 @@ POST /api/mail/webmail/deploy-project
     mailServerId: { type: 'string', description: 'The mail server this webmail fronts.', required: true },
     hostname: { type: 'string', description: 'Fully-qualified hostname to serve webmail at.', required: true },
     target: { type: 'object', description: 'Where to deploy — see below.', required: true },
+    reconnectProjectId: {
+      type: 'string',
+      description: 'Explicitly reconnect an existing catalog webmail when the mail registration lost its link. Choose an ID from status.webmailRecoveryCandidates.',
+    },
     replaceLegacy: {
       type: 'boolean',
       description: 'Consent to replace a pre-catalog webmail. Only needed after a 409 LEGACY_WEBMAIL.',
@@ -263,6 +267,28 @@ curl -X POST "$OPENSHIP_URL/api/mail/webmail/deploy-project" \
   -H "Content-Type: application/json" \
   -d '{"mailServerId":"srv_123","hostname":"mail.example.com","target":{"kind":"self","serverId":"srv_123"}}'
 ```
+
+### Reconnecting an existing webmail
+
+Forgetting and re-adopting a mail server can leave its catalog webmail running
+with a missing control-plane link. `mail.getStatus({ serverId })` returns
+`webmailRecoveryCandidates` for accessible, unlinked catalog apps on that mail
+server which already route its `mail.<domain>` hostname. Reading status grants
+no routing rights.
+
+Choose the existing app in **Emails → Deploy webmail**, then press **Reconnect
+and deploy**. With the SDK, pass its `projectId` as `reconnectProjectId` to
+`mail.deployWebmail(input)`; the CLI accepts the same input through
+`mail webmail deploy reconnect.json`. Keep the app's existing server and mail hostname
+for this recovery. It reuses the project, service, generated credentials and
+persistent volumes, and restores the link before queuing deployment. The mail
+certificate record stays owned by the mail service.
+
+An omitted selection returns `WEBMAIL_RECONNECT_REQUIRED` when a recoverable
+app exists. `WEBMAIL_LINK_CHANGED` means another operation changed the link;
+refresh status and review the current app before retrying. A project from
+another organization, another mail server's linked app, or a different
+destination cannot be adopted through this path.
 
 ### Replacing a pre-catalog webmail
 
@@ -345,7 +371,7 @@ Use `--schema` for JSON configuration commands. Mail is a remote, self-hosted fe
 | Wipe the on-server state file (does not touch iRedMail). | `mail.resetSetup(input)`<br />Remote client | `POST /api/mail/setup/reset`<br />`mail_server:admin` · Self-hosted |
 | Rotate the postmaster account password. | `mail.setPostmasterPassword(input)`<br />Remote client | `POST /api/mail/credentials/postmaster`<br />`mail_server:write` · Self-hosted |
 | List deploy-target options (self-hosted servers / cloud). | `mail.getWebmailTargets(input)`<br />Remote client | `GET /api/mail/webmail/targets`<br />`mail_server:read` · Self-hosted |
-| Create a webmail project + deployment and start the build. | `mail.deployWebmail(input)`<br />Remote client | `POST /api/mail/webmail/deploy-project`<br />`mail_server:write` · Self-hosted |
+| Install or redeploy webmail; reconnectProjectId explicitly recovers an existing app after its mail-server link was lost. | `mail.deployWebmail(input)`<br />Remote client | `POST /api/mail/webmail/deploy-project`<br />`mail_server:write` · Self-hosted |
 | Deploy webmail for an external mail server. | `mail.deployExternalWebmail(input)`<br />Remote client | `POST /api/mail/webmail/deploy-external`<br />`mail_server:write` · Self-hosted |
 | Stop managing a server (drops the DB row only; leaves the stack + state file intact). | `mail.forget(id)`<br />Remote client | `DELETE /api/mail/servers/:serverId`<br />`mail_server:admin` · Self-hosted |
 | Mail daemons, outbound delivery, and cached public-port reachability (TCP 25/465/587/993). | `mail.getHealth(id, input?)`<br />Remote client | `GET /api/mail/health/:serverId`<br />`mail_server:read` · Self-hosted |

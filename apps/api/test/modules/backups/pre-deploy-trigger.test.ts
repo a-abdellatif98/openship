@@ -93,6 +93,22 @@ vi.mock("@repo/platform/engine/modules/backups/backup.orchestrator", () => ({
 
 import { firePreDeployBackups } from "@repo/platform/engine/modules/backups/triggers/pre-deploy";
 
+it("uses the admitted backup requirements when policies change before the worker starts", async () => {
+  h.policies = [{ id: "new-policy", createdBy: "new-owner" }];
+  h.listThrows = true;
+  await firePreDeployBackups({ projectId: "project", organizationId: "org",
+    policies: [{ id: "admitted-policy", createdBy: "original-owner" }] });
+  expect(h.enqueued.map(item => item.policyId)).toEqual(["admitted-policy"]);
+});
+
+it("keeps an explicitly empty admitted set when a backup policy is added later", async () => {
+  h.policies = [{ id: "new-policy", createdBy: null }];
+  h.listThrows = true;
+  expect(await firePreDeployBackups({ projectId: "project", organizationId: "org", policies: [] }))
+    .toEqual({ enqueued: 0, completed: 0 });
+  expect(h.enqueued).toEqual([]);
+});
+
 function failedBackup(extra: Partial<typeof h.runs extends Map<string, infer T> ? T : never> = {}) {
   return {
     status: "failed",

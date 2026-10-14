@@ -34,6 +34,7 @@
     "local": "ローカル"
   },
   "card": {
+    "more": "その他",
     "liveVersion": "稼働中のバージョン v{version}",
     "sourceLocal": "ローカル",
     "services": "サービス",
@@ -243,7 +244,10 @@
     "noTransfer": "まだ転送がありません"
   },
   "analytics": {
-    "loadFailed": "トラフィック分析を読み込めませんでした"
+    "loadFailed": "トラフィック分析を読み込めませんでした",
+    "loadFailedDescription": "再試行して最新のデータを読み込んでください。",
+    "sectionsUnavailable": "取得できません: {sections}。",
+    "staleData": "最後に取得したデータを表示しています。"
   },
   "monitoring": {
     "noDataTitle": "まだモニタリングデータがありません",
@@ -308,7 +312,11 @@
       "disable": "トップパスを無効にする"
     },
     "liveFeed": "最近のヒット",
-    "liveFeedHint": "最近のヒット一覧を地図上に表示（詳細はログタブ）"
+    "liveFeedHint": "最近のヒット一覧を地図上に表示（詳細はログタブ）",
+    "dataUnavailable": "一部の監視データを取得できません",
+    "connecting": "接続中…",
+    "liveUnavailable": "ライブリクエストを取得できません",
+    "liveUnavailableDescription": "過去のトラフィックは引き続き表示されます。ライブリクエストを表示するには再接続してください。"
   },
   "services": {
     "failedLoad": "サービスの読み込みに失敗しました",
@@ -403,6 +411,8 @@
     "fixStep3": "ドメインを検証してデプロイします。"
   },
   "connections": {
+    "nativeClusterHint": "このデータベースと同じクラスタのプロジェクトを選択してください。リンクされたプロジェクトのみがプライベートアクセスを利用できます。",
+    "nativeNoTargets": "このクラスタを使用する他のプロジェクトはまだありません。",
     "useInProject": "プロジェクトで使用",
     "title": "プロジェクトで使用",
     "subtitle": "接続を通じて、このサービスを別のプロジェクトと共有します。",

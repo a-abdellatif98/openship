@@ -61,7 +61,7 @@ import { withCloudWorkspaceActivity } from "../../lib/cloud-workspace-lock";
 import { captureExecutionAuthority, resolveExecutionAuthority } from "../../lib/execution-authority";
 import { establishDirectLink, cleanupDirectTrust, stopDirectTransfer, PathMissingError, sq } from "./direct-transfer";
 import type { MigrationServiceRoutes } from "./migration-input";
-import { remapMigrationRoutes, saveMigrationRoutes } from "./migration-routes";
+import { findOmittedMigrationRootRoutes, remapMigrationRoutes, saveMigrationRoutes } from "./migration-routes";
 import { PromptRegistry, type PromptPayload } from "../../lib/prompt-gateway";
 import { prepareServerEdge, applyProjectEdgeRoutes } from "../domains/project-edge.service";
 import { sizeOfMoveSet } from "./migration-size";
@@ -694,16 +694,40 @@ class MigrationOrchestratorImpl {
     };
   }
 
+  /** Review a changed fallback before adopting rows or touching containers. */
+  private async reviewOmittedRootRoutes(
+    runId: string,
+    routes: MigrationServiceRoutes | undefined,
+    sourceRoutes: Parameters<typeof findOmittedMigrationRootRoutes>[1],
+    log: (message: string) => void,
+  ): Promise<void> {
+    const omittedRoots = findOmittedMigrationRootRoutes(routes, sourceRoutes);
+    if (omittedRoots.length === 0) return;
+    log(`Route review needed: the source has catch-all routes omitted from the selection: ${omittedRoots.join(", ")}`);
+    const action = await this.promptUser(runId, {
+      promptId: "migration-omitted-root",
+      title: "Review unmatched paths",
+      message: `The source routes all paths for ${omittedRoots.join(", ")}, but your selection includes only specific paths. Migrating this selection will return 404 for other paths. Continue with those paths, or cancel and include the catch-all route.`,
+      actions: [
+        { id: "continue", label: "Migrate selected paths" },
+        { id: "cancel", label: "Cancel and review routes", variant: "secondary" },
+      ],
+      details: { hostnames: omittedRoots },
+    });
+    if (action !== "continue") throw new Error("Migration cancelled to review the source catch-all routes.");
+    log(`Continuing with selected paths for ${omittedRoots.join(", ")}; unmatched paths will return 404`);
+  }
+
   /**
    * Door A — adopt what a SCAN of the source server found.
    *
-   * Unchanged behaviour, moved verbatim out of `run()` so a second door can reach the
-   * same pipeline (see {@link resolveOwnedProjectWorkload}). Everything specific to
-   * adopting a stranger's containers lives here: the identity-first selection, the
-   * reverse-proxy exclusion, the already-managed gate, and `adoptServerStack` itself.
+   * Everything specific to adopting a stranger's containers lives here: the
+   * identity-first selection, reverse-proxy exclusion, already-managed gate,
+   * and `adoptServerStack` itself.
    */
   private async resolveScannedWorkload(
     ctx: RequestContext,
+    runId: string,
     input: StartMigrationInput,
     log: (message: string) => void,
   ): Promise<ResolvedWorkload> {
@@ -752,6 +776,7 @@ class MigrationOrchestratorImpl {
           .join(", ")}. Publish an image or link a repo first.`,
       );
     }
+    await this.reviewOmittedRootRoutes(runId, input.routesByServiceName, stack.proxyRoutes ?? [], log);
     // Per-service volume strategy decides the takeover mode on the SAME server:
     //   reuse → ATTACH the already-running container live, in place (no
     //           redeploy, no volume move, zero downtime).
@@ -841,7 +866,7 @@ class MigrationOrchestratorImpl {
       // verify, cutover, rollback, resume. Only the identification differs.
       const { chosen, attachChosen, deployChosen, adopt, repoServices } = input.projectMove
         ? await this.resolveOwnedProjectWorkload(input, log)
-        : await this.resolveScannedWorkload(ctx, input, log);
+        : await this.resolveScannedWorkload(ctx, id, input, log);
       const projectId = adopt.projectId;
       if (adopt.created) {
         createdProjectId = projectId;

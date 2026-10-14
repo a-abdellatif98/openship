@@ -25,6 +25,8 @@
 
 import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { cacheStore } from "../../lib/cache-store/index";
+import { GitHubApiError } from "./github.error";
+export { GitHubApiError, isGitHubCredentialRejected } from "./github.error";
 
 export interface GhRequest {
   url: string;
@@ -32,30 +34,8 @@ export interface GhRequest {
   /** GET → serialized to the query string; non-GET → JSON request body. */
   params?: Record<string, unknown>;
   headers?: Record<string, string>;
-}
-
-/** Shared by credential health checks and request fallback. GitHub also uses
- * 403 for rate limits, which say nothing about whether a token is valid. */
-export function isGitHubCredentialRejected(
-  status: number,
-  headers: Headers,
-  message?: unknown,
-): boolean {
-  return status === 401 || (status === 403 &&
-    headers.get("x-ratelimit-remaining") !== "0" && !headers.has("retry-after") &&
-    !(typeof message === "string" && /rate limit|abuse detection/i.test(message)));
-}
-
-/** Machine-readable failure details; callers must not infer retry policy from
- * translated/upstream error text or retry mutations after an auth failure. */
-export class GitHubApiError extends Error {
-  readonly credentialRejected: boolean;
-
-  constructor(readonly status: number, message: string, headers: Headers) {
-    super(`GitHub API error (${status}): ${message}`);
-    this.name = "GitHubApiError";
-    this.credentialRejected = isGitHubCredentialRejected(status, headers, message);
-  }
+  /** Signed artifact links and completed Actions logs use the same auth boundary. */
+  response?: "json" | "redirect";
 }
 
 function ghHeaders(token: string, extra?: Record<string, string>): Record<string, string> {
@@ -118,13 +98,30 @@ export async function ghFetch<T = unknown>(token: string, req: GhRequest): Promi
     method,
     headers: ghHeaders(token, req.headers),
     body: method !== "GET" ? JSON.stringify(req.params ?? {}) : undefined,
+    ...(req.response === "redirect" && { redirect: "manual" as const }),
   });
 
   if (res.status === 204) return { success: true } as T;
+  if (req.response === "redirect" && res.status >= 300 && res.status < 400) {
+    const location = res.headers.get("location");
+    if (!location || new URL(location).protocol !== "https:")
+      throw new Error("GitHub returned an invalid download link");
+    await res.body?.cancel();
+    return { url: location } as T;
+  }
 
-  const data = (await res.json()) as T & { message?: string };
+  // GitHub accepts some mutations with an empty 201/202 body, including reruns.
+  const data = (
+    res.ok && [201, 202, 205].includes(res.status)
+      ? await res.text().then((value) => (value.trim() ? JSON.parse(value) : { success: true }))
+      : await res.json()
+  ) as T & { message?: string };
   if (!res.ok) {
-    throw new GitHubApiError(res.status, (data as { message?: string }).message ?? "Unknown", res.headers);
+    throw new GitHubApiError(
+      res.status,
+      (data as { message?: string }).message ?? "Unknown",
+      res.headers,
+    );
   }
   return data;
 }
@@ -162,9 +159,11 @@ export async function ghFetchPublic<T = unknown>(req: GhRequest): Promise<T | nu
     const headers = {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
-      ...Object.fromEntries(Object.entries(req.headers ?? {}).filter(([name]) =>
-        !["authorization", "cookie"].includes(name.toLowerCase()),
-      )),
+      ...Object.fromEntries(
+        Object.entries(req.headers ?? {}).filter(
+          ([name]) => !["authorization", "cookie"].includes(name.toLowerCase()),
+        ),
+      ),
     };
     const res = await timedFetch(withQuery(req.url, "GET", req.params), {
       method: "GET",
@@ -205,7 +204,10 @@ export async function isPublicRepo(owner: string, repo: string): Promise<boolean
   try {
     const res = await timedFetch(
       `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
-      { method: "GET", headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } },
+      {
+        method: "GET",
+        headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+      },
     );
     if (res.ok) {
       const data = (await res.json()) as { private?: boolean };

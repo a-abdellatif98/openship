@@ -73,17 +73,19 @@ export function cloudCapacityRestriction(error: unknown): CloudCapacityRestricti
 export interface CloudDeployRestriction {
   code: "CLOUD_BILLING_BLOCKED" | "PLAN_UPGRADE_REQUIRED";
   reason?: string;
+  message?: string;
 }
 
 /** Only an explicit deployment refusal can open pricing. Provider failures,
  * connectivity errors and ordinary permissions failures keep their own recovery. */
 export function cloudDeployRestriction(error: unknown): CloudDeployRestriction | null {
   if (!(error instanceof ApiError) || error.status !== 402) return null;
-  const body = error.body as { code?: unknown; reason?: unknown } | null;
+  const body = error.body as { code?: unknown; reason?: unknown; error?: unknown } | null;
   if (body?.code !== "CLOUD_BILLING_BLOCKED" && body?.code !== "PLAN_UPGRADE_REQUIRED") return null;
   return {
     code: body.code,
     ...(typeof body.reason === "string" ? { reason: body.reason } : {}),
+    ...(typeof body.error === "string" ? { message: body.error } : {}),
   };
 }
 

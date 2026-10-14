@@ -6,6 +6,7 @@ import React from "react";
 import { useProjectSettings } from "@/context/ProjectSettingsContext";
 import { useI18n } from "@/components/i18n-provider";
 import WarningCallout from "@/components/shared/WarningCallout";
+import { localizeDiagnosisMessage } from "@/lib/i18n/localize-issues";
 
 export const RoutingUnsyncedCallout = ({
   onRetry,
@@ -21,12 +22,17 @@ export const RoutingUnsyncedCallout = ({
   // accepted yet, so its routes aren't the thing to fix first.
   // The inline operation owns progress while running. Keep the saved failure
   // until the server refreshes it, but don't display that stale result mid-repair.
-  if (retrying || !projectData?.routingUnsynced || projectData.awaitingDecision) return null;
+  if (retrying || !projectData?.routingUnsynced || projectData.awaitingDecision)
+    return null;
+
+  const warning = projectData?.routingWarning
+    ? localizeDiagnosisMessage(projectData.routingWarning, t.issues?.messages)
+    : t.projects.routingRetry.description;
 
   return (
     <WarningCallout
       title={t.projects.routingRetry.title}
-      description={projectData?.routingWarning || t.projects.routingRetry.description}
+      description={warning}
       actions={
         <button
           type="button"

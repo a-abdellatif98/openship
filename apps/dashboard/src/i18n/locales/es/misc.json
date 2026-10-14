@@ -94,7 +94,12 @@
     "grantRejectedTitle": "Tu cuenta no puede conceder eso",
     "grantRejected": "Se quitó {resource} porque tu propio acceso no lo cubre. Revisa el resumen y autoriza de nuevo.",
     "deny": "Denegar",
-    "authorize": "Autorizar"
+    "authorize": "Autorizar",
+    "dgReadSource": "Leer el contenido de archivos de las rutas especificadas",
+    "dgNotReadSource": "Leer cualquier contenido de archivos de sus repositorios",
+    "levelViewHint": "Solo lectura: configuración, registros y metadatos. Sin cambios.",
+    "levelManageHint": "Desplegar, reiniciar y cambiar configuración. No puede eliminar.",
+    "levelFullHint": "Todo, incluida la eliminación del propio recurso."
   },
   "acceptInvite": {
     "invalidInvitation": "Invitación no válida",
@@ -154,10 +159,25 @@
     "title": "Autorizar dispositivo",
     "instancePre": "Una instancia de Openship en ",
     "instancePost": " quiere conectarse a tu cuenta de Openship Cloud.",
+    "organization": "Organización",
+    "switch": "Cambiar",
+    "switchAccount": "Cambiar cuenta",
+    "switchOrganization": "Cambiar organización",
+    "choose": "Elegir",
+    "chooseOrganization": "Elige una organización",
+    "chooseOrganizationHint": "Elige una organización antes de conectar.",
+    "loadingOrganizations": "Cargando organizaciones…",
+    "organizationsError": "No se pudieron cargar tus organizaciones. Inténtalo de nuevo.",
+    "noOrganizations": "No hay organizaciones disponibles para esta cuenta.",
+    "switchOrganizationError": "No se pudo cambiar la organización. La conexión no se ha autorizado.",
+    "switchAccountError": "No se pudo cerrar sesión. Inténtalo de nuevo para cambiar de cuenta.",
+    "retry": "Intentar de nuevo",
     "signedInAs": "Sesión iniciada como",
     "authorizing": "Autorizando…",
     "authorize": "Autorizar",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "deviceDoneTitle": "Conectado a Openship Cloud",
+    "deviceDoneBody": "Puede cerrar esta pestaña y volver a su terminal: la configuración continuará automáticamente."
   },
   "cloudConnect": {
     "noCode": "No se proporcionó el código de autenticación. Inténtalo de nuevo.",
@@ -224,7 +244,18 @@
     "restoreComplete": "Restauración completada.",
     "restoreStatus": "Restauración {status}",
     "failed": "fallida",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "cancelFailed": "Error al cancelar la restauración",
+    "cancelPending": "Cancelación solicitada. La restauración se detendrá en el siguiente punto seguro; esta ventana mostrará el resultado.",
+    "destructiveNotYet": "Aún no se ha escrito nada, por lo que cancelar ahora es seguro.",
+    "destructiveNow": "Se están escribiendo datos. Cancelar ahora dejará datos parciales.",
+    "abortRestore": "Abortar restauración",
+    "abortTitle": "¿Abortar esta restauración?",
+    "abortBodyClean": "La restauración no ha escrito nada todavía. Cancelar ahora deja sus datos tal como están; el servicio se reinicia si lo habíamos detenido.",
+    "abortBodyDestructive": "La restauración ya ha comenzado a escribir. Abortar ahora deja el destino con datos parciales y el servicio se deja detenido deliberadamente; vuelva a ejecutar esta restauración (o una más nueva) hasta completarla antes de iniciarlo.",
+    "abortKeepGoing": "Continuar restaurando",
+    "abortConfirm": "Sí, abortar",
+    "partialDataNotice": "El destino de la restauración contiene datos parciales y el servicio se dejó detenido deliberadamente. Vuelva a ejecutar esta restauración (o una más nueva) hasta completarla antes de iniciarlo."
   },
   "terminalTabs": {
     "shell": "Shell {n}",
@@ -368,6 +399,19 @@
     "historyPage": "Página {page}",
     "incremental": "Incremental",
     "moreContents": "+{count} más",
-    "destinationDetails": "Detalles del destino"
+    "destinationDetails": "Detalles del destino",
+    "providerLabel": "Proveedor",
+    "providerAws": "AWS S3",
+    "providerR2": "Cloudflare R2",
+    "providerB2": "Backblaze B2",
+    "providerWasabi": "Wasabi",
+    "providerDo": "DigitalOcean Spaces",
+    "providerMinio": "MinIO / Personalizado",
+    "fieldAccountId": "ID de cuenta",
+    "hintAccountId": "Su ID de cuenta de Cloudflare: se utiliza para crear el punto de conexión R2.",
+    "hintEndpointMinio": "URL completa del extremo S3, p. ej., https://minio.example.com:9000",
+    "testConnection": "Probar conexión",
+    "testing": "Probando conexión…",
+    "testOk": "Conectado: el bucket es accesible y tiene permisos de escritura."
   }
 }

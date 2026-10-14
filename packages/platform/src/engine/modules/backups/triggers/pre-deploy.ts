@@ -6,7 +6,7 @@
  */
 import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { setTimeout as delay } from "node:timers/promises";
-import { repos } from "@repo/db";
+import { repos, type BackupPolicy } from "@repo/db";
 import {
   formatBytes,
   formatDuration,
@@ -24,6 +24,8 @@ import {
 const POLL_MS = 1_000;
 const PROGRESS_MS = 30_000;
 
+export type PreDeployBackupPolicy = Pick<BackupPolicy, "id" | "createdBy">;
+
 interface BackupTarget {
   policyId: string;
   userId: string;
@@ -33,6 +35,9 @@ interface BackupTarget {
 export async function firePreDeployBackups(opts: {
   projectId: string;
   organizationId: string;
+  /** Cloud queue admission captures the required set before taking its resource
+   * reservation. Later policy edits apply to subsequent admissions. */
+  policies?: readonly PreDeployBackupPolicy[];
   signal?: AbortSignal;
   log?: (message: string, level?: LogEntry["level"]) => void;
   promptUser?: (prompt: PromptPayload) => Promise<string>;
@@ -40,7 +45,7 @@ export async function firePreDeployBackups(opts: {
   throwIfDeploymentCancelled(opts.signal);
   const startedAt = Date.now();
   // Failure to read policies is not evidence that backups are disabled.
-  const policies = await repos.backupPolicy.listEnabledPreDeployByProject(opts.projectId);
+  const policies = opts.policies ?? await repos.backupPolicy.listEnabledPreDeployByProject(opts.projectId);
   if (policies.length === 0) return { enqueued: 0, completed: 0 };
   // Names are only presentation; an unavailable name must not bypass the gate.
   const services = await repos.service.listByProject(opts.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/backups/triggers/pre-deploy"); return []; });

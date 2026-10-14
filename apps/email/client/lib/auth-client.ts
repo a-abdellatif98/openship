@@ -94,8 +94,11 @@ function mapSession(s: ServerSession | null): Session | null {
   };
 }
 
-async function fetchSession(): Promise<Session | null> {
-  const res = await fetch(`${BASE}/auth/session`, { credentials: 'include' });
+async function fetchSession(signal?: AbortSignal): Promise<Session | null> {
+  const res = await fetch(`${BASE}/auth/session`, {
+    credentials: 'include',
+    ...(signal ? { signal } : {}),
+  });
   if (!res.ok) return null;
   const body = (await res.json()) as ServerSession | null;
   return mapSession(body);
@@ -150,7 +153,24 @@ export interface SignInInput {
 }
 
 async function signInEmail(input: SignInInput): Promise<{ error: { message: string } | null }> {
+  // Cover both credential verification and session confirmation with one
+  // deadline. The server's IMAP operation budget is normally 30 seconds; a
+  // broken network must not leave the form pending until the browser gives up.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 40_000);
+  try {
+    return await performSignIn(input, controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function performSignIn(
+  input: SignInInput,
+  signal: AbortSignal,
+): Promise<{ error: { message: string } | null }> {
   const connectionError = { error: { message: 'Cannot reach webmail. Check your connection and try again.' } };
+  const timeoutError = { error: { message: 'Sign in timed out. Please try again.' } };
   let res: Response;
   try {
     res = await fetch(`${BASE}/auth/sign-in`, {
@@ -158,12 +178,14 @@ async function signInEmail(input: SignInInput): Promise<{ error: { message: stri
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
+      signal,
     });
   } catch {
-    return connectionError;
+    return signal.aborted ? timeoutError : connectionError;
   }
   if (!res.ok) {
     const body = await res.json().catch(() => null) as { error?: unknown } | null;
+    if (signal.aborted) return timeoutError;
     const fallback = res.status >= 500
       ? 'Webmail is temporarily unavailable. Try again shortly.'
       : 'Sign in failed. Please try again.';
@@ -176,9 +198,9 @@ async function signInEmail(input: SignInInput): Promise<{ error: { message: stri
   // hard navigate that re-mounts root.tsx with the new connection id.
   let signedInSession: Session | null;
   try {
-    signedInSession = await fetchSession();
+    signedInSession = await fetchSession(signal);
   } catch {
-    return connectionError;
+    return signal.aborted ? timeoutError : connectionError;
   }
   if (!signedInSession || signedInSession.user.email.toLowerCase() !== input.email.toLowerCase()) {
     return { error: { message: 'Could not confirm your sign-in. Please try again.' } };

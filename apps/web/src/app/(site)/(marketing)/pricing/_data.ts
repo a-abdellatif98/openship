@@ -1,4 +1,5 @@
 import { UI, paidLadder, type CloudPricing } from "@/lib/pricing";
+import { cloudPlanHref } from "@/lib/cloud-links";
 
 export interface FaqItem {
   q: string;
@@ -46,6 +47,5 @@ export function faq(pricing: CloudPricing): FaqItem[] {
   ];
 }
 
-/** The marketing site sends sign-in and signup to the Cloud dashboard. */
-export const CLOUD_CTA_HREF = "/login";
+export const CLOUD_CTA_HREF = cloudPlanHref();
 export const SELF_HOST_CTA_HREF = "/docs/getting-started/quickstart";

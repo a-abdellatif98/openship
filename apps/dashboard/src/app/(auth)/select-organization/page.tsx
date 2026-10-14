@@ -20,9 +20,10 @@ import { Icon as UiIcon } from "@repo/ui/icons";
  * org client at module scope so its identity is stable.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { buildAuthPageHref, validateReturnTo } from "@/lib/cloud-auth";
 import { authClient, signOut } from "@/lib/auth-client";
 import { setActiveOrganizationId } from "@/lib/api/client";
 import { AuthShell } from "@/components/auth-shell";
@@ -86,7 +87,13 @@ function roleLabel(role: MemberRole | null): string {
 }
 
 export default function SelectOrganizationPage() {
+  return <Suspense><SelectOrganization /></Suspense>;
+}
+
+function SelectOrganization() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const destination = validateReturnTo(searchParams.get("returnTo")) ?? "/";
   const [loading, setLoading] = useState(true);
   const [orgs, setOrgs] = useState<DecoratedOrg[]>([]);
   const [picking, setPicking] = useState<string | null>(null);
@@ -97,6 +104,7 @@ export default function SelectOrganizationPage() {
     (async () => {
       try {
         const listRes = await orgClient.list();
+        if (cancelled) return;
         const list = listRes.data ?? [];
 
         // Edge cases: no orgs (shouldn't happen — personal org auto-created
@@ -108,9 +116,11 @@ export default function SelectOrganizationPage() {
         }
         if (list.length === 1) {
           const only = list[0];
-          await orgClient.setActive({ organizationId: only.id });
+          const result = await orgClient.setActive({ organizationId: only.id });
+          if (result.error) throw new Error(result.error.message ?? "Failed to switch organization.");
+          if (cancelled) return;
           setActiveOrganizationId(only.id);
-          router.replace("/");
+          router.replace(destination);
           return;
         }
 
@@ -184,7 +194,7 @@ export default function SelectOrganizationPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, destination]);
 
   const handlePick = async (orgId: string) => {
     if (picking) return;
@@ -197,7 +207,7 @@ export default function SelectOrganizationPage() {
         return;
       }
       setActiveOrganizationId(orgId);
-      router.push("/");
+      router.push(destination);
     } catch (err) {
       observeCaughtError(err, "dashboard/app/(auth)/select-organization/page");
       setError(
@@ -213,7 +223,7 @@ export default function SelectOrganizationPage() {
     try {
       await signOut();
     } finally {
-      router.push("/login");
+      router.push(buildAuthPageHref("/login", searchParams));
     }
   };
 
@@ -229,7 +239,7 @@ export default function SelectOrganizationPage() {
 
   // No orgs (defensive). Personal org is auto-created on signup so this
   // should be unreachable in practice — render a settling spinner.
-  if (!loading && orgs.length === 0) {
+  if (!loading && orgs.length === 0 && !error) {
     return (
       <AuthShell maxWidth="max-w-[440px]">
         <div className="flex flex-col items-center justify-center py-12 text-center">

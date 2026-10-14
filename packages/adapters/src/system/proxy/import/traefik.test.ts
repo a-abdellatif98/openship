@@ -47,12 +47,20 @@ describe("parseTraefikLabels", () => {
     expect(res.sites[0]?.serverNames).toEqual(["a.com", "b.com"]);
   });
 
-  test("a path-only domain is reported instead of being broadened to a root route", () => {
+  test("a path-only domain is imported without being broadened to a root route", () => {
     const res = parseTraefikLabels([
       c("a", { "traefik.http.routers.r.rule": "Host(`a.com`) && PathPrefix(`/api`)" }),
     ]);
-    expect(res.sites).toEqual([]);
-    expect(res.warnings.some((w) => w.includes("PathPrefix"))).toBe(true);
+    expect(res.sites).toEqual([
+      {
+        serverNames: ["a.com"],
+        ssl: false,
+        target: { kind: "proxy", url: "http://172.17.0.5:80" },
+        routes: [{ path: "/api", url: "http://172.17.0.5:80" }],
+        source: "traefik container a",
+      },
+    ]);
+    expect(res.warnings).toEqual([]);
   });
 
   test("middleware → surfaced as a coverage warning", () => {

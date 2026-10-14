@@ -259,5 +259,11 @@ export function createAdvisoryLocks(options: {
       },
     };
   }
-  return Object.freeze({ withAdvisoryLock, tryAcquireAdvisoryLock });
+  /** A detached worker must acquire its own lock session. Inheriting its
+   * request's session can hold an admission lock until the entire worker exits. */
+  function runOutsideAdvisoryLock<T>(work: () => T): T {
+    return currentFrame.exit(work);
+  }
+
+  return Object.freeze({ withAdvisoryLock, tryAcquireAdvisoryLock, runOutsideAdvisoryLock });
 }

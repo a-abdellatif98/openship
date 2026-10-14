@@ -101,6 +101,7 @@
     }
   },
   "plansRoute": {
+    "requestedPlanUnavailable": "L’offre sélectionnée n’est plus disponible. Choisissez une autre offre ci-dessous.",
     "loadError": "Échec du chargement des forfaits",
     "genericError": "Une erreur s'est produite",
     "tryAgain": "Réessayer",
@@ -292,7 +293,8 @@
     "cancelNotice": "Le renouvellement sera arrêté à la fin de la période payée. Votre abonnement reste en vigueur jusque-là.",
     "confirmCancel": "Arrêter le renouvellement",
     "keepPlan": "Conserver l’abonnement",
-    "error": "Impossible de modifier votre abonnement. Réessayez."
+    "error": "Impossible de modifier votre abonnement. Réessayez.",
+    "manage": "Gérer l’abonnement"
   },
   "checkout": {
     "checking": "Confirmation de votre commande…",
@@ -343,6 +345,7 @@
     }
   },
   "resourcesGuide": {
+    "concurrentBuilds": "Builds simultanés",
     "title": "Comprendre l’utilisation du Cloud",
     "credits": "Crédits Cloud",
     "creditsHint": "Les compilations et les applications actives consomment des crédits pour le CPU, la mémoire, les accès disque et les transferts de données. Les charges plus importantes les consomment plus vite.",
@@ -582,7 +585,7 @@
     "save": "Enregistrer",
     "delete": "Supprimer le serveur",
     "confirmDelete": "Supprimer cet espace vide",
-    "deleteHint": "Supprimez d’abord tous les projets et mettez fin à l’abonnement. Cette action supprime définitivement le serveur vide et les données restantes du disque.",
+    "deleteHint": "Supprimer les projets n’annule pas l’abonnement. Arrêtez le renouvellement dans Facturation et attendez la fin de la période payée avant de supprimer un serveur abonné. La suppression efface définitivement le serveur vide et les données restantes du disque.",
     "buildCapacityTitle": "Vérifiez la capacité de le serveur",
     "buildCapacityHint": "Les compilations utilisent la capacité libre de cet espace. Arrêtez un service inutilisé ou augmentez la capacité, puis réessayez.",
     "openWorkspace": "Ouvrir le serveur",
@@ -824,7 +827,8 @@
     "monthly": "par mois",
     "annual": "par an",
     "oneTime": "paiement unique",
-    "cancelUnavailable": "L’annulation de ce paiement est indisponible pour le moment. Actualisez ou contactez l’assistance.",
+    "cancelUnavailable": "Impossible de vérifier la possibilité d’annulation. Actualisez le statut du paiement.",
+    "cancelUnsupported": "Ce paiement ne peut pas être annulé ici. Terminez-le ou attendez son expiration avant de choisir une autre offre.",
     "support": "Contacter l’assistance",
     "cancelHint": "Le lien de paiement sera fermé. Vous pourrez ensuite choisir une autre offre.",
     "confirmCancel": "Confirmer l’annulation",

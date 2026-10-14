@@ -173,12 +173,38 @@ on. Correct it in the [deploy wizard](/docs/dashboard/deploy-wizard) if it doesn
 </Steps>
 
 <Callout type="warn" title="A different “port” problem: the port is already taken">
-On a Local or Server deploy, if another process already holds the port, the deploy pauses and asks what
-to do — a **Port In Use** prompt saying *"Port 3000 is occupied by … This may not be a previous
-deployment."* with **Free Port & Continue** or **Cancel Deploy**. Choose *Free Port* only if you
-recognize the occupant as a stale deployment; otherwise cancel and change the port. If it can't be freed
-you'll see *"Deploy aborted: port 3000 is in use by …"*.
+On a Local or Server deploy, if another workload already holds the port, the deploy pauses with a
+**Port In Use** dialog. For a single-app Docker deployment using a loopback host port, it also offers
+**Use port 20002** (the number varies) when another port can be verified as available. This leaves the
+existing workload running and continues with the built image. The app's internal port stays the same;
+the selected host port is saved after a successful deployment for future redeploys.
+
+Openship checks both live listeners and saved port reservations, then checks the exact suggestion again
+when you choose it. If it is no longer available, the dialog asks again. It never substitutes another
+port without your choice. If availability cannot be verified, the alternative is not offered.
+
+The existing **Stop … & Continue**, **I Freed It — Re-check**, and **Cancel Deploy** actions remain
+available where appropriate. Choose a stop action only if you recognize the occupant and intend to
+stop it. Direct (Bare) apps still use their configured application ports; change those in configuration
+if needed. Cancelling preserves the current port.
 </Callout>
+
+## The deployment is running, but the app only listens inside its container
+
+An exposed Docker app listening only on `127.0.0.1` or `::1` cannot receive traffic through
+its published port. Openship shows **Action required** in the deployment's existing port review
+and in Monitoring. This applies to Docker deployments on your servers and Openship Cloud.
+The deployment keeps running; this warning does not hold the release or trigger a rollback.
+
+Use **Open settings** to review the app's start command or configuration. If it should receive
+routed traffic, configure it to listen on `0.0.0.0` and redeploy. If it deliberately binds to
+loopback behind a proxy, route to that proxy instead. Changing only the port number or retrying
+routing does not change the app's bind address. **Skip** dismisses this deployment's warning;
+it does not repair or expose the app.
+
+The warning requires a confirmed loopback-only listener. An incomplete socket-table read or
+unavailable probe does not establish that. Bare apps can legitimately use host loopback and do
+not receive this Docker warning. Open **Domains** for a fresh port check after fixing the app.
 
 ## The app needs a bigger machine than this one
 

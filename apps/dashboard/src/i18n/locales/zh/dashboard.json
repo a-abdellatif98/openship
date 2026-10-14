@@ -86,7 +86,8 @@
     },
     "apps": "应用",
     "jobs": "任务",
-    "workspaces": "工作区"
+    "workspaces": "工作区",
+    "actions": "操作"
   },
   "sidebar": {
     "expand": "展开侧边栏",
@@ -131,7 +132,15 @@
         "automation": "自动化",
         "mail": "邮件",
         "other": "工具"
-      }
+      },
+      "addCustom": "添加自定义",
+      "howToAddApp": "如何添加应用",
+      "removeCustomApp": "删除自定义应用",
+      "needsUpdateDesc": "更新您的 Openship 实例以安装此应用。",
+      "needsUpdateBadge": "需要更新",
+      "needsVersionBadge": "需要 v{version}",
+      "removedToast": "已删除 \"{name}\"。",
+      "removeFailedToast": "无法删除该应用。"
     },
     "projects": {
       "title": "项目",

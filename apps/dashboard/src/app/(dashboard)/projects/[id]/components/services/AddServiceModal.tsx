@@ -57,8 +57,10 @@ function envRowsFromCatalog(entry: ImageCatalogEntry | null): EnvRow[] {
   // off per-value if it's sensitive (e.g. an admin password).
   return entry.defaultEnv.map((e) => ({
     key: e.key,
-    value: e.value ?? "",
-    visible: true,
+    value: e.generate === "secret"
+      ? Array.from(crypto.getRandomValues(new Uint8Array(24)), (byte) => byte.toString(16).padStart(2, "0")).join("")
+      : e.value ?? "",
+    visible: e.generate !== "secret",
   }));
 }
 
@@ -233,7 +235,7 @@ export function AddServiceModal({ open, projectId, projectName, isCloudProject, 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   // Every application service uses the shared Docker engine and OCI catalog.
-  const catalog = LOCAL_SERVICE_CATALOG;
+  const catalog = cloudOnly ? LOCAL_SERVICE_CATALOG.filter(entry => !entry.gpus) : LOCAL_SERVICE_CATALOG;
 
   // Configure step state. Ports is a single-line, comma-separated string -
   // 95% of services have one port and the old textarea wasted vertical space.
@@ -391,6 +393,16 @@ export function AddServiceModal({ open, projectId, projectName, isCloudProject, 
       environment: envObjectFromRows(envRows),
       volumes: volumeList,
       command: "",
+      // A custom replacement image must not inherit another image's entrypoint
+      // arguments. Matching catalog images keep argv intact (never `sh -c`).
+      ...(trimmedImage === selected?.image && selected.commandArgv
+        ? { commandArgv: [...selected.commandArgv] }
+        : {}),
+      // A catalog entry that needs a GPU (the Ollama GPU variant) carries its
+      // request; a replacement image keeps nothing, like commandArgv above.
+      ...(trimmedImage === selected?.image && selected.gpus
+        ? { advanced: { gpus: { ...selected.gpus } } }
+        : {}),
       restart: "unless-stopped",
       enabled: true,
       exposed,

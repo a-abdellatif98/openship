@@ -55,6 +55,7 @@ const h = vi.hoisted(() => ({
   manageSsl: vi.fn(),
   servers: new Map<string, { organizationId: string; [key: string]: unknown }>(),
   serverCreate: vi.fn(), serverUpdate: vi.fn(), serverRemove: vi.fn(), serverWorkloads: vi.fn(),
+  serverInvalidate: vi.fn(),
   serverExec: vi.fn(), serverWithExecutor: vi.fn(), serverModuleScan: vi.fn(), serverModuleApply: vi.fn(),
   serverRateRead: vi.fn(), serverRateApply: vi.fn(),
   componentCheck: vi.fn(), installDocker: vi.fn(), installEdge: vi.fn(), removeEdge: vi.fn(),
@@ -96,6 +97,7 @@ vi.mock("@repo/db", () => ({
   getDriver: () => "postgres",
   repos: {
     serverCluster: { membership: async () => null },
+    clusterDatabase: { list: async () => [] },
     user: { findFoundingAdmin: async () => ({ id: "founder" }) },
     instanceSettings: { get: async () => h.settings, upsert: h.settingsUpsert, delete: h.settingsDelete },
     serverTunnel: {
@@ -323,15 +325,18 @@ vi.mock("@repo/platform/engine/lib/deployment-runtime", async importOriginal => 
 
 vi.mock("@repo/platform/engine/lib/startup/self-server", () => ({ ensureLocalServer: vi.fn(async () => null), localServerHostChannel: vi.fn(async () => null) }));
 vi.mock("@repo/platform/engine/lib/geo-ip", () => ({ primeGeo: vi.fn(async () => {}), countryForIp: () => null }));
-vi.mock("@repo/platform/engine/lib/host-capacity", () => ({ invalidateHostCapacity: vi.fn(async () => {}), getTrustedHostCapacity: h.hostCapacity }));
+vi.mock("@repo/platform/engine/lib/host-capacity", () => ({ invalidateHostCapacity: vi.fn(async () => {}), getTrustedHostCapacity: h.hostCapacity, getHostCapacity: vi.fn(async () => ({ cpuCores: 0, memoryMb: 0, source: "unknown" })) }));
 vi.mock("@repo/platform/engine/lib/openresty-paths", () => ({
   invalidateOpenRestyPaths: vi.fn(async () => {}),
   withOpenRestyRouting: async (_id: string, work: (routing: unknown) => unknown) => work({ getRateLimitConfig: h.serverRateRead, applyRateLimit: h.serverRateApply }),
 }));
 vi.mock("@repo/platform/engine/lib/ssh-manager", () => ({
   sshManager: {
-    withExecutor: h.serverWithExecutor, invalidate: vi.fn(),
-    acquire: async () => ({ exec: h.monitorExec }), retain: h.serverRetain, release: h.serverRelease,
+    withExecutor: h.serverWithExecutor,
+    invalidate: h.serverInvalidate,
+    acquire: async () => ({ exec: h.monitorExec }),
+    retain: h.serverRetain,
+    release: h.serverRelease,
   },
 }));
 vi.mock("@repo/platform/engine/lib/agent-exec", () => ({ execOnHost: h.serverExec }));
@@ -1138,10 +1143,11 @@ describe("deployment inspection HTTP/native parity", () => {
 
 describe("hostname SSL HTTP/native parity", () => {
   const remote = () => new OpenshipClient({ baseUrl: "http://openship.test", organizationId: "org-a", fetch: ((url, init) => app.request(url as string, init)) as typeof fetch });
+  const expiresAt = new Date(Date.now() + 90 * 86_400_000).toISOString();
   beforeEach(() => {
-    h.domains.set("domain-a", { ...domainFixture(), id: "domain-a", projectId: "project-a", hostname: "app.example.com", sslStatus: "active", sslIssuer: "Let's Encrypt", sslExpiresAt: "2026-12-01T00:00:00.000Z", verified: true });
+    h.domains.set("domain-a", { ...domainFixture(), id: "domain-a", projectId: "project-a", hostname: "app.example.com", sslStatus: "active", sslIssuer: "Let's Encrypt", sslExpiresAt: expiresAt, verified: true });
     h.domains.set("domain-www", { ...h.domains.get("domain-a")!, id: "domain-www", projectId: "project-a", hostname: "www.app.example.com" });
-    h.manageSsl.mockResolvedValue({ expiresAt: "2026-12-01T00:00:00.000Z", issuer: "Let's Encrypt" });
+    h.manageSsl.mockResolvedValue({ verified: true, expiresAt, issuer: "Let's Encrypt" });
     h.domainGet.mockImplementation(async (_ctx, id) => h.domains.get(id));
   });
 
@@ -1156,7 +1162,7 @@ describe("hostname SSL HTTP/native parity", () => {
   it("keeps primary and www renewal outcomes independent, with one audit per operation", async () => {
     h.manageSsl.mockImplementation(async hostname => {
       if (hostname.startsWith("www.")) throw new Error("www DNS is not pointed here");
-      return { expiresAt: "2026-12-01T00:00:00.000Z", issuer: "Let's Encrypt" };
+      return { verified: true, expiresAt, issuer: "Let's Encrypt" };
     });
     const input = { domain: "app.example.com", includeWww: true };
     const result = await (await native()).deployments.renewSsl(input);
@@ -1173,6 +1179,13 @@ describe("hostname SSL HTTP/native parity", () => {
     for (const deployments of [(await native()).deployments, remote().deployments]) {
       expect(await deployments.renewSsl({ domain: "app.example.com" })).toMatchObject({ success: false, status: "provisioning" });
     }
+  });
+
+  it("preserves pending certificate verification through both native and HTTP contracts", async () => {
+    h.manageSsl.mockResolvedValue({ verified: false, expiresAt, issuer: "provider", reason: "pending", detail: "Checking the edge certificate" });
+    const result = await (await native()).deployments.renewSsl({ domain: "app.example.com" });
+    expect(result).toMatchObject({ success: false, pending: true, status: "provisioning", message: "Checking the edge certificate" });
+    expect(await remote().deployments.renewSsl({ domain: "app.example.com" })).toEqual(result);
   });
 
   it("rejects read-only credentials before renewal and rechecks each hostname's organization", async () => {
@@ -2213,6 +2226,19 @@ describe("server HTTP/native parity", () => {
       await expect(servers.create({ sshHost: "example.com", sshPort: 99999 })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     }
     expect(h.serverCreate).not.toHaveBeenCalled();
+  });
+
+  it("updates GPU metadata through HTTP/native without disconnecting retained SSH sessions", async () => {
+    const local = await native();
+    for (const servers of [local.servers, remote().servers]) {
+      await expect(servers.update("server-a", { gpuOverride: "yes" })).resolves.toMatchObject({
+        gpu: { available: true, override: "yes" },
+      });
+    }
+    expect(h.serverInvalidate).not.toHaveBeenCalled();
+    expect(h.audit.mock.calls.at(-1)?.[0]).toMatchObject({ after: { gpuOverride: "yes" } });
+    await local.servers.update("server-a", { sshHost: "gpu.example.com" });
+    expect(h.serverInvalidate).toHaveBeenCalledExactlyOnceWith("server-a");
   });
 
   it("requires server admin for execution and rate-limit writes, beyond a write grant", async () => {

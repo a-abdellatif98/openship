@@ -5,6 +5,16 @@ beforeEach(() => { h = managedRoutingFixture(); });
 const route = { domain: "app.opsh.io", targetUrl: "http://127.0.0.1:3000", tls: true };
 
 describe("project routes on a managed server", () => {
+  it("publishes only explicit paths without adding a root proxy or static fallback", async () => {
+    await h.infra.registerRoute({
+      domain: route.domain, tls: true, notFound: true,
+      proxyLocations: [{ pathPrefix: "/v3", targetUrl: route.targetUrl }],
+    });
+    expect(h.routes.set).toHaveBeenCalledWith(route.domain, {
+      spa: false,
+      routes: [{ match: { path: "/v3", type: "prefix" }, action: { kind: "proxy", workspace: h.workspaceId, port: 3000 } }],
+    });
+  });
   it("updates one project-owned Page repeatedly without a new workspace", async () => {
     await h.infra.registerRoute(route);
     await h.infra.registerRoute(route);

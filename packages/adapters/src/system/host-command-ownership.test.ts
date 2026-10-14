@@ -102,7 +102,7 @@ const RULES: readonly OwnershipRule[] = [
       // The image's Debian/Alpine OS is independent of the deployment host profile;
       // envOps(host) would install the wrong packages on a differently hosted image.
       // Narrowed below, with stage/output behavior covered by the recipe tests.
-      "packages/adapters/src/runtime/docker-build-plan.ts",
+      "packages/adapters/src/runtime/docker-recipes/ruby.ts",
     ],
     why:
       "A per-package-manager table outside environment-ops.ts is how this bug happened — " +
@@ -378,7 +378,7 @@ describe("the container helper's package manager is the image's, not the host's"
   });
 
   it("limits the Dockerfile generator to Debian/Alpine image installation verbs", () => {
-    const source = read("packages/adapters/src/runtime/docker-build-plan.ts");
+    const source = read("packages/adapters/src/runtime/docker-recipes/ruby.ts");
     const matches = source.match(/\b(?:apt|apt-get|dnf|yum|apk|zypper|pacman)[ \t]+[a-z-]+/g);
     expect(matches).toEqual(["apk add", "apt-get update", "apt-get install"]);
   });

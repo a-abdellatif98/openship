@@ -8,7 +8,10 @@ import { AppCatalog } from "./AppCatalog";
 const h = vi.hoisted(() => ({ catalog: vi.fn(), push: vi.fn() }));
 vi.mock("@/lib/api", () => ({ appsApi: { catalog: h.catalog } }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: h.push }), useSearchParams: () => new URLSearchParams() }));
-vi.mock("@/components/i18n-provider", () => ({ useI18n: () => ({ t: baseDictionary }) }));
+vi.mock("@/components/i18n-provider", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/components/i18n-provider")>(),
+  useI18n: () => ({ t: baseDictionary, locale: "en" }),
+}));
 vi.mock("@/context/ToastContext", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock("@/components/HelpMenu", () => ({ HelpMenu: () => null }));
 vi.mock("./AddCustomAppModal", () => ({ AddCustomAppModal: () => null }));

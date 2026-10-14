@@ -131,13 +131,16 @@ export function Credentials() {
         <div className="space-y-6">
           {providers.map((provider) => {
             const held = byProvider.get(provider.id) ?? [];
+            const pLoc = (copy as any)?.providers?.[provider.id];
+            const pLabel = pLoc?.label ?? provider.label;
+            const pSummary = pLoc?.summary ?? provider.summary;
             return (
               <div key={provider.id} className="rounded-xl border border-border/50 p-4">
                 <div className="mb-3 flex items-start gap-3">
                   <ProviderLogo slug={provider.icon} className="mt-0.5 size-5 shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground">{provider.label}</p>
-                    <p className="text-xs text-muted-foreground">{provider.summary}</p>
+                    <p className="text-sm font-medium text-foreground">{pLabel}</p>
+                    <p className="text-xs text-muted-foreground">{pSummary}</p>
                   </div>
                   <button
                     onClick={() => {

@@ -65,4 +65,32 @@ describe("buildDomainFanoutRegistrations", () => {
     expect(buildDomainFanoutRegistrations({ routes: null, resolveTargetUrl: () => null })).toEqual([]);
     expect(buildDomainFanoutRegistrations({ routes: [], resolveTargetUrl: () => "x" })).toEqual([]);
   });
+
+  it("preserves a path-only table and refuses to replace it if any upstream is missing", () => {
+    const route: ProjectCompositeRoute = {
+      hostname: "api.onvo.me",
+      isCustomDomain: true,
+      locations: [
+        { pathPrefix: "/v3", serviceId: "svc-api" },
+        { pathPrefix: "/mcp", serviceId: "svc-web", exact: true },
+      ],
+    };
+    expect(buildDomainFanoutRegistrations({
+      routes: [route],
+      resolveTargetUrl: (id) => upstreams[id],
+    })[0]).toMatchObject({ notFound: true, proxyLocations: [
+      { pathPrefix: "/v3", targetUrl: upstreams["svc-api"] },
+      { pathPrefix: "/mcp", targetUrl: upstreams["svc-web"], exact: true },
+    ] });
+    expect(buildDomainFanoutRegistrations({
+      routes: [route],
+      resolveTargetUrl: (id) => id === "svc-api" ? upstreams[id] : null,
+    })).toEqual([]);
+    expect(buildDomainFanoutRegistrations({
+      routes: [route],
+      services: [],
+      domainByHostname: new Map(),
+      resolveTargetUrl: (id) => upstreams[id],
+    })).toEqual([]);
+  });
 });

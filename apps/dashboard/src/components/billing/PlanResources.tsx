@@ -1,6 +1,6 @@
 "use client";
 
-import { planServiceResources, formatCpuCores, formatMemoryMb } from "@repo/core";
+import { Icon } from "@repo/ui/icons";
 import { useI18n, interpolate } from "@/components/i18n-provider";
 import { formatBillingNumber } from "@/lib/billing-usage";
 import type { ApiPlan } from "./PricingCards";
@@ -26,65 +26,34 @@ export function PlanResources({ plan, compact = false, workspaceScoped = false }
   const copy = t.billing.resourcesGuide;
   if (plan.id === "free")
     return <p className="text-xs leading-relaxed text-muted-foreground">{copy.setupHint}</p>;
-  const count = (n: number | null) =>
-    n === null ? copy.unlimited : formatBillingNumber(n, locale);
-  const spec = planServiceResources(plan.limits);
   const buildMinutes = plan.limits.buildMinutesPerMonth;
   const facts = [
-    { label: copy.projects, value: count(plan.limits.maxProjects) },
-    { label: t.billing.capacity.runningServices, value: count(plan.limits.runningServices) },
-    {
+    ...(plan.limits.maxProjects != null ? [{ label: copy.projects, value: formatBillingNumber(plan.limits.maxProjects, locale) }] : []),
+    ...(plan.limits.runningServices != null ? [{ label: t.billing.capacity.runningServices, value: formatBillingNumber(plan.limits.runningServices, locale) }] : []),
+    ...(plan.limits.concurrentBuilds != null ? [{ label: copy.concurrentBuilds, value: formatBillingNumber(plan.limits.concurrentBuilds, locale) }] : []),
+    ...(buildMinutes !== null ? [{
       label: copy.buildTime,
-      value:
-        buildMinutes === null
-          ? copy.buildIncluded
-          : buildMinutes === 0
-            ? copy.notIncluded
-            : interpolate(copy.buildMinutes, { amount: count(buildMinutes) }),
-    },
-    {
-      label: copy.perService,
-      value: spec
-        ? `${formatCpuCores(spec.cpuCores)} · ${formatMemoryMb(spec.memoryMb)}`
-        : copy.unlimited,
-    },
-    { label: t.billing.capacity.routes, value: count(plan.limits.freeSubdomains) },
-    ...(plan.edge
-      ? [
-          {
-            label: t.billing.resourceOverview.bandwidth,
-            value:
-              plan.edge.bandwidthGb === null
-                ? copy.unlimited
-                : interpolate(t.billing.resourceOverview.bandwidthPerMonth, {
-                    amount: count(plan.edge.bandwidthGb),
-                  }),
-          },
-        ]
-      : []),
+      value: buildMinutes === 0
+        ? copy.notIncluded
+        : interpolate(copy.buildMinutes, { amount: formatBillingNumber(buildMinutes, locale) }),
+    }] : []),
+    ...(plan.edge?.bandwidthGb != null ? [{
+      label: t.billing.resourceOverview.bandwidth,
+      value: interpolate(t.billing.resourceOverview.bandwidthPerMonth, {
+        amount: formatBillingNumber(plan.edge.bandwidthGb, locale),
+      }),
+    }] : []),
   ];
+  // Use the offer's localized support feature, not a guessed benefit for its tier name.
+  const supportIndex = plan.featureKeys?.indexOf(`${plan.support}Support`) ?? -1;
+  const support = supportIndex >= 0 ? plan.features[supportIndex] : undefined;
 
-  if (compact)
-    return (
-      <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        {facts.slice(0, 3).map(({ label, value }) => (
-          <div
-            key={label}
-            className="flex items-center justify-between gap-3 rounded-xl bg-muted/50 p-3 sm:block"
-          >
-            <dt className="text-sm text-muted-foreground">{label}</dt>
-            <dd className="text-sm font-medium tabular-nums text-foreground sm:mt-2">
-              <bdi>{value}</bdi>
-            </dd>
-          </div>
-        ))}
-      </dl>
-    );
+  if (compact) return <PlanCapacity plan={plan} />;
 
   return (
     <div className="space-y-4 py-4">
       <PlanCapacity plan={plan} workspaceScoped={workspaceScoped} />
-      <dl className="space-y-2.5">
+      {facts.length > 0 && <dl className="space-y-2.5">
         {facts.map(({ label, value }) => (
           <div key={label} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3">
             <dt className="text-sm text-muted-foreground">{label}</dt>
@@ -93,7 +62,13 @@ export function PlanResources({ plan, compact = false, workspaceScoped = false }
             </dd>
           </div>
         ))}
-      </dl>
+      </dl>}
+      {support && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Icon name="check" className="size-3.5 shrink-0" aria-hidden="true" />
+          {support}
+        </p>
+      )}
     </div>
   );
 }

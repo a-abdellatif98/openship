@@ -106,7 +106,10 @@ export const notificationsApi = {
     api.get<{ channels: NotificationChannel[] }>(endpoints.notifications.channels),
 
   createChannel: (data: { kind: ChannelKind; label: string; config: Record<string, unknown> }) =>
-    api.post<{ channel: NotificationChannel }>(endpoints.notifications.channels, data),
+    api.post<{ channel: NotificationChannel; secret?: string }>(
+      endpoints.notifications.channels,
+      data,
+    ),
 
   updateChannel: (
     id: string,
@@ -116,7 +119,11 @@ export const notificationsApi = {
       verified: boolean;
       config: Record<string, unknown>;
     }>,
-  ) => api.patch<{ channel: NotificationChannel }>(endpoints.notifications.channel(id), data),
+  ) =>
+    api.patch<{ channel: NotificationChannel; secret?: string }>(
+      endpoints.notifications.channel(id),
+      data,
+    ),
 
   deleteChannel: (id: string) => api.delete<{ ok: true }>(endpoints.notifications.channel(id)),
 

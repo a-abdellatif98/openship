@@ -143,6 +143,30 @@ export type ComposeHealthcheck = {
 };
 
 /**
+ * GPU request authored in a compose file (`deploy.resources.reservations.devices` with a `gpu`
+ * capability, or the short form `gpus: all`). Docker has no "GPU" field of its own: what it takes is
+ * `HostConfig.DeviceRequests`, and that is what the Docker runtime builds from this (see
+ * `toDeviceRequests` in the adapters). Compose spells the count as an integer or the word `all`.
+ *
+ * Only NVIDIA is supported. Unsupported drivers are refused, never silently dropped.
+ */
+export interface ComposeGpu {
+  /** Device driver. Only `nvidia` is supported. */
+  driver?: string;
+  /** `"all"` or a non-negative integer. Mutually exclusive with `deviceIds`. */
+  count?: "all" | number;
+  /** Specific GPU ids/UUIDs (compose `device_ids`). */
+  deviceIds?: string[];
+  /** Compose `capabilities`, e.g. `["gpu"]`, `["gpu","compute","utility"]`. */
+  capabilities?: string[];
+  /** Driver options from Compose's device reservation. */
+  options?: Record<string, string>;
+}
+
+/** Live Docker GPU configuration; an empty object records that neither was set. */
+export type ComposeGpuConfig = Pick<ComposeAdvanced, "gpus" | "runtime">;
+
+/**
  * Extended compose fields that don't warrant their own first-class columns.
  * Stored as ONE JSONB blob (`service.advanced`) and nested inside the drift
  * `ComposeServiceSpec` so 3-way reconciliation covers it like any other
@@ -324,6 +348,15 @@ export type ComposeAdvanced = {
    */
   resources?: { cpuCores?: number; memoryMb?: number };
   /**
+   * GPU this service asks for (compose `deploy.resources.reservations.devices` / `gpus`). Absent = no GPU.
+   * Compose-owned: dropping it from the file must release the GPU, so it is swept in
+   * COMPOSE_OWNED_ADVANCED_KEYS. A target without a GPU gets a PREFLIGHT WARNING, not a refusal (the
+   * operator may have a GPU the probe cannot see; Docker itself still rejects the create if not).
+   */
+  gpus?: ComposeGpu | ComposeGpu[];
+  /** Legacy NVIDIA runtime. Preserve NVIDIA_VISIBLE_DEVICES; this is not `gpus: all`. */
+  runtime?: "nvidia";
+  /**
    * Compose `network_mode` — the network namespace this service SHARES instead of
    * getting its own. `"none"`, `"service:<name>"` (a sibling in this stack), or
    * `"container:<id>"`. Absent = the normal case: its own endpoint on the project
@@ -343,6 +376,9 @@ export type ComposeAdvanced = {
    * nothing else (it keeps its own network identity, ports, and aliases).
    */
   pidMode?: string;
+  /** Docker/Compose hostname-to-address mappings, including host-gateway.
+   * Frozen with the service definition for redeploy and rollback. */
+  extraHosts?: Record<string, string>;
   /**
    * Custom east-west DNS alias for this service, resolving ALONGSIDE the default
    * `service.name` on the project network — both names reach the container. Set

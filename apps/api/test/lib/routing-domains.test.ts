@@ -95,7 +95,7 @@ describe("tracked SSL provisioning progress", () => {
     await tracked.provisionCert(missing.domain);
     expect(lines.some(line => line.includes("DNS problem: NXDOMAIN"))).toBe(true);
     expect(lines.join(" ")).not.toContain("SSL certificate issued");
-    expect(repos.domain.recordSslFailure).toHaveBeenCalledWith("dom_1", "DNS problem: NXDOMAIN", true);
+    expect(repos.domain.recordSslFailure).toHaveBeenCalledWith("dom_1", "DNS problem: NXDOMAIN", "invalid");
   });
 
   it("does not add a progress read when no logger is attached", async () => {
@@ -749,7 +749,7 @@ describe("createTrackedSslProvider (deploy-time issuance)", () => {
     expect(repos.domain.recordSslFailure).toHaveBeenCalledWith(
       "dom_1",
       expect.stringContaining("DNS is not pointing here"),
-      true,
+      "invalid",
     );
     expect(repos.domain.markVerifiedActive).not.toHaveBeenCalled();
   });
@@ -770,7 +770,7 @@ describe("createTrackedSslProvider (deploy-time issuance)", () => {
     expect(repos.domain.recordSslFailure).toHaveBeenCalledWith(
       "dom_1",
       expect.stringContaining("No usable HTTPS certificate"),
-      true,
+      "invalid",
     );
     expect(repos.domain.updateSsl).not.toHaveBeenCalled();
   });

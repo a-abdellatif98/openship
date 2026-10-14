@@ -101,6 +101,7 @@
     }
   },
   "plansRoute": {
+    "requestedPlanUnavailable": "El plan seleccionado ya no está disponible. Elige otro plan a continuación.",
     "loadError": "No se pudieron cargar los planes",
     "genericError": "Algo salió mal",
     "tryAgain": "Intentar de nuevo",
@@ -292,7 +293,8 @@
     "cancelNotice": "La renovación se detendrá al finalizar el período pagado. Tu suscripción seguirá vigente hasta entonces.",
     "confirmCancel": "Detener renovación",
     "keepPlan": "Mantener suscripción",
-    "error": "No se pudo actualizar tu suscripción. Inténtalo de nuevo."
+    "error": "No se pudo actualizar tu suscripción. Inténtalo de nuevo.",
+    "manage": "Gestionar suscripción"
   },
   "checkout": {
     "checking": "Confirmando tu compra…",
@@ -343,6 +345,7 @@
     }
   },
   "resourcesGuide": {
+    "concurrentBuilds": "Compilaciones simultáneas",
     "title": "Cómo funciona el uso de Cloud",
     "credits": "Créditos Cloud",
     "creditsHint": "Las compilaciones y las aplicaciones activas consumen créditos por CPU, memoria, actividad de disco y transferencia de datos. Las cargas mayores consumen créditos más rápido.",
@@ -582,7 +585,7 @@
     "save": "Guardar",
     "delete": "Eliminar servidor",
     "confirmDelete": "Eliminar este espacio vacío",
-    "deleteHint": "Primero elimina todos los proyectos y finaliza la suscripción. Esto elimina permanentemente el servidor vacío y los datos restantes del disco.",
+    "deleteHint": "Eliminar proyectos no cancela una suscripción. Detén la renovación en Facturación y espera a que termine el período pagado antes de eliminar un servidor con suscripción. La eliminación borra permanentemente el servidor vacío y los datos restantes del disco.",
     "buildCapacityTitle": "Revisa la capacidad del servidor",
     "buildCapacityHint": "Las compilaciones usan la capacidad libre de este espacio. Detén un servicio inactivo o aumenta la capacidad y vuelve a intentarlo.",
     "openWorkspace": "Abrir servidor",
@@ -824,7 +827,8 @@
     "monthly": "al mes",
     "annual": "al año",
     "oneTime": "pago único",
-    "cancelUnavailable": "Este pago no se puede cancelar ahora. Actualiza el estado o contacta con soporte.",
+    "cancelUnavailable": "No se pudo verificar la cancelación. Actualiza el estado del pago.",
+    "cancelUnsupported": "Este pago no se puede cancelar aquí. Complétalo o espera a que caduque antes de elegir otro plan.",
     "support": "Contactar con soporte",
     "cancelHint": "El enlace de pago se cerrará. Después podrás elegir otro plan.",
     "confirmCancel": "Confirmar cancelación",

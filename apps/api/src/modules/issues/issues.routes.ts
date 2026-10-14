@@ -45,6 +45,12 @@ r.get(
   ctrl.issuesSummary,
 );
 
+r.delete("/history", {
+  tag: "project:admin", collection: true, localOnly: true,
+  auditHandledByOperation: true,
+  mcp: { description: "Clear resolved monitoring incident history in the caller's organization. Requires an organization owner/admin with unrestricted access. Preserves open incidents, other organizations and incidents resolving after the server-side cutoff. Does not clear audit logs, notifications or workloads." },
+}, ctrl.clearHistory);
+
 r.get(
   "/health",
   {

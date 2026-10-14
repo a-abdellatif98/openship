@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-import type { Domain } from "@repo/db";
-import { domainDiagnostics } from "@repo/platform/engine/modules/domains/domain-diagnostics";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { repos, type Domain, type Project } from "@repo/db";
+import { domainDiagnostics, withDomainDiagnostics } from "@repo/platform/engine/modules/domains/domain-diagnostics";
 
 const now = new Date("2026-09-23T00:01:00Z");
 const project = {
@@ -10,6 +10,7 @@ const project = {
   deletionInProgress: false,
 };
 const schedule = { cron: "*/13 * * * *", unavailable: false };
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 const domain = (patch: Partial<Domain> = {}): Domain =>
   ({
     id: "domain",
@@ -28,6 +29,44 @@ const domain = (patch: Partial<Domain> = {}): Domain =>
   }) as Domain;
 
 describe("domain details reflect the persisted check and actual schedule", () => {
+  it.each([
+    { pending: true, health: false, action: "verify", next: "2026-09-23T00:15:00.000Z" },
+    { pending: false, health: true, action: "verify_ssl", next: "2026-09-23T00:17:00.000Z" },
+    { pending: true, health: true, action: "verify", next: "2026-09-23T00:15:00.000Z" },
+  ])("uses the earliest enabled Cloud check (pending=$pending, health=$health)", async ({ pending, health, action, next }) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    vi.spyOn(repos.job, "findByKey").mockImplementation(async (key) => ({
+      enabled: key === "domains:verify-pending" ? pending : health,
+      scheduleType: "recurring",
+      cronExpression: key === "domains:verify-pending" ? "*/5 * * * *" : "2-59/5 * * * *",
+    }) as NonNullable<Awaited<ReturnType<typeof repos.job.findByKey>>>);
+    const row = domain({ verified: true, status: "active", sslStatus: "error", verifyAttempts: 1,
+      lastCheckedAt: new Date("2026-09-23T00:00:00Z") });
+    const [result] = await withDomainDiagnostics({ ...project, workspaceId: "workspace" } as Project, [row], []);
+    expect(result.diagnostics).toMatchObject({ automaticRetry: "scheduled", retryAction: action, nextRetryAt: next });
+  });
+
+  it("schedules a failed Cloud observation even while retaining an active certificate", () => {
+    const row = domain({ verified: true, status: "active", sslStatus: "active", verifyAttempts: 1,
+      lastVerifyError: "HTTPS could not be checked", lastCheckedAt: new Date("2026-09-23T00:00:00Z") });
+    expect(domainDiagnostics(row, project, {
+      cron: "2-59/5 * * * *", unavailable: false, healthCheckIntervalMs: 300_000,
+    }, true, now)).toMatchObject({
+      retryAction: "verify_ssl", automaticRetry: "scheduled", nextRetryAt: "2026-09-23T00:17:00.000Z",
+    });
+  });
+
+  it("respects the Cloud observer's minimum age and disabled job", () => {
+    const row = domain({ verified: true, status: "active", sslStatus: "provisioning",
+      lastCheckedAt: new Date("2026-09-23T00:00:00Z") });
+    const health = { cron: "2-59/5 * * * *", unavailable: false, healthCheckIntervalMs: 300_000 };
+    expect(domainDiagnostics(row, project, health, true, now)?.nextRetryAt).toBe("2026-09-23T00:07:00.000Z");
+    expect(domainDiagnostics(row, project, { ...health, cron: null }, true, now)).toMatchObject({
+      automaticRetry: "disabled", nextRetryAt: null, retryAction: "verify_ssl",
+    });
+  });
+
   it("schedules the first check after the grace period on the configured cron", () => {
     expect(domainDiagnostics(domain(), project, schedule, true, now)).toEqual({
       state: "pending",

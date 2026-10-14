@@ -112,7 +112,7 @@ describe("Cloud customer checkout", () => {
       kind: "subscription",
       billingInterval: "monthly",
       offer: {
-        reference: "openship:starter:v10",
+        reference: "openship:starter:v11",
         unitAmount: 2000,
         credits: 0, billingMode: "monthly",
         capacity: { vcpus: 2, memoryMb: 8192, diskGb: 128, workspaces: 1 },
@@ -129,8 +129,9 @@ describe("Cloud customer checkout", () => {
     expect(input).not.toHaveProperty("planTierId");
     expect(input).not.toHaveProperty("customer");
     expect(JSON.parse(input.metadata.openship_limits)).toMatchObject({
-      runningServices: null,
-      maxProjects: null,
+      runningServices: 15,
+      maxProjects: 10,
+      concurrentBuilds: 4,
     });
   });
   it("sells the new Hobby offer as a namespace contract with finite capacity", async () => {
@@ -139,7 +140,7 @@ describe("Cloud customer checkout", () => {
     expect(h.checkout).toHaveBeenCalledWith(expect.objectContaining({
       namespace: "ns-org-a",
       offer: expect.objectContaining({
-        reference: "openship:hobby:v10", unitAmount: 500, credits: 0, billingMode: "monthly",
+        reference: "openship:hobby:v11", unitAmount: 500, credits: 0, billingMode: "monthly",
         resourceLimits: { max_workspaces: 1, max_vcpus: 1, max_ram_mb: 2048, max_disk_gb: 40,
           max_total_vcpus: 1, max_total_ram_mb: 2048, max_total_disk_gb: 40 },
       }),
@@ -165,7 +166,7 @@ describe("Cloud customer checkout", () => {
       capacity: { vcpus: 8, memoryMb: 32768, diskGb: 600, workspaces: 1 },
       resourceLimits: { max_workspaces: 1, max_vcpus: 8, max_ram_mb: 32768, max_disk_gb: 600, max_total_vcpus: 8, max_total_ram_mb: 32768, max_total_disk_gb: 600 },
     });
-    expect(JSON.parse(input.metadata.openship_limits).runningServices).toBeNull();
+    expect(JSON.parse(input.metadata.openship_limits).runningServices).toBe(100);
     expect(h.quota).not.toHaveBeenCalled();
   });
   it("passes a reseller's explicitly chosen VM restrictions unchanged", async () => {

@@ -67,8 +67,8 @@ export default function ProjectsPage() {
     [projects, t],
   );
   const showFilters = filters.length > 1;
-  const showServerCta = selfHosted && !projects.some(project => project.deployTarget === "server");
-  const showSidebar = showFilters || showServerCta;
+  const showServerCta = !loading && selfHosted && !projects.some(project => project.deployTarget === "server");
+  const showSidebar = loading || showFilters || showServerCta;
   const filtered = projects.filter(project =>
     projectMatchesFilter(project, filter) &&
     [project.name, project.slug, project.framework].some(value => value?.toLowerCase().includes(search.toLowerCase())),
@@ -91,17 +91,7 @@ export default function ProjectsPage() {
         </div>
       </header>
 
-      {loading ? (
-        <div className="divide-y divide-border/50 rounded-2xl bg-card" aria-busy="true">
-          {Array.from({ length: 5 }, (_, index) => (
-            <div key={index} className="flex animate-pulse items-center gap-4 px-5 py-4">
-              <div className="size-10 rounded-xl bg-muted" />
-              <div className="flex-1 space-y-2"><div className="h-4 w-32 rounded-lg bg-muted" /><div className="h-3 w-48 max-w-full rounded-lg bg-muted/60" /></div>
-              <div className="h-6 w-16 rounded-full bg-muted/60" />
-            </div>
-          ))}
-        </div>
-      ) : projects.length === 0 ? (
+      {!loading && projects.length === 0 ? (
         <EmptyState />
       ) : (
         <div className={`grid grid-cols-1 gap-x-6 gap-y-4 ${showSidebar ? "@min-[60rem]/project-collection:grid-cols-[minmax(0,1fr)_340px]" : ""}`}>
@@ -114,7 +104,9 @@ export default function ProjectsPage() {
           </div>
 
           <div className="min-w-0 @min-[60rem]/project-collection:col-start-1 @min-[60rem]/project-collection:row-start-2">
-            {filtered.length > 0 ? (
+            {loading ? (
+              <ProjectsSkeleton view={view} />
+            ) : filtered.length > 0 ? (
               view === "grid" ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3">
                   {filtered.map(project => <ProjectGridCard key={project.id} project={project} preferAppLogo updateAvailable={updatesBehind.has(project.id)} />)}
@@ -141,6 +133,7 @@ export default function ProjectsPage() {
 
           {showSidebar && (
             <aside className="space-y-4 @min-[60rem]/project-collection:col-start-2 @min-[60rem]/project-collection:row-span-2 @min-[60rem]/project-collection:row-start-1 @min-[60rem]/project-collection:sticky @min-[60rem]/project-collection:top-6 @min-[60rem]/project-collection:self-start">
+              {loading ? <ProjectSidebarSkeleton showGuidance={selfHosted} /> : <>
               {showFilters && <ProjectFilters options={filters} active={filter} onChange={setFilter} />}
               {showServerCta && (
                 <div className="rounded-2xl bg-card p-5">
@@ -152,10 +145,90 @@ export default function ProjectsPage() {
                   </Button>
                 </div>
               )}
+              </>}
             </aside>
           )}
         </div>
       )}
     </PageContainer>
+  );
+}
+
+
+/** Keep loading in the same collection shell and selected view as the real cards. */
+function ProjectsSkeleton({ view }: { view: ProjectView }) {
+  if (view === "list") {
+    return (
+      <div className="divide-y divide-border/50 rounded-2xl bg-card" aria-busy="true">
+        {Array.from({ length: 5 }, (_, index) => (
+          <div key={index} className="flex items-center gap-3 px-4 py-3.5 motion-safe:animate-pulse">
+            <div className="size-10 shrink-0 rounded-xl bg-muted" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="h-4 w-32 max-w-full rounded bg-muted" />
+              <div className="h-3 w-48 max-w-full rounded bg-muted" />
+            </div>
+            <div className="h-4 w-12 rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3" aria-busy="true">
+      {Array.from({ length: 6 }, (_, index) => (
+        <div key={index} className="flex min-w-0 flex-col gap-2 rounded-2xl bg-card p-4 motion-safe:animate-pulse" aria-hidden="true">
+          <div className="flex items-center gap-3">
+            <div className="size-10 shrink-0 rounded-xl bg-muted" />
+            <div className="min-w-0 flex-1">
+              <div className="h-6 w-28 max-w-full rounded bg-muted" />
+              <div className="mt-0.5 h-5 w-40 max-w-full rounded bg-muted" />
+            </div>
+            <div className="size-6 shrink-0 rounded-lg bg-muted" />
+          </div>
+          <div className="flex h-4 items-center justify-between">
+            <div className="h-3 w-24 rounded bg-muted" />
+            <div className="h-3 w-12 rounded bg-muted" />
+          </div>
+          <div className="flex min-h-7 items-center gap-2">
+            <div className="h-6 w-28 rounded-lg bg-muted" />
+            <div className="h-6 w-12 rounded-lg bg-muted" />
+            <div className="ms-auto h-3 w-10 rounded bg-muted" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+function ProjectSidebarSkeleton({ showGuidance }: { showGuidance: boolean }) {
+  return (
+    <div className="space-y-4" aria-busy="true">
+      <div className="rounded-2xl bg-card motion-safe:animate-pulse" aria-hidden="true">
+        <div className="space-y-2 border-b border-border/50 px-5 py-4">
+          <div className="h-5 w-24 rounded bg-muted" />
+          <div className="h-3 w-40 rounded bg-muted" />
+        </div>
+        <div className="p-2">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div key={index} className="flex items-center gap-2.5 px-3 py-2">
+              <div className="size-4 rounded bg-muted" />
+              <div className="h-5 w-28 rounded bg-muted" />
+              <div className="ms-auto h-3 w-5 rounded bg-muted" />
+            </div>
+          ))}
+        </div>
+      </div>
+      {showGuidance && (
+        <div className="rounded-2xl bg-card p-5 motion-safe:animate-pulse" aria-hidden="true">
+          <div className="mb-3 size-5 rounded bg-muted" />
+          <div className="h-5 w-32 rounded bg-muted" />
+          <div className="mt-2 h-4 w-full rounded bg-muted" />
+          <div className="mt-1 h-4 w-3/4 rounded bg-muted" />
+          <div className="mt-3 h-8 w-28 rounded-lg bg-muted" />
+        </div>
+      )}
+    </div>
   );
 }

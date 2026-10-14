@@ -46,6 +46,12 @@ function server(scanOverrides: Record<string, unknown> = {}) {
 }
 
 describe("SDK source deployments", () => {
+  it("preserves the scanned PHP version through project creation", async () => {
+    const s = server({ runtimeImage: "custom/runtime:83", runtimeVersion: "8.3", stack: "laravel", projectType: "app", packageManager: "composer", installCommand: "composer install", buildImage: "php:8.3-cli-bookworm", services: [] });
+    await s.client.deploy({ source: { type: "files", files: { "composer.json": "{}" } } });
+    expect(s.commands.find(command => command.path === "/api/projects/ensure")?.body)
+      .toMatchObject({ runtimeImage: "custom/runtime:83", runtimeVersion: "8.3", buildImage: "php:8.3-cli-bookworm", hasBuild: true });
+  });
   it.each([{ releaseCommands: ["node migrate.js"] }, { releaseCommands: [] }])("preserves declared release commands when creating a project: %j", async ({ releaseCommands }) => {
     const s = server({ releaseCommands });
     await s.client.deploy({ source: { type: "files", files: { "index.js": "" } } });

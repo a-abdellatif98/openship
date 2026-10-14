@@ -48,6 +48,10 @@ export const CloudWorkspaceSchema = Type.Object({
   projectCount: Type.Integer({ minimum: 0 }),
   state: Type.String(),
   resources: resourceSize,
+  /** A linked installation could not verify Cloud authority; never a VM health verdict. */
+  connectionIssue: Type.Optional(Type.Union([
+    Type.Literal("not_connected"), Type.Literal("account_mismatch"), Type.Literal("unavailable"),
+  ])),
   operation: Type.Union([
     Type.Object({
       id: Type.String(),
@@ -88,6 +92,7 @@ const name = Type.String({ minLength: 1, maxLength: 80, pattern: "\\S" });
 export const CreateManagedServerInputSchema = Type.Object(
   {
     name,
+    idempotencyKey: Type.Optional(operationKey),
   },
   { additionalProperties: false },
 );

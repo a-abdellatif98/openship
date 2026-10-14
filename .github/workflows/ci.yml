@@ -28,6 +28,13 @@ concurrency:
 # unmergeable forever with no visible reason.
 
 jobs:
+  actions-runner:
+    name: Actions execution
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/actions-e2e.yml
+
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
@@ -106,6 +113,13 @@ jobs:
               test/e2e/migration-direct-transfer.e2e.test.ts
               test/e2e/migration-takeover.e2e.test.ts
               test/e2e/backup-volume-roundtrip.e2e.test.ts
+              test/e2e/docker-exec-watchdog.e2e.test.ts
+          # Inventory image identity and atomic cutover must pass before release.
+          - suite: Compose cutover and rollback
+            command: >-
+              RUN_DOCKER_E2E=1 bun run --cwd apps/api test:e2e
+              test/e2e/compose-port-preflight-atomic.e2e.test.ts
+              test/e2e/rollback-compose-cycle.e2e.test.ts
           # Run the rule guard with real CJSON, shared dictionaries and HTTP on
           # every PR. A missing daemon must fail, not silently skip this gate.
           - suite: Edge routing
@@ -141,17 +155,28 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Prepare execution assets used by installed-package tests
+        if: matrix.suite == 'SDK and CLI' || matrix.suite == 'Other packages'
+        uses: ./.github/actions/actions-runner
+
       # Run every workspace test, with the large API suite split across runners.
       # Direct Vitest runs and Turbo's stream mode expose progress immediately.
       # The complete API test/e2e/** suite also runs in release-gate.yml.
       - name: Run tests
         run: ${{ matrix.command }}
 
+      - name: Verify Cloud build coordination on PostgreSQL
+        if: matrix.suite == 'Database'
+        env:
+          OPENSHIP_TEST_CLOUD_POSTGRES: "1"
+        run: |
+          OPENSHIP_TEST_PG_BIN="$(pg_config --bindir)" bun run --cwd packages/db test src/repos/cloud-build-postgres.integration.test.ts
+
   # Preserve the existing required "Test" check. A failed, skipped, or canceled
   # matrix must fail this check; no individual shard can make the PR green.
   test:
     name: Test
-    needs: test_suites
+    needs: [test_suites, actions-runner]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -159,9 +184,10 @@ jobs:
       - name: Require every test suite to pass
         env:
           TEST_SUITES_RESULT: ${{ needs.test_suites.result }}
+          ACTIONS_RESULT: ${{ needs.actions-runner.result }}
         run: |
-          if [ "$TEST_SUITES_RESULT" != "success" ]; then
-            echo "::error::Test suites finished with status: $TEST_SUITES_RESULT"
+          if [ "$TEST_SUITES_RESULT" != "success" ] || [ "$ACTIONS_RESULT" != "success" ]; then
+            echo "::error::Test suites: $TEST_SUITES_RESULT; Actions execution: $ACTIONS_RESULT"
             exit 1
           fi
 
@@ -184,6 +210,8 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - uses: ./.github/actions/actions-runner
 
       - name: Build public SDK and CLI
         run: bun run build:sdk
@@ -252,6 +280,10 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Install webmail server dependencies for shared client imports
+        working-directory: apps/email/server
+        run: bun install --frozen-lockfile
 
       - name: Install webmail client dependencies
         working-directory: apps/email/client

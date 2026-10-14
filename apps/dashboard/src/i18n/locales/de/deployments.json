@@ -201,5 +201,42 @@
     "next": "Nächste Seite",
     "pageOf": "Seite {page} von {total}",
     "range": "Bereitstellungen {from}–{to} von {total}"
+  },
+  "cloudBuildQueue": {
+    "label": "Cloud-Build-Warteschlange",
+    "title": "Build eingereiht",
+    "position": "Build eingereiht · Position {position}",
+    "concurrency": "Warten auf einen freien Platz für einen gleichzeitigen Build.",
+    "resources": "Warten auf verfügbare CPU oder Arbeitsspeicher auf dem Server.",
+    "server": "Warten, bis der Server diesen Build annimmt.",
+    "automaticStart": "Der Build startet automatisch.",
+    "allowance": "Gleichzeitige Builds in deinem Tarif: {count}.",
+    "unlimited": "Dein Tarif begrenzt gleichzeitige Builds nicht.",
+    "active": "Aktive Builds: {count}.",
+    "comparePlans": "Tarife vergleichen",
+    "optionalUpgrade": "Ein Upgrade ist optional. Du kannst weiter warten.",
+    "compareConcurrency": "Vergleiche Tarife für mehr gleichzeitige Builds. Dein Build kann in der Warteschlange bleiben.",
+    "compareResources": "Vergleiche Tarife für mehr CPU oder Arbeitsspeicher. Du kannst weiter warten, bis Serverressourcen verfügbar sind."
+  },
+  "monitoring": {
+    "title": "Deployment-Übersicht",
+    "scope": "Gewähltes Projekt und Suche · UTC-Kalendertage · gespeicherter Verlauf",
+    "period": "Zeitraum",
+    "days": "{count} Tage",
+    "refresh": "Aktualisieren",
+    "attempts": "Deployment-Versuche",
+    "window": "Im gewählten Zeitraum",
+    "successRate": "Erfolgsquote",
+    "rateHint": "Erfolgreich / (erfolgreich + fehlgeschlagen); ohne Abbrüche",
+    "failedHint": "Einschließlich teilweiser und blockierter Releases",
+    "activeHint": "Laufende oder wartende Versuche im Zeitraum",
+    "unavailable": "Übersicht nicht verfügbar. Versuchen Sie es erneut.",
+    "trend": "Tägliche Ergebnisse",
+    "avgBuild": "Ø erfolgreicher Build",
+    "empty": "Keine Deployments in diesem Zeitraum.",
+    "projects": "Projektübersicht",
+    "projectHint": "Top 6 nach Fehlern, dann aktiven Versuchen",
+    "failedShort": "fehlgeschlagen",
+    "history": "Deployment-Verlauf"
   }
 }

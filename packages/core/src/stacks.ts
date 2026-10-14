@@ -24,12 +24,17 @@ import { validateImageReference } from "./project-source";
 
 // ─── Language definitions ────────────────────────────────────────────────────
 
+export type DockerBuildRecipe = "generic" | "php" | "ruby" | "static";
+export type DockerRuntimeProbe = "node" | "bun" | "python" | "ruby" | "java" | "dotnet" | "elixir";
+
 export interface LanguageDefinition {
   name: string;
   /** Default build image - used when stack doesn't override */
   buildImage: string;
   /** Default runtime image */
   runtimeImage: string;
+  dockerRecipe?: DockerBuildRecipe;
+  dockerRuntimeProbe?: DockerRuntimeProbe;
   /** Package managers available for this language */
   packageManagers: readonly string[];
   /**
@@ -42,6 +47,7 @@ export interface LanguageDefinition {
 
 export const LANGUAGES = {
   javascript: {
+    dockerRuntimeProbe: "node",
     name: "JavaScript",
     buildImage: "node:22",
     runtimeImage: "node:22",
@@ -49,6 +55,7 @@ export const LANGUAGES = {
     requiredTools: ["node", "npm"],
   },
   typescript: {
+    dockerRuntimeProbe: "node",
     name: "TypeScript",
     buildImage: "node:22",
     runtimeImage: "node:22",
@@ -70,6 +77,7 @@ export const LANGUAGES = {
     requiredTools: ["rustc", "cargo"],
   },
   python: {
+    dockerRuntimeProbe: "python",
     name: "Python",
     buildImage: "python:3.12-slim",
     runtimeImage: "python:3.12-slim",
@@ -77,6 +85,8 @@ export const LANGUAGES = {
     requiredTools: ["python3", "pip"],
   },
   ruby: {
+    dockerRuntimeProbe: "ruby",
+    dockerRecipe: "ruby",
     name: "Ruby",
     buildImage: "ruby:3.3-slim",
     runtimeImage: "ruby:3.3-slim",
@@ -84,6 +94,7 @@ export const LANGUAGES = {
     requiredTools: ["ruby", "bundler"],
   },
   php: {
+    dockerRecipe: "php",
     name: "PHP",
     buildImage: "php:8.4-cli",
     // FrankenPHP, not php:*-fpm. An fpm image is a FastCGI backend, not a
@@ -98,6 +109,7 @@ export const LANGUAGES = {
     requiredTools: ["php", "composer"],
   },
   java: {
+    dockerRuntimeProbe: "java",
     name: "Java",
     // Maven image bundles both `mvn` and JDK 21, so the generated Dockerfile
     // builds Maven projects out of the box; Gradle/Kotlin projects build via
@@ -108,6 +120,7 @@ export const LANGUAGES = {
     requiredTools: ["java", "javac"],
   },
   csharp: {
+    dockerRuntimeProbe: "dotnet",
     name: "C#",
     buildImage: "mcr.microsoft.com/dotnet/sdk:8.0",
     runtimeImage: "mcr.microsoft.com/dotnet/aspnet:8.0",
@@ -115,6 +128,7 @@ export const LANGUAGES = {
     requiredTools: ["dotnet"],
   },
   elixir: {
+    dockerRuntimeProbe: "elixir",
     name: "Elixir",
     buildImage: "elixir:1.16-alpine",
     runtimeImage: "elixir:1.16-alpine",
@@ -172,6 +186,46 @@ export interface StackDetection {
   contentPatterns?: Readonly<Record<string, string>>;
 }
 
+// ─── Stack runtime roles (issue #935) ────────────────────────────────────────
+
+/** "web" is derived from `defaultStartCommand`, never declared as a role. */
+export type RoleKind = "web" | "worker" | "scheduler";
+export const ROLE_KINDS: readonly RoleKind[] = ["web", "worker", "scheduler"];
+
+export interface RoleHealth {
+  kind: "http" | "exec" | "process";
+  /** Path to probe. Only meaningful when `kind` is "http". */
+  path?: string;
+  /** Command to run. Only meaningful when `kind` is "exec". */
+  command?: string;
+}
+export const ROLE_HEALTH_KINDS: readonly RoleHealth["kind"][] = ["http", "exec", "process"];
+
+export interface StackRole {
+  name: string;
+  kind: RoleKind;
+  command: string;
+  /** Process count. Omit for the runtime default (1). */
+  replicas?: number;
+  /** Exactly one instance; incompatible with `replicas` > 1. Always true for "scheduler". */
+  singleton?: boolean;
+  /** Signal sent on stop (e.g. "SIGQUIT"). Absent means the runtime default (SIGTERM). */
+  stopSignal?: string;
+  /** Wait after the stop signal before SIGKILL, compose duration (e.g. "90s", "10m"). */
+  stopGracePeriod?: string;
+  health?: RoleHealth;
+  /** Preset gating only: every signal must match. Ignored for openship.json roles. */
+  when?: {
+    deps?: readonly string[];
+    files?: readonly string[];
+  };
+  /** Preset gating only: ANY signal here excludes the preset. */
+  unless?: {
+    deps?: readonly string[];
+    files?: readonly string[];
+  };
+}
+
 export interface StackDefinition {
   /** Human-readable display name */
   name: string;
@@ -183,6 +237,7 @@ export interface StackDefinition {
   buildImage?: string;
   /** Docker image for production runtime (overrides the language default) */
   runtimeImage?: string;
+  dockerRecipe?: DockerBuildRecipe;
   /** Default output directory after build */
   outputDirectory: string;
   /** Default port the application listens on */
@@ -191,6 +246,11 @@ export interface StackDefinition {
   defaultBuildCommand: string;
   /** Default start command */
   defaultStartCommand: string;
+  /**
+   * Optional web startup optimization, enabled by openship.json `optimize`.
+   * Runs with the runtime environment before the resolved start command.
+   */
+  optimizeCommand?: string;
   /** Minimum tool versions required by this stack on bare metal. */
   requiredToolVersions?: Readonly<Record<string, string>>;
   /**
@@ -211,6 +271,9 @@ export interface StackDefinition {
    * Only framework-specific caches - generic ones (.git) are always excluded.
    */
   cacheDirs?: readonly string[];
+  /** Pure build caches, safe to mount outside the application image. Unlike
+   * transfer exclusions, these must never contain required build outputs. */
+  buildCacheDirs?: readonly string[];
   /**
    * Paths (relative to the app root) this framework WRITES at runtime and would
    * lose on redeploy. Declared here so a stock app keeps its data with no
@@ -233,6 +296,8 @@ export interface StackDefinition {
    * `stack-detector.ts` and `project-root-detector.ts`. See {@link StackDetection}.
    */
   detection?: StackDetection;
+  /** Non-web role presets, gated by `when` in `resolveStackRoles`. */
+  defaultRoles?: readonly StackRole[];
 }
 
 // ─── The registry ────────────────────────────────────────────────────────────
@@ -250,7 +315,8 @@ export const STACKS = {
     defaultBuildCommand: "next build",
     defaultStartCommand: "next start",
     requiredToolVersions: { node: "20.9.0" },
-    cacheDirs: [".next/cache"],    detection: {
+    cacheDirs: [".next/cache"],
+    buildCacheDirs: [".next/cache"],    detection: {
       rootMarkers: ["next.config.js", "next.config.mjs", "next.config.ts"],
       deps: ["next"],
     },
@@ -394,7 +460,8 @@ export const STACKS = {
     defaultPort: 8000,
     defaultBuildCommand: "gatsby build",
     defaultStartCommand: "gatsby serve",
-    cacheDirs: [".cache"],    detection: {
+    cacheDirs: [".cache"],
+    buildCacheDirs: [".cache"],    detection: {
       rootMarkers: ["gatsby-config.js", "gatsby-config.ts"],
       deps: ["gatsby"],
     },
@@ -710,6 +777,37 @@ export const STACKS = {
       // The conjunction is encoded as an override in stack-detector.
       rootMarkers: ["Gemfile", "bin/rails", "config/routes.rb"],
     },
+    // Commands use `exec` so the worker replaces the `sh -c` wrapper as PID 1
+    // and receives SIGTERM.
+    // Only one queue backend is registered per app in practice, but a repo can
+    // carry both gems mid-migration - resolveStackRoles drops the worker role
+    // entirely when that happens rather than guessing which one runs.
+    //
+    // Explicit shutdown budgets for the later runtime slice, sized to the
+    // workers' own timeouts: Solid Queue's `shutdown_timeout` defaults to 5s
+    // and Sidekiq's `timeout` to 25s, each measured to exit ~0.5s after it
+    // (solid_queue 1.7.0, sidekiq 8.1.7). 10s matches Docker's own default and
+    // is kept as explicit intent. Sidekiq gets 45s because exceeding the grace
+    // period loses the in-flight job rather than requeueing it, so the 4.5s a
+    // 30s budget left over one measured run was too thin. An explicit
+    // openship.json `roles` array replaces all presets, so declare grace
+    // periods there to keep these values.
+    defaultRoles: [
+      {
+        name: "jobs",
+        kind: "worker",
+        command: "exec bin/jobs",
+        stopGracePeriod: "10s",
+        when: { deps: ["solid_queue"], files: ["bin/jobs"] },
+      },
+      {
+        name: "sidekiq",
+        kind: "worker",
+        command: "exec bundle exec sidekiq",
+        stopGracePeriod: "45s",
+        when: { deps: ["sidekiq"] },
+      },
+    ],
   },
   sinatra: {
     name: "Sinatra",
@@ -743,6 +841,9 @@ export const STACKS = {
     defaultBuildCommand: "",
     defaultStartCommand:
       'SERVER_NAME=":$PORT" exec frankenphp run --config /etc/frankenphp/Caddyfile --adapter caddyfile',
+    // Opt-in web cache warming after runtime environment injection. Keep the
+    // normal start command separate so existing projects stay unchanged.
+    optimizeCommand: "php artisan optimize",
     // Everything a stock Laravel app writes lives here: uploads
     // (storage/app), sessions + cache when the drivers are `file`, and the
     // framework's own scratch space. `database/` is deliberately NOT persisted —
@@ -754,6 +855,51 @@ export const STACKS = {
       rootMarkers: ["artisan", "composer.json"],
       deps: ["laravel/framework"],
     },
+    // queue and scheduler ship with laravel/framework, so they need no gate.
+    // Horizon replaces the plain worker: `queue` steps aside via `unless`
+    // and `horizon` takes over via `when`, so exactly one worker resolves.
+    // The scheduler sets `singleton: true` itself, because the parser's
+    // scheduler-forces-singleton rule never runs over stack presets.
+    //
+    // Commands use `exec` so PHP replaces the `sh -c` wrapper as PID 1 and
+    // receives SIGTERM. Without it, `queue:work` and `schedule:work` were
+    // killed after the grace period (Laravel 13.33.0, see #935). Horizon's
+    // shutdown was not measured separately.
+    //
+    // `deps` merges `require` and `require-dev`, so a dev-only
+    // laravel/horizon still selects `horizon`. Callers that need
+    // production-only matching must read `require` from composer.json.
+    //
+    // Explicit shutdown budgets for the later runtime slice. 90s exceeds the
+    // default 60s queue and Horizon supervisor timeouts, so size these to the
+    // application's own configured timeouts. Horizon's internal settings still
+    // govern worker draining, and scheduler grace is provisional because
+    // shutdown behaviour depends on the Laravel version. An explicit
+    // openship.json `roles` array replaces all presets, so declare grace
+    // periods there to keep these values.
+    defaultRoles: [
+      {
+        name: "queue",
+        kind: "worker",
+        command: "exec php artisan queue:work",
+        stopGracePeriod: "90s",
+        unless: { deps: ["laravel/horizon"] },
+      },
+      {
+        name: "horizon",
+        kind: "worker",
+        command: "exec php artisan horizon",
+        stopGracePeriod: "90s",
+        when: { deps: ["laravel/horizon"] },
+      },
+      {
+        name: "scheduler",
+        kind: "scheduler",
+        command: "exec php artisan schedule:work",
+        stopGracePeriod: "90s",
+        singleton: true,
+      },
+    ],
   },
   symfony: {
     name: "Symfony",
@@ -1216,6 +1362,36 @@ export function getRuntimeImage(
   return stack.runtimeImage ?? LANGUAGES[stack.language].runtimeImage;
 }
 
+
+/** Recipe identity comes from the stack, never from an image's display name. */
+export function getDockerBuildRecipe(
+  framework?: string | null,
+  isStatic = false,
+): DockerBuildRecipe {
+  if (isStatic) return "static";
+  const normalized = normalizeFramework(framework);
+  const stack = Object.hasOwn(STACKS, normalized)
+    ? (STACKS[normalized as StackId] as StackDefinition)
+    : undefined;
+  return (
+    stack?.dockerRecipe ??
+    (stack ? (LANGUAGES[stack.language] as LanguageDefinition).dockerRecipe : undefined) ??
+    "generic"
+  );
+}
+
+export function getDockerRuntimeProbe(
+  framework: string,
+  packageManager?: string,
+): DockerRuntimeProbe | undefined {
+  const normalized = normalizeFramework(framework);
+  const stack = Object.hasOwn(STACKS, normalized)
+    ? (STACKS[normalized as StackId] as StackDefinition)
+    : undefined;
+  if (!stack) return undefined;
+  if (packageManager === "bun" && BUN_ELIGIBLE_LANGUAGES.has(stack.language)) return "bun";
+  return (LANGUAGES[stack.language] as LanguageDefinition).dockerRuntimeProbe;
+}
 
 /** Get the full stack definition with resolved images */
 export function getStackDefaults(stackId: StackId, packageManager?: string) {

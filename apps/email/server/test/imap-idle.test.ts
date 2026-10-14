@@ -43,7 +43,7 @@ describe('IMAP IDLE stream lifetime', () => {
     expect(client.eventNames()).toEqual([]);
     expect(clear).toHaveBeenCalled();
     client.emit('exists');
-    expect(stream.writeSSE).not.toHaveBeenCalled();
+    expect(stream.writeSSE).toHaveBeenCalledTimes(hold === 'idle' ? 1 : 0);
   });
 
   it('does not open a connection for an already aborted response', async () => {
@@ -153,7 +153,16 @@ describe('IMAP IDLE stream lifetime', () => {
       const deadline = Date.now() + 2000;
       while (idleCount < 2 && Date.now() < deadline) await Bun.sleep(5);
       expect(idleCount).toBeGreaterThanOrEqual(2);
-      await response.body!.cancel();
+      const reader = response.body!.getReader();
+      const ready = await reader.read();
+      expect(new TextDecoder().decode(ready.value)).toContain('event: mailbox');
+      for (const socket of sockets) socket.write('* 2 EXISTS\r\n');
+      const delivered = await Promise.race([
+        reader.read(),
+        Bun.sleep(1000).then(() => { throw new Error('IDLE notification was not forwarded'); }),
+      ]);
+      expect(new TextDecoder().decode(delivered.value)).toContain('event: mailbox');
+      await reader.cancel();
       await done;
       while (sockets.size && Date.now() < deadline) await Bun.sleep(5);
       expect(sockets.size).toBe(0);

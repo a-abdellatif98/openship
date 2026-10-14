@@ -33,6 +33,7 @@ import { CloudResourceContext } from "./CloudResourceContext";
 import { useRouter } from "next/navigation";
 import { setApiResourceScope } from "@/lib/api/client";
 import { clearProjectEndpointCaches } from "@/hooks/useProjectEndpoints";
+import { useI18n, interpolate } from "@/components/i18n-provider";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -117,6 +118,14 @@ export function CloudProvider({ children }: { children: ReactNode }) {
   // whenever the cloud connection flips (below).
   const { refresh: refreshGitHub } = useGitHub();
   const cloudCapabilityCopy = useCloudCapabilityCopy();
+  const { t } = useI18n();
+  const modalLoc = t.settings.cloud.connectModal;
+  const cloudFeatures = [
+    { icon: "rocket" as const, label: modalLoc?.features?.deployments ?? "Cloud deployments" },
+    { icon: "shield" as const, label: modalLoc?.features?.infra ?? "Managed infrastructure" },
+    { icon: "globe" as const, label: modalLoc?.features?.ssl ?? "Automatic SSL & domains" },
+    { icon: "bolt" as const, label: modalLoc?.features?.cdn ?? "Global CDN" },
+  ];
 
   const { data: session } = useSession();
   const contextKey = `${session?.user.id ?? "local"}:${session?.session.activeOrganizationId ?? ""}`;
@@ -446,7 +455,7 @@ export function CloudProvider({ children }: { children: ReactNode }) {
 
             {/* Title */}
             <h2 className="text-lg font-semibold text-foreground">
-              Connect Openship Cloud
+              {modalLoc?.title ?? "Connect Openship Cloud"}
             </h2>
             {modalFeature.description ? (
               <div className="mt-1 space-y-1.5 text-sm leading-relaxed">
@@ -455,8 +464,11 @@ export function CloudProvider({ children }: { children: ReactNode }) {
               </div>
             ) : (
               <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                <strong className="text-foreground">{modalFeature.feature}</strong> requires
-                an Openship Cloud connection. Connect your account to unlock:
+                {interpolate(
+                  modalLoc?.requiresConnection ??
+                    "{feature} requires an Openship Cloud connection. Connect your account to unlock:",
+                  { feature: modalFeature.feature }
+                )}
               </p>
             )}
 
@@ -468,7 +480,7 @@ export function CloudProvider({ children }: { children: ReactNode }) {
 
             {/* Feature list */}
             <div className="mt-4 space-y-2">
-              {FEATURES.map(({ icon: Icon, label }) => (
+              {cloudFeatures.map(({ icon: Icon, label }) => (
                 <div key={label} className="flex items-center gap-2.5 text-sm text-muted-foreground">
                   <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                     <UiIcon name={Icon} className="size-3.5 text-primary" />
@@ -484,9 +496,6 @@ export function CloudProvider({ children }: { children: ReactNode }) {
                 size="lg"
                 disabled={connecting}
                 onClick={() => {
-                  // Keep the modal open in the `connecting` state — it stays the
-                  // dismissal arbiter. Success closes it (the isConnected effect);
-                  // an abandoned/blocked connect is dismissed → resolves false.
                   startConnect();
                 }}
               >
@@ -495,13 +504,15 @@ export function CloudProvider({ children }: { children: ReactNode }) {
                 ) : (
                   <UiIcon name="external-link" className="size-4" />
                 )}
-                {connecting ? "Waiting for sign in…" : (modalFeature.ctaLabel ?? "Connect to Openship Cloud")}
+                {connecting
+                  ? (modalLoc?.waitingSignIn ?? "Waiting for sign in…")
+                  : (modalFeature.ctaLabel ?? modalLoc?.connect ?? "Connect to Openship Cloud")}
               </Button>
               <Button
                 variant="ghost"
                 onClick={dismissCloudModal}
               >
-                Maybe later
+                {modalLoc?.maybeLater ?? "Maybe later"}
               </Button>
             </div>
           </div>

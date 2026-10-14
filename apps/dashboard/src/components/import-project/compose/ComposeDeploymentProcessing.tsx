@@ -8,6 +8,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import DeploymentDetails from "../DeploymentDetails";
 import BuildTerminal from "../BuildTerminal";
 import { DeploymentHeader } from "../DeploymentHeader";
+import { DeploymentHealthWarning } from "../DeploymentHealthWarning";
+import { CloudBuildQueueNotice } from "../CloudBuildQueueNotice";
 import { DeploymentLayout } from "../DeploymentLayout";
 import { DeploymentLogsPanel } from "../DeploymentLogsPanel";
 import { PageContainer } from "@/components/ui/PageContainer";
@@ -43,7 +45,7 @@ interface Props {
 }
 
 const ComposeDeploymentProcessing: React.FC<Props> = ({ onRedeploy }) => {
-  const { config, state, onTerminalReady, respondToPrompt, deploymentStatus } =
+  const { config, state, onTerminalReady, respondToPrompt, resolvePortCheck, deploymentStatus } =
     useDeployment();
   const showCloudPricing = useCloudDeployPricing(config.workspaceId);
   const { showToast } = useToast();
@@ -71,6 +73,12 @@ const ComposeDeploymentProcessing: React.FC<Props> = ({ onRedeploy }) => {
   // manual pin when this advances to a new service.
   const prevWorkingRef = useRef<string | undefined>(undefined);
 
+  const [resolvedWarning, setResolvedWarning] = useState<string | null>(null);
+  const warningKey = `${state.projectId || config.projectId}:${state.deploymentId}:${state.warningMessage}`;
+  const warningResolved = resolvedWarning === warningKey;
+  const handleWarningResolved = React.useCallback((resolved: boolean) => {
+    setResolvedWarning(resolved ? warningKey : null);
+  }, [warningKey]);
   const hasWarning = deploymentStatus === "ready" && !!state.warningMessage;
   // A partial-failure deploy held for an explicit keep/reject decision. Driven
   // by the server-backed `decisionPending` flag (survives refresh), suppressed
@@ -256,7 +264,13 @@ const ComposeDeploymentProcessing: React.FC<Props> = ({ onRedeploy }) => {
 
   return (
     <PageContainer>
-      <DeploymentHeader onRedeploy={onRedeploy} serviceCount={total} decisionPending={showDecision} />
+      <DeploymentHeader
+        warningResolved={warningResolved}
+        onRedeploy={onRedeploy}
+        serviceCount={total}
+        decisionPending={showDecision}
+        isCompose
+      />
 
       <ComposeDeploymentBody
         logs={state.buildLogs}
@@ -274,6 +288,7 @@ const ComposeDeploymentProcessing: React.FC<Props> = ({ onRedeploy }) => {
         isFinished={isFinished}
         terminalTheme={terminalTheme}
       >
+        {state.queue && state.isDeploying && <CloudBuildQueueNotice queue={state.queue} />}
         {/* Decision banner — persists while a partial deploy awaits keep/reject
             (survives refresh via the server flag). Re-opens the dialog. */}
         {showDecision ? (
@@ -297,23 +312,20 @@ const ComposeDeploymentProcessing: React.FC<Props> = ({ onRedeploy }) => {
             </div>
           </div>
         ) : hasWarning ? (
-          <div className="rounded-2xl border border-warning-border bg-warning-bg px-5 py-4">
-            <p className="text-sm font-medium text-warning">
-              {cd.warningTitle}
-            </p>
-            <p className="mt-1 text-sm text-warning">
-              {state.warningMessage}
-            </p>
-          </div>
+          <DeploymentHealthWarning key={warningKey} projectId={projectId}
+            deploymentId={state.deploymentId} warningMessage={state.warningMessage}
+            onResolved={handleWarningResolved} />
         ) : null}
 
-        {deploymentStatus === "ready" && (
+        {deploymentStatus === "ready" && !showDecision && (
           <PortAdvisoryModal
+            key={state.deploymentId}
             deploymentId={state.deploymentId}
             projectId={state.projectId || config.projectId}
             checks={state.portCheck}
             skipped={state.portCheckSkipped}
             isCompose
+            onResolved={resolvePortCheck}
           />
         )}
       </ComposeDeploymentBody>

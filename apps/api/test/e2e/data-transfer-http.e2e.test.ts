@@ -164,7 +164,10 @@ async function jsonRequest<T>(apiBase: string, path: string, init: RequestInit =
   });
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`${init.method ?? "GET"} ${path} returned ${response.status}: ${text}`);
+    const api = [...children].find((child) => child.baseUrl === apiBase);
+    throw new Error(
+      `${init.method ?? "GET"} ${path} returned ${response.status}: ${text}\n${api?.logs() ?? ""}`,
+    );
   }
   return JSON.parse(text) as T;
 }

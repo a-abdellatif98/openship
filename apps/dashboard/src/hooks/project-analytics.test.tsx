@@ -135,6 +135,21 @@ describe("project analytics requests and recovery (#396)", () => {
     expect(container.textContent).toContain("3.1K");
   });
 
+  it("keeps the error and disables Retry while its replacement request is pending", async () => {
+    h.get.mockRejectedValueOnce(new TypeError("Connection lost"));
+    await renderProject();
+    const pending = deferred<ReturnType<typeof response>>();
+    h.get.mockReturnValueOnce(pending.promise);
+    await act(async () => container.querySelector<HTMLButtonElement>('[role="alert"] button')!.click());
+    const retry = container.querySelector<HTMLButtonElement>('[role="alert"] button')!;
+    expect(retry.disabled).toBe(true);
+    await act(async () => retry.click());
+    expect(h.get).toHaveBeenCalledTimes(2);
+    await act(async () => pending.resolve(response(9000)));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).toContain("9.0K");
+  });
+
   it.each(["resolve", "reject"] as const)("does not let an invalidated request %s over a newer cache entry", async (outcome) => {
     const old = deferred<ReturnType<typeof response>>();
     const fresh = deferred<ReturnType<typeof response>>();

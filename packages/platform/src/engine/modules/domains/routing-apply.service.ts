@@ -200,7 +200,7 @@ export async function applyProjectRouting(
       domainByHostname,
     });
     for (const route of fanoutRoutes) {
-      requirePort(route.rootServiceId, route.rootPort);
+      if (route.rootServiceId) requirePort(route.rootServiceId, route.rootPort);
       for (const location of route.locations) requirePort(location.serviceId, location.port);
     }
 
@@ -433,6 +433,8 @@ export async function applyCloudRouting(opts: {
   const errors = new Map<string, string>();
   const singleHostnames = new Set<string>();
   const compositeHostnames = new Set(project.compositeRoutes?.map(route => route.hostname.toLowerCase()));
+  const pathOnlyHostnames = new Set(project.compositeRoutes?.filter(route => !route.rootServiceId)
+    .map(route => route.hostname.toLowerCase()));
   const singleApp = opts.deployment &&
     ((opts.deployment.meta as DeploymentMeta)?.serviceDeploymentMode === "single" || defs.length === 0);
   if (singleApp) {
@@ -501,7 +503,7 @@ export async function applyCloudRouting(opts: {
     runtimeName: "docker",
     certificateManagement: routing.certificateManagement,
     usesManagedRouting: true,
-  });
+  }).filter(route => !pathOnlyHostnames.has(route.hostname.toLowerCase()));
   const fanoutRoutes = resolveDomainFanoutRoutes({
     routes: project.compositeRoutes,
     services: defs,
@@ -554,7 +556,7 @@ export async function applyCloudRouting(opts: {
     {
       hostname: string;
       custom: boolean;
-      serviceId: string;
+      serviceId?: string;
       port?: number;
       domain?: (typeof projectPlans)[number];
       locations?: NonNullable<typeof project.compositeRoutes>[number]["locations"];
@@ -605,8 +607,10 @@ export async function applyCloudRouting(opts: {
     try {
       if (table.domain)
         await ensureRouteDomainRecord({ projectId: project.id, route: table.domain, domainByHostname });
-      const root = await serviceTarget(table.serviceId, table.port);
-      const input = await rulesFor(table.serviceId, root);
+      const root = table.serviceId ? await serviceTarget(table.serviceId, table.port) : undefined;
+      const input = root && table.serviceId
+        ? await rulesFor(table.serviceId, root)
+        : compileRoutingToOblien(project.routingConfig ?? {});
       const locations = [...(table.locations ?? [])].sort(
         (a, b) =>
           b.pathPrefix.length - a.pathPrefix.length ||
@@ -638,7 +642,7 @@ export async function applyCloudRouting(opts: {
         });
       // A missing composite target leaves the existing full table untouched;
       // never publish a root-only intermediate table during a live edit.
-      await routing.publishRoute(table.hostname, root.port, table.custom, input);
+      await routing.publishRoute(table.hostname, root?.port, table.custom, input);
     } catch (error) {
       observeCaughtError(error, "platform/engine/modules/domains/routing-apply.service");
       errors.set(key, safeErrorMessage(error));

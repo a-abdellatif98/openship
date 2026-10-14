@@ -3,6 +3,7 @@ import { matchesWorkspace } from "@/lib/server-reference";
 
 import { useId, useState } from "react";
 import Link from "next/link";
+import { CloudDeployPlanModal } from "@/components/billing/CloudDeployPlanModal";
 import { useDialogFocus } from "@/hooks/useDialogFocus";
 import { useI18n } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export function ServerCapacityRecovery({
   const server = data?.servers.find((row) => workspaceId ? matchesWorkspace(row, workspaceId) : data.servers.length === 1 && !!row.managed);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   async function retry() {
     if (!onRetry || retrying) return;
     setRetrying(true);
@@ -40,6 +42,7 @@ export function ServerCapacityRecovery({
       setRetrying(false);
     }
   }
+  if (upgrading) return <CloudDeployPlanModal workspaceId={workspaceId} restriction={{ code: "PLAN_UPGRADE_REQUIRED", reason: "workspace-capacity", message }} onClose={() => setUpgrading(false)} onRetry={onRetry} />;
   return (
     <div
       ref={dialog}
@@ -66,6 +69,7 @@ export function ServerCapacityRecovery({
         </p>
       )}
       <div className="flex flex-wrap gap-2">
+        {workspaceId && <Button onClick={() => setUpgrading(true)}>{t.billing.pricing.upgrade}</Button>}
         {server && (
           <Button asChild>
             <Link
