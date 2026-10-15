@@ -689,7 +689,7 @@ describe("customer credit limits", () => {
     await act(async () => { details.open = true; });
     expect(visibleText()).toContain("900 credits left");
   });
-  it("shows measured server disk use instead of counting reserved project capacity as stored data", async () => {
+  it("links live usage to its Cloud space without repeating the host measurement in Billing", async () => {
     mocks.usage.mockResolvedValue({ available: true, measuredAt: "2026-10-01T00:00:00Z", reason: null,
       cpuPercent: 10, memoryUsedMb: 512, memoryAvailableMb: 3584,
       diskUsedMb: 2048, diskAvailableMb: 23552, diskTotalMb: 25600, projects: [], sharedDiskMb: null });
@@ -697,8 +697,8 @@ describe("customer credit limits", () => {
       vcpus: { used: 3, max: 4 }, ramMb: { used: 3072, max: 8192 }, diskGb: { used: 96, max: 128 },
       workspaces: { used: 3, max: 6 }, buildMinutes: { used: 14, max: null },
     } }} />);
-    expect(mocks.usage).toHaveBeenCalledExactlyOnceWith("managed-server");
-    expect(visibleText()).toContain("2 GB / 25 GB");
+    expect(mocks.usage).not.toHaveBeenCalled();
+    expect(container.querySelector('a[href="/resources?pool=managed-server"]')).not.toBeNull();
     expect(visibleText()).not.toContain("96 GB");
     expect(visibleText()).toContain(copy.resourceOverview.measuredUsage);
     expect(visibleText()).not.toContain("3,000 min");

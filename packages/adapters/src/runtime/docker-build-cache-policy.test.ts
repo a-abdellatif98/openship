@@ -181,6 +181,9 @@ describe("bounded project build cache", () => {
       spaceReclaimed: 0,
     });
     expect(remove).toHaveBeenCalledWith();
+    await expect(
+      pruneManagedBuildCaches(h.docker as never, h.executor, { projectId: "a" }),
+    ).rejects.toMatchObject({ code: "BUILD_CACHE_IN_USE" });
   });
 
   it("creates an owned cache and checks the actual winner of a concurrent create", async () => {

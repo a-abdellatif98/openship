@@ -37,6 +37,7 @@ import {
   withTimeout,
   type ComposeAdvanced,
   validateComposeGpuConfig,
+  parseComposeShmSize,
   type ProxySettings,
 } from "@repo/core";
 import { getTemplateForOrg } from "../../apps/catalog-source";
@@ -1013,6 +1014,7 @@ async function deployComposeServicesUnlocked(
     if (!opts?.strictScope || !opts.targetServiceIds || opts.targetServiceIds.has(service.id)) {
       parseContainerHosts(service.advanced?.extraHosts);
       validateComposeGpuConfig(service.advanced);
+      parseComposeShmSize(service.advanced?.shmSize);
     }
   }
   await assertCloudDeploymentLimits(project.organizationId, {

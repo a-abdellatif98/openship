@@ -86,6 +86,8 @@ jobs:
             homepage,
             immich,
             jellyfin,
+            ollama,
+            open-webui,
           ]
         arch: [amd64, arm64]
         include:

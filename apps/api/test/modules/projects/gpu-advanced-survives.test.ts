@@ -44,6 +44,7 @@ it("carries inspected GPU selectors through discovery, adoption and the next con
     NetworkSettings: { Networks: {} },
     Mounts: [],
     HostConfig: {
+      ShmSize: 2147483648,
       Runtime: "nvidia",
       DeviceRequests: [
         { Driver: "nvidia", Count: 0, DeviceIDs: ["GPU-specific"], Capabilities: [["gpu"]] },
@@ -89,6 +90,7 @@ it("carries inspected GPU selectors through discovery, adoption and the next con
       advanced: rows[0]?.advanced,
     } as never,
   );
+  expect(creates[0]!.HostConfig.ShmSize).toBe(2147483648);
   expect(creates[0]?.HostConfig).toMatchObject({
     Runtime: "nvidia",
     DeviceRequests: [{ Driver: "nvidia", DeviceIDs: ["GPU-specific"], Capabilities: [["gpu"]] }],

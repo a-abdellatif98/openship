@@ -8,6 +8,7 @@ import { buildCatalog } from "../packages/core/scripts/gen-catalog";
 import type { AppTemplate, TemplateServiceSpec } from "../packages/core/src/app-templates";
 import { runAppPrepareCommand } from "../packages/platform/src/engine/modules/deployments/compose/app-prepare";
 import retiredBuilds from "./fixtures/catalog-retired-builds.json";
+import { appGpuEnvironment } from "../packages/core/src/apps/gpu";
 
 export const OFFICIAL_APP_STACKS = [
   "wordpress",
@@ -22,6 +23,8 @@ export const OFFICIAL_APP_STACKS = [
   "homepage",
   "immich",
   "jellyfin",
+  "ollama",
+  "open-webui",
 ] as const;
 const run = promisify(execFile);
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -149,7 +152,7 @@ async function smokeApp(app: AppTemplate) {
     throw new Error(app.id + "/" + service.name + " did not become healthy");
   };
   const create = async (s: TemplateServiceSpec) => {
-    const memory = s.resources ? s.resources.memoryMb + "m" : "768m";
+    const memory = s.resources ? s.resources.memoryMb + "m" : app.category === "ai" ? "1536m" : "768m";
     const args = [
       "create",
       "--name",
@@ -306,7 +309,7 @@ async function smokeApp(app: AppTemplate) {
         if (f.service === s.name && config.get(f.key)) values[f.key] = config.get(f.key)!;
       for (const group of app.settings ?? [])
         for (const f of group.fields) if (f.service === s.name) values[f.key] = config.get(f.key)!;
-      environment.set(s.name, values);
+      environment.set(s.name, appGpuEnvironment({ ...s, environment: values }, false));
       for (const mount of s.volumes ?? []) {
         const name = mount.split(":")[0]!;
         if (!volumes.has(name)) {
@@ -341,6 +344,56 @@ async function smokeApp(app: AppTemplate) {
     await start();
     operation = app.id + "/login-and-write";
     switch (app.id) {
+      case "ollama": {
+        const model = "qwen3:0.6b";
+        const pulled = await fetch(url("ollama", "/api/pull"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: model, stream: false }),
+          signal: AbortSignal.timeout(600_000),
+        });
+        assert(pulled.ok, "Ollama model download failed");
+        assert((await pulled.json() as { status?: string }).status === "success", "Ollama model download did not complete");
+        const generated = await fetch(url("ollama", "/api/generate"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model, prompt: "Say hello.", stream: false, think: false, options: { num_predict: 8 } }),
+          signal: AbortSignal.timeout(120_000),
+        });
+        assert(generated.ok && (await generated.json() as { response?: string }).response, "Ollama CPU inference failed");
+        await replace();
+        const models = await request("ollama", "/api/tags").then((response) => response.json()) as { models: { name: string }[] };
+        assert(models.models.some((item) => item.name === model), "Ollama downloaded model did not persist");
+        break;
+      }
+      case "open-webui": {
+        const login = async () => {
+          const response = await request("open-webui", "/api/v1/auths/signin", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: env("open-webui", "WEBUI_ADMIN_EMAIL"), password: env("open-webui", "WEBUI_ADMIN_PASSWORD") }),
+          });
+          assert(response.ok, "Open WebUI generated admin login failed");
+          const session = await response.json() as { token: string; role: string };
+          assert(session.token && session.role === "admin", "Open WebUI initial account is not an administrator");
+          return { Authorization: "Bearer " + session.token, "Content-Type": "application/json" };
+        };
+        const headers = await login();
+        assert((await request("open-webui", "/api/v1/auths/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Blocked", email: "blocked@openship.io", password: randomBytes(32).toString("hex") }),
+        })).status === 403, "Open WebUI public sign-up was not disabled");
+        const response = await request("open-webui", "/api/v1/chats/new", {
+          method: "POST", headers, body: JSON.stringify({ chat: { title: marker, messages: [] } }),
+        });
+        assert(response.ok, "Open WebUI authenticated chat creation failed");
+        const chat = await response.json() as { id: string };
+        await replace();
+        const restored = await request("open-webui", "/api/v1/chats/" + chat.id, { headers: await login() });
+        assert(restored.ok && (await restored.json() as { chat: { title: string } }).chat.title === marker, "Open WebUI chat did not persist");
+        break;
+      }
       case "homepage": {
         const response = await request("homepage-access", "/");
         assert(response.status === 401, "Homepage allowed unauthenticated public access");

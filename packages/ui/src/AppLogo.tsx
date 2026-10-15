@@ -23,6 +23,9 @@ const BRAND_LOGO: Record<
   microsoftteams: { src: "https://www.google.com/s2/favicons?domain=teams.microsoft.com&sz=128" },
   // Supabase's official mark, rendered in its brand green by the simpleicons CDN.
   supabase: { slug: "supabase" },
+  ollama: { src: "https://github.com/ollama.png?size=80" },
+  vllm: { src: "https://github.com/vllm-project.png?size=80" },
+  "open-webui": { src: "https://github.com/open-webui.png?size=80" },
   pocketbase: { slug: "pocketbase" },
   mongodb: { slug: "mongodb" },
   n8n: { slug: "n8n" },

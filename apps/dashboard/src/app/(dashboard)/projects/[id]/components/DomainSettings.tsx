@@ -2548,10 +2548,7 @@ export const DomainSettings = ({ serviceScope, onRoutesChanged }: DomainSettings
                 runtimePort={publicEndpoints[0]?.port || projectRuntimePort}
                 onChange={(nextEndpoints) => setPublicEndpoints(nextEndpoints)}
                 allowRemoveAll
-                // Canonical redirects are rendered in the box's own vhost, so
-                // they're self-hosted only — a cloud-owned project's routing
-                // belongs to the managed edge (the API refuses it there too).
-                allowRedirects={selfHosted && !isCloudProject}
+                allowRedirects
               />
             </div>
 

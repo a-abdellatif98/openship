@@ -30,11 +30,13 @@
 // `.d.ts` files (#448).
 /// <reference path="./tar-fs.d.ts" />
 import { reportCaughtError as observeCaughtError, diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
+import { currentManagedCommandTracking } from "./cloud/command-tracking";
 import Dockerode from "dockerode";
 import { prepareDockerImage, type DockerImagePreparationOptions } from "./docker-image-preparation";
 import * as tarFs from "tar-fs";
 import { randomUUID } from "node:crypto";
 import { projectBuildKitWorker, removeProjectBuildKitWorker } from "./docker-buildkit-worker";
+import { readSoftwareCache } from "./docker-software-cache";
 import {
   DEFAULT_BUILD_CACHE_KEEP_BYTES, DOCKER_BUILD_STORAGE_COMMAND, parseBuildStorage,
   assertBuildStorage, buildStorageReserve, buildKitCacheConfig,
@@ -199,6 +201,7 @@ import {
   normalizeComposeGpuRequests,
   ValidationError,
   validateComposeGpuConfig,
+  parseComposeShmSize,
   type ComposeGpuConfig,
   type ComposeHealthcheck,
 } from "@repo/core";
@@ -1631,16 +1634,28 @@ export class DockerRuntime implements RuntimeAdapter {
   protected async clearManagedProjectBuildCache(projectId: string): Promise<void> {
     const executor = this.connectionOptions?.executor;
     if (!executor) return;
-    await this.withBuildCacheLock(() => this.pruneManagedBuildState(executor, { projectId }));
+    await this.withBuildCacheLock(async () => {
+      // An idle BuildKit container still pins its state volume. Teardown owns
+      // project admission; stop its worker only after durable commands drain,
+      // under the same host lock used to bootstrap it.
+      await this.assertBuildCacheCommandsStopped(projectId);
+      await removeProjectBuildKitWorker(executor, projectId);
+      await this.pruneManagedBuildState(executor, { projectId });
+    });
   }
 
   private async pruneManagedBuildState(executor: CommandExecutor, options: { projectId?: string; keepBytes?: number } = {}) {
+    // Docker/exec replies can precede their durable exit acknowledgements.
+    // Otherwise teardown mistakes its own finished inspection/removal commands
+    // for a live build, even when no cache volume exists.
+    await currentManagedCommandTracking()?.flush();
     const protection = await this.connectionOptions?.buildCacheProtection?.();
     return pruneManagedBuildCaches(this.docker, executor, { ...options,
       protectedProjectIds: new Set(protection?.projectIds), protectAll: protection?.all });
   }
 
   private async assertBuildCacheCommandsStopped(projectId: string): Promise<void> {
+    await currentManagedCommandTracking()?.flush();
     const protection = await this.connectionOptions?.buildCacheProtection?.();
     if (protection?.all || protection?.projectIds.includes(projectId))
       throw new AppError("A build command has not confirmed exit. Recover it before starting or completing this build.",
@@ -1769,6 +1784,9 @@ export class DockerRuntime implements RuntimeAdapter {
       `${labelArgs} ${buildArgs} .`;
     let bootstrapBuilder: (() => Promise<void>) | undefined;
     if (isolatedBuildKit) {
+      const software = await readSoftwareCache(executor, `${remoteBuildDir}/${dockerfileName || "Dockerfile"}`, signal);
+      if (software.args) log.log("Shared public build images are available; private build cache remains project-owned.\n");
+      else if (software.unavailable) log.log("Shared build images are unavailable; using the normal build cache.\n", "warn");
       const driverOptions = [
         ...(cloudLimits.memory ? [`memory=${cloudLimits.memory}`, `memory-swap=${cloudLimits.memory}`] : []),
         ...(cloudLimits.cpuquota ? [`cpu-quota=${cloudLimits.cpuquota}`, `cpu-period=${cloudLimits.cpuperiod}`] : []),
@@ -1797,7 +1815,7 @@ export class DockerRuntime implements RuntimeAdapter {
         "set -e",
         `trap ${sq(`${removeBuilder} >/dev/null 2>&1 || true`)} EXIT HUP INT TERM`,
         `cd ${sq(remoteBuildDir)}`,
-        `docker buildx build --builder ${sq(builderName!)} --load --progress=plain -t ${sq(tag)}${dockerfileFlag} ${labelArgs} ${buildArgs} .`,
+        `docker buildx build --builder ${sq(builderName!)} --load --progress=plain${software.args} -t ${sq(tag)}${dockerfileFlag} ${labelArgs} ${buildArgs} .`,
       ].join("\n");
       log.log(Object.keys(cloudLimits!).length > 0
         ? `Build worker limited to ${describeResourceLimits(config.resources)}.\n`
@@ -4570,6 +4588,7 @@ export class DockerRuntime implements RuntimeAdapter {
         : undefined,
       resources: inspectResourceLimits(data.HostConfig),
       gpu,
+      ...(data.HostConfig?.ShmSize && { shmSize: data.HostConfig.ShmSize }),
       ...(gpuImportError && { gpuImportError }),
       composeProject: labels["com.docker.compose.project"] || undefined,
       composeService: labels["com.docker.compose.service"] || undefined,
@@ -5878,6 +5897,7 @@ export class DockerRuntime implements RuntimeAdapter {
     const healthcheck = toDockerHealthcheck(config.advanced?.healthcheck);
     const stopConfig = toStopConfig(config.advanced);
     validateComposeGpuConfig(config.advanced);
+    const shmSize = parseComposeShmSize(config.advanced?.shmSize);
     const deviceRequests = toDeviceRequests(config.advanced?.gpus);
 
     // Acquire an external image BEFORE touching the running container. This is
@@ -5998,6 +6018,7 @@ export class DockerRuntime implements RuntimeAdapter {
         // toolkit is never handed a request it would reject.
         ...(deviceRequests ? { DeviceRequests: deviceRequests } : {}),
         ...(config.advanced?.runtime ? { Runtime: config.advanced.runtime } : {}),
+        ...(shmSize !== undefined ? { ShmSize: shmSize } : {}),
         ...(ownsProjectEndpoint ? { PortBindings: portBindings } : {}),
         Binds: binds,
         // The project network is the default; a compose `network_mode` replaces it.

@@ -93,7 +93,9 @@ export function getNavSections(
   // Cloud's Emails entry connects existing IMAP/SMTP backends through the
   // generic webmail app; local control planes retain mail-server administration.
   const infraItems: NavItem[] = [
-    { key: "servers", href: "/servers", icon: "server" },
+    selfHosted
+      ? { key: "servers", href: "/servers", icon: "server" }
+      : { key: "resources", href: "/resources", icon: "layers", alsoAt: ["/servers"] },
     { key: "emails", href: "/emails", icon: "mail" },
   ];
   infraItems.push({ key: "jobs", href: "/jobs", icon: "clock" });

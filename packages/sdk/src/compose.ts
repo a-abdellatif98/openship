@@ -27,6 +27,7 @@ import {
   parseComposeNamespace,
   parseContainerHosts,
   readComposeGpuConfig,
+  readComposeShmConfig,
   type ComposeAdvanced,
 } from "@repo/core";
 /** Rewrite an absolute build context (as docker resolves it) back to a repo-relative path. */
@@ -199,6 +200,9 @@ export function mapComposeService(
   errors.push(...namespaceErrors);
   const gpu = readComposeGpuConfig(d);
   Object.assign(advanced, gpu.config);
+  const shm = readComposeShmConfig(d.shm_size);
+  Object.assign(advanced, shm.config);
+  errors.push(...shm.issues.map((issue) => `  ${name}: ${issue.reason}`));
   errors.push(
     ...gpu.issues.filter((issue) => issue.blocking).map((issue) => `  ${name}: ${issue.reason}`),
   );

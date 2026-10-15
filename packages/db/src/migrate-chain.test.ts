@@ -299,6 +299,7 @@ describe("migration chain applies to an existing, populated database", () => {
           github_checks: null,
           runtime_version: null,
           runtime_image: null,
+          lifecycle_operation: null,
           external_config: null,
         })),
       );
@@ -503,6 +504,7 @@ describe("migration chain applies to an existing, populated database", () => {
           ...previous,
           runtime_version: null, runtime_image: null,
           cloud_promotion: null,
+          lifecycle_operation: null,
           cloud_static_hosting: "pages",
           github_checks: null,
           external_config: null,

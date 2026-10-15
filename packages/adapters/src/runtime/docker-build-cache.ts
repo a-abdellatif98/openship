@@ -254,7 +254,15 @@ export async function pruneManagedBuildCaches(
     try {
       await docker.getVolume(cache.name).remove();
     } catch (error) {
-      if ((error as { statusCode?: number })?.statusCode === 409) continue;
+      if ((error as { statusCode?: number })?.statusCode === 409) {
+        if (options.projectId)
+          throw new AppError(
+            "The project's build cache is still in use",
+            409,
+            "BUILD_CACHE_IN_USE",
+          );
+        continue;
+      }
       if (!missing(error)) throw error;
     }
     total -= cache.bytes;

@@ -1342,8 +1342,15 @@
     {
       "idx": 191,
       "version": "7",
-      "when": 1791936001001,
-      "tag": "0191_external_project",
+      "when": 1792022400000,
+      "tag": "0191_project_lifecycle_operation",
+      "breakpoints": true
+    },
+    {
+      "idx": 192,
+      "version": "7",
+      "when": 1792022401000,
+      "tag": "0192_external_project",
       "breakpoints": true
     }
   ]

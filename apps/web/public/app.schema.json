@@ -22,9 +22,20 @@
       "description": "A simpleicons slug, or an id mapped to a vendored SVG in the dashboard.",
       "type": "string"
     },
+    "gpu": {
+      "enum": [
+        "recommended",
+        "required"
+      ],
+      "description": "NVIDIA GPU placement. GPU services default to required. Requires schemaVersion 2."
+    },
+    "supportsCloud": {
+      "type": "boolean",
+      "description": "False: self-hosted only; default true. Requires schemaVersion 2."
+    },
     "category": {
       "description": "Catalog grouping.",
-      "enum": ["backend", "database", "cms", "mail", "analytics", "automation", "other"]
+      "enum": ["backend", "database", "cms", "mail", "analytics", "automation", "ai", "other"]
     },
     "tags": {
       "description": "Free-form keywords used for catalog search.",
@@ -167,6 +178,58 @@
   },
 
   "definitions": {
+    "gpuRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "driver": {
+          "const": "nvidia"
+        },
+        "count": {
+          "oneOf": [
+            {
+              "const": "all"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 64
+            }
+          ]
+        },
+        "deviceIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string"
+          }
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "not": {
+        "required": [
+          "count",
+          "deviceIds"
+        ]
+      }
+    },
+
     "localized": {
       "description": "A plain string, or an inline per-locale map such as { \"en\": \"…\", \"ar\": \"…\" }.",
       "oneOf": [
@@ -180,6 +243,26 @@
       "required": ["name"],
       "oneOf": [{ "required": ["image"] }, { "required": ["build"] }],
       "properties": {
+        "gpus": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/gpuRequest"
+            },
+            {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/definitions/gpuRequest"
+              }
+            }
+          ]
+        },
+        "shmSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1099511627776,
+          "description": "Private /dev/shm bytes; no host IPC. Requires schemaVersion 2."
+        },
         "name": {
           "description": "Service name, and its hostname on the project network. Other services reach it at this exact name.",
           "type": "string"
@@ -639,6 +722,7 @@
           "description": "Env key the chosen connection is written to.",
           "type": "string"
         },
+        "bundleId": { "type": "string", "minLength": 1, "description": "Match a specific provides bundle; requires schemaVersion 2." },
         "category": {
           "description": "Restrict candidate sources to this category.",
           "type": "string"

@@ -235,7 +235,7 @@ export function AddServiceModal({ open, projectId, projectName, isCloudProject, 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   // Every application service uses the shared Docker engine and OCI catalog.
-  const catalog = cloudOnly ? LOCAL_SERVICE_CATALOG.filter(entry => !entry.gpus) : LOCAL_SERVICE_CATALOG;
+  const catalog = cloudOnly ? LOCAL_SERVICE_CATALOG.filter(entry => !entry.gpus && entry.supportsCloud !== false) : LOCAL_SERVICE_CATALOG;
 
   // Configure step state. Ports is a single-line, comma-separated string -
   // 95% of services have one port and the old textarea wasted vertical space.

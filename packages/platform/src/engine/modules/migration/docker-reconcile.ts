@@ -48,6 +48,7 @@ export interface DiscoveredService {
   /** Live GPU settings; an empty object explicitly clears stale declarations. */
   gpu?: ComposeGpuConfig;
   gpuImportError?: string;
+  shmSize?: number;
   /** compose service name, or the container name for a standalone container. */
   name: string;
   /** Where it was discovered — informs how much Openship can reconstruct. */
@@ -611,6 +612,7 @@ export function toDiscoveredService(
           }
         : undefined),
     gpuImportError: detail.gpuImportError,
+    shmSize: detail.shmSize ?? declared?.advanced?.shmSize,
     proxyKind,
     edgePorts: edgePorts.length > 0 ? edgePorts : undefined,
     existingRoute,

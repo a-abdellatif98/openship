@@ -9,6 +9,12 @@ import {
 } from "@repo/platform/engine/lib/compose-parser";
 
 describe("parseComposeFile", () => {
+  it("keeps shared memory capacity and reports invalid values as blocking", () => {
+    const parsed = parseComposeFile("services:\n  inference:\n    image: vllm:test\n    shm_size: ${SHM}\n", { envFileContent: "SHM=2g\n" });
+    expect(parsed.services[0]?.advanced?.shmSize).toBe(2147483648);
+    const invalid = parseComposeFile("services:\n  inference:\n    image: vllm:test\n    shm_size: wrong\n");
+    expect(invalid.unsupported).toEqual(expect.arrayContaining([expect.objectContaining({ field: "shm_size", blocking: true })]));
+  });
   it("preserves host-gateway aliases with one interpolation pass", () => {
     const parsed = parseComposeFile('services:\n  webmail:\n    image: webmail:test\n    extra_hosts:\n      - "mail.example.com=${ADDRESS}"\n', { envFileContent: 'ADDRESS=host-gateway\n' });
     expect(parsed.services[0]?.advanced?.extraHosts).toEqual({ "mail.example.com": "host-gateway" });

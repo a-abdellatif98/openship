@@ -14,6 +14,7 @@ export interface ImageCatalogEntry {
   image?: string;
   /** Exact container argv required by this image's entrypoint. */
   commandArgv?: string[];
+  supportsCloud?: boolean;
   /** Optional NVIDIA device request for this exact catalog image. */
   gpus?: ComposeGpu;
   /** URL to logo / icon */

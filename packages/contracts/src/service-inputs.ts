@@ -21,6 +21,7 @@ import {
   MAX_GENERATED_CONFIG_FILE_BYTES,
   MAX_GENERATED_CONFIG_PATH_BYTES,
   CONTAINER_HOST_PATTERN,
+  MAX_COMPOSE_SHM_BYTES,
 } from "@repo/core";
 import { MonorepoSubAppFieldsSchema } from "./project-inputs";
 
@@ -169,6 +170,7 @@ const AdvancedSchema = Type.Object(
       Type.Union([GpuRequestSchema, Type.Array(GpuRequestSchema, { maxItems: 16 }), Type.Null()]),
     ),
     runtime: Type.Optional(Type.Union([Type.Literal("nvidia"), Type.Null()])),
+    shmSize: Type.Optional(Type.Union([Type.Integer({ minimum: 1, maximum: MAX_COMPOSE_SHM_BYTES }), Type.Null()])),
     /** Custom east-west DNS alias resolving ALONGSIDE the service name on the
      *  project network. Free-form here (normalized + collision-checked by
      *  validateServiceAlias); `null`/`""` clears it. */

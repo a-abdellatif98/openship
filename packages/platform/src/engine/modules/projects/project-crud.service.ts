@@ -1771,6 +1771,31 @@ export async function updateProject(
   data: TUpdateProjectBody,
   organizationId: string,
 ) {
+  const changesRouting =
+    data.publicEndpoints !== undefined ||
+    data.port !== undefined ||
+    data.routeStrategy !== undefined ||
+    data.routingConfig !== undefined;
+  if (!changesRouting) return updateProjectUnlocked(projectId, data, organizationId);
+
+  // Authorize before admission. Preparation, domain-row persistence and live
+  // application share the existing project lock, so concurrent edits cannot
+  // interleave the two sides of a canonical redirect. Nested live writers reuse it.
+  const project = await repos.project.findById(projectId);
+  assertResourceInOrg(project, "Project", organizationId, projectId);
+  // Keep definitive capability refusals ahead of Cloud activity admission;
+  // the writer revalidates the current project again after acquiring the lock.
+  await assertProjectRoutingCapabilities(project, data.routingConfig);
+  return withProjectRuntimeLock(projectId, () =>
+    updateProjectUnlocked(projectId, data, organizationId),
+  );
+}
+
+async function updateProjectUnlocked(
+  projectId: string,
+  data: TUpdateProjectBody,
+  organizationId: string,
+) {
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
   const touchesRouting = (["publicEndpoints", "port", "routeStrategy", "routingConfig"] as const)

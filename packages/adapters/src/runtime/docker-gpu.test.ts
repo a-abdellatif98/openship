@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DockerRuntime, inspectGpuConfig } from "./docker";
 import type { MultiServiceDeployConfig, MultiServiceGroupHandle } from "./types";
+import { getAppTemplate, appServiceGpuConfig } from "@repo/core";
 
 /**
  * What a compose GPU request becomes at container create.
@@ -53,6 +54,19 @@ async function createWith(config: MultiServiceDeployConfig) {
 }
 
 describe("deployServiceWorkload — GPU", () => {
+  it("deploys the vLLM template with one GPU and private shared memory", async () => {
+    const service = getAppTemplate("vllm")!.services![0]!;
+    const args = await createWith(baseConfig({ advanced: { ...appServiceGpuConfig(service, true), shmSize: service.shmSize } }));
+    expect(args.HostConfig.DeviceRequests).toEqual([{ Driver: "nvidia", Count: 1, Capabilities: [["gpu"]] }]);
+    expect(args.HostConfig.ShmSize).toBe(2147483648);
+    expect(args.HostConfig).not.toHaveProperty("IpcMode");
+    expect(args.HostConfig).not.toHaveProperty("Privileged");
+    const ordinary = await createWith(baseConfig());
+    expect(ordinary.HostConfig).not.toHaveProperty("ShmSize");
+  });
+  it("rejects invalid shared memory before creating a replacement", async () => {
+    await expect(createWith(baseConfig({ advanced: { shmSize: -1 } }))).rejects.toThrow(/Shared memory/);
+  });
   it("puts DeviceRequests on HostConfig when the service asks for a GPU", async () => {
     const args = await createWith(
       baseConfig({ advanced: { gpus: { driver: "nvidia", count: "all", capabilities: ["gpu"] } } }),

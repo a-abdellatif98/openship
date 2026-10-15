@@ -68,7 +68,6 @@ import {
   withServerHostExecutor,
 } from "../../lib/edge-host-executor";
 import {
-  assertRedirectSupported,
   assertRedirectTargets,
   normalizeRedirect,
 } from "../../lib/domain-redirect";
@@ -209,7 +208,6 @@ export async function addDomain(
   // already owns — never off-site, never at itself, never round a loop.
   const redirect = normalizeRedirect(data);
   if (redirect.redirectTo) {
-    assertRedirectSupported({ isCloudProject: !!(project?.workspaceId), hostname });
     const peers = await repos.domain.listByProject(data.projectId).catch((diagnosticFailure) => { observeCaughtError(diagnosticFailure, "platform/engine/modules/domains/domain.service"); return []; });
     assertRedirectTargets([
       ...peers

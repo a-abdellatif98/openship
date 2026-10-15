@@ -34,13 +34,13 @@ export async function readCloudWorkspaceHost(organizationId: string, id: string)
     const connection = await remoteServerConnection(organizationId, id);
     const client = new Oblien({ token: connection.token, baseUrl: connection.providerApiUrl });
     const workspace = await client.workspaces.get(connection.workspaceId);
-    if (workspace.namespace !== connection.namespace) throw new AppError("Cloud server namespace changed", 409, "CLOUD_NAMESPACE_MISMATCH");
+    if (workspace.namespace !== connection.namespace) throw new AppError("Cloud space ownership changed", 409, "CLOUD_NAMESPACE_MISMATCH");
     if (workspace.id !== connection.workspaceId)
-      throw new AppError("Cloud returned a different managed server", 502, "CLOUD_SERVER_IDENTITY_MISMATCH");
+      throw new AppError("Cloud returned a different Cloud space", 502, "CLOUD_SERVER_IDENTITY_MISMATCH");
     const binding = await repos.cloudDockerWorkspace.find({ ownerWorkspaceId: id }, organizationId);
     return { owner, binding, provider: { workspace, allocation: connection.resources }, credentials: { client, namespace: connection.namespace } };
   }
-  if (owner.remote) throw new AppError("Invalid Cloud server authority", 409, "CLOUD_SERVER_LINK_INVALID");
+  if (owner.remote) throw new AppError("The Cloud space connection could not be verified", 409, "CLOUD_SERVER_LINK_INVALID");
   const binding = await repos.cloudDockerWorkspace.find({ ownerWorkspaceId: id }, organizationId);
   if (!binding?.workspaceId) return { owner, binding, provider: null, credentials: null };
   if (!owner.namespace || binding.namespace !== owner.namespace)
@@ -53,7 +53,7 @@ export async function readCloudWorkspaceConnection(organizationId: string, id: s
   const { owner, binding, provider, credentials } = await readCloudWorkspaceHost(organizationId, id);
   if (!binding?.workspaceId || !provider)
     throw new AppError(
-      "The managed server has not been provisioned yet",
+      "Your Cloud space is not set up yet. Complete setup to continue.",
       409,
       "CLOUD_WORKSPACE_NOT_READY",
     );
@@ -66,7 +66,7 @@ async function runningConnection(organizationId: string, id: string) {
   const connection = await readCloudWorkspaceConnection(organizationId, id);
   if (!["running", "active"].includes(cloudWorkspaceStatus(connection.provider.workspace)))
     throw new AppError(
-      "The server is stopped. Resume it to read live usage.",
+      "Your Cloud space is stopped. Resume it to view resource usage.",
       409,
       "CLOUD_WORKSPACE_NOT_RUNNING",
     );

@@ -17,6 +17,7 @@ import {
   parseContainerHosts,
   parseEnvFile,
   readComposeGpuConfig,
+  readComposeShmConfig,
 } from "@repo/core";
 import type { ComposeAdvanced, ComposeHealthcheck, ComposeNamespaceField } from "@repo/core";
 
@@ -599,6 +600,9 @@ function parseAdvanced(
   const gpu = readComposeGpuConfig(svc, (value) => interpolateComposeString(value, env));
   Object.assign(advanced, gpu.config);
   unsupported.push(...gpu.issues.map((issue) => ({ service: serviceName, ...issue })));
+  const shm = readComposeShmConfig(svc.shm_size, (value) => interpolateComposeString(value, env));
+  Object.assign(advanced, shm.config);
+  unsupported.push(...shm.issues.map((issue) => ({ service: serviceName, ...issue })));
 
   const networkMode = parseNamespaceField(
     svc.network_mode,
@@ -711,7 +715,6 @@ const UNSUPPORTED_SERVICE_KEYS: Record<string, string> = {
   security_opt: "security_opt is not modeled — default seccomp/AppArmor apply.",
   sysctls: "sysctls is not modeled — kernel parameters stay at their defaults.",
   ulimits: "ulimits is not modeled — daemon defaults apply.",
-  shm_size: "shm_size is not modeled — /dev/shm stays at Docker's 64MB default.",
   ipc: "ipc is not modeled — the container gets its own IPC namespace.",
   userns_mode: "userns_mode is not modeled.",
   uts: "uts is not modeled.",

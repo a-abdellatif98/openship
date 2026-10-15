@@ -37,6 +37,18 @@ import {
   type ApplyServerContainerInput,
 } from "./server-containers";
 
+/** Default host stats remain compatible; usage is an opt-in managed resource sample. */
+export const ServerMonitorFormatSchema = Type.Union([Type.Literal("stats"), Type.Literal("usage")]);
+export interface ServerMonitorOptions {
+  signal?: AbortSignal;
+  format?: Static<typeof ServerMonitorFormatSchema>;
+}
+export const ResourceUsageSampleSchema = Type.Pick(CloudWorkspaceUsageSchema, [
+  "measuredAt", "cpuPercent", "memoryUsedMb", "memoryAvailableMb",
+  "diskUsedMb", "diskAvailableMb", "diskTotalMb",
+]);
+export type ResourceUsageSample = Static<typeof ResourceUsageSampleSchema>;
+
 const nullableString = Type.Union([Type.String(), Type.Null()]);
 export const ServerNetworkSettingsSchema = Type.Object({
   internetAccess: Type.Union([Type.Boolean(), Type.Null()]),
@@ -682,5 +694,5 @@ export interface ServerOperations
     input?: ServerInstallSessionInput,
     options?: { signal?: AbortSignal },
   ): AsyncIterable<DeploymentEvent>;
-  monitor(id: string, options?: { signal?: AbortSignal }): AsyncIterable<DeploymentEvent>;
+  monitor(id: string, options?: ServerMonitorOptions): AsyncIterable<DeploymentEvent>;
 }

@@ -2,15 +2,15 @@
 
 import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
 import React, { useCallback } from "react";
-import { isValidCustomHostname } from "@repo/core";
+import { isValidCustomHostname, withKeyedMutex } from "@repo/core";
 import { getApiErrorMessage, projectsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { usePlatform } from "@/context/PlatformContext";
 import { useI18n } from "@/components/i18n-provider";
 import { RoutingModePicker, type RoutingMode } from "@/components/routing/RoutingModePicker";
 import { createPublicEndpoint, type PublicEndpoint } from "@/context/deployment/types";
 import { validatedPublicEndpointPayload } from "@/lib/public-endpoint-payload";
 import { normalizeSubdomain } from "@/utils/subdomain";
+import { getApiRequestScopeVersion } from "@/lib/api/client";
 
 interface DomainSettingsProps {
   projectId?: string;
@@ -27,6 +27,14 @@ interface DomainSettingsProps {
 /** Shared with the project Domains tab — see lib/public-endpoint-payload. */
 const buildPublicEndpointPayload = validatedPublicEndpointPayload;
 
+function saveDomains(projectId: string, fields: Record<string, unknown>) {
+  const scope = getApiRequestScopeVersion();
+  return withKeyedMutex(`deploy-domain-save:${scope}:${projectId}`, async () => {
+    if (scope !== getApiRequestScopeVersion()) return;
+    return projectsApi.update(projectId, fields);
+  });
+}
+
 const DomainSettings: React.FC<DomainSettingsProps> = ({
   projectId,
   projectName,
@@ -39,7 +47,6 @@ const DomainSettings: React.FC<DomainSettingsProps> = ({
 }) => {
   const { showToast } = useToast();
   const { t } = useI18n();
-  const { selfHosted } = usePlatform();
 
   const handleChange = useCallback(async (
     nextEndpoints: PublicEndpoint[],
@@ -75,10 +82,10 @@ const DomainSettings: React.FC<DomainSettingsProps> = ({
       return;
     }
 
-    const primaryPort = hasServer && "port" in payload[0] ? payload[0].port : undefined;
+    const primaryPort = hasServer ? payload.find((endpoint) => !endpoint.redirectTo)?.port : undefined;
 
     try {
-      await projectsApi.update(projectId, {
+      await saveDomains(projectId, {
         publicEndpoints: payload,
         ...(typeof primaryPort === "number" ? { port: primaryPort } : {}),
       });
@@ -110,15 +117,13 @@ const DomainSettings: React.FC<DomainSettingsProps> = ({
         //     (undefined would make it auto-derive the free subdomain again).
         setEndpoints([]);
         if (projectId) {
-          void projectsApi
-            .update(projectId, { publicEndpoints: [] })
-            .catch((error) => {
-              showToast(
-                getApiErrorMessage(error, t.deploy.domainSettings.saveFailed),
-                "error",
-                t.deploy.domainSettings.toastTitle,
-              );
-            });
+          void saveDomains(projectId, { publicEndpoints: [] }).catch((error) => {
+            showToast(
+              getApiErrorMessage(error, t.deploy.domainSettings.saveFailed),
+              "error",
+              t.deploy.domainSettings.toastTitle,
+            );
+          });
         }
         return;
       }
@@ -154,10 +159,7 @@ const DomainSettings: React.FC<DomainSettingsProps> = ({
       hasServer={hasServer}
       runtimePort={runtimePort}
       onEndpointsChange={handleChange}
-      // "Include www" creates the sibling as a 301 to the apex, so the control has
-      // to be visible here or that's an invisible redirect. Rendered in the box's
-      // own vhost → self-hosted only (the API refuses it for cloud projects).
-      allowRedirects={selfHosted}
+      allowRedirects
     />
   );
 };

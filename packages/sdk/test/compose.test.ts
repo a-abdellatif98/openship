@@ -1,6 +1,12 @@
 import { expect, it } from "vitest";
 import { normalizeComposeServices } from "../src/compose";
 
+it("preserves private shared memory for CLI and SDK Compose sync", () => {
+  const [service] = normalizeComposeServices({ services: { vllm: { image: "vllm:test", shm_size: "2g", gpus: "all" } } }, "/tmp");
+  expect(service?.advanced?.shmSize).toBe(2147483648);
+  expect(() => normalizeComposeServices({ services: { vllm: { image: "vllm:test", shm_size: "wrong" } } }, "/tmp")).toThrow(/cannot deploy faithfully/);
+});
+
 it("keeps Compose host mappings in the SDK sync payload", () => {
   const [service] = normalizeComposeServices(
     {

@@ -76,12 +76,13 @@ it("sends the GPU request of Ollama (NVIDIA GPU)", async () => {
   await pick(name);
   await act(async () => { submit(); });
   expect(h.submit).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
-    advanced: { gpus: { driver: "nvidia", count: "all", capabilities: ["gpu"] } },
+    advanced: { gpus: { driver: "nvidia", count: 1, capabilities: ["gpu"] } },
   }));
 });
 it("sends no GPU request for plain Ollama or a replacement image", async () => {
+  h.mode = "local";
   await render();
-  await pick("ollama/ollama:latest");
+  await pick(getAppTemplate("ollama")!.services![0]!.image!);
   await act(async () => { submit(); });
   expect(h.submit.mock.calls[0]![0]).not.toHaveProperty("advanced");
 });
@@ -142,11 +143,8 @@ it("prevents duplicate service creation while a save is pending", async () => {
 });
 
 
-it.each(["cloud", "linked"])("offers CPU Ollama without an unusable GPU variant on managed Cloud (%s)", async mode => {
+it.each(["cloud", "linked"])("does not offer either self-hosted Ollama mode on managed Cloud (%s)", async mode => {
   h.mode = mode === "cloud" ? "cloud" : "local";
   await render(mode === "linked");
-  expect([...host.querySelectorAll("button")].some(button => button.textContent?.includes("Ollama (NVIDIA GPU)"))).toBe(false);
-  await pick("ollama/ollama:latest");
-  await act(async () => { submit(); });
-  expect(h.submit.mock.calls[0]![0]).not.toHaveProperty("advanced");
+  expect([...host.querySelectorAll("button")].some(button => button.textContent?.includes("Ollama"))).toBe(false);
 });

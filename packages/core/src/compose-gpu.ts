@@ -1,6 +1,8 @@
 import { ValidationError } from "./errors";
 import type { ComposeGpu, ComposeGpuConfig } from "./types";
 
+export type NormalizedComposeGpu = Omit<ComposeGpu, "driver"> & { driver: "nvidia" };
+
 // Docker's NVIDIA CDI driver can accept fully qualified device names. Keep this
 // feature confined to NVIDIA GPUs rather than allowing unrelated host CDI devices.
 function isNvidiaGpuId(id: string): boolean {
@@ -9,11 +11,11 @@ function isNvidiaGpuId(id: string): boolean {
 }
 
 /** Shared by Compose imports, API writes and Docker activation. No invalid request becomes "all". */
-export function normalizeComposeGpuRequests(value: unknown): ComposeGpu[] {
+export function normalizeComposeGpuRequests(value: unknown): NormalizedComposeGpu[] {
   if (value == null) return [];
   const entries = Array.isArray(value) ? value : [value];
   if (entries.length > 16) throw new ValidationError("At most 16 GPU request groups are supported");
-  return entries.map((entry): ComposeGpu => {
+  return entries.map((entry): NormalizedComposeGpu => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry))
       throw new ValidationError("Each GPU request must be an object");
     const raw = entry as Record<string, unknown>;
@@ -26,7 +28,7 @@ export function normalizeComposeGpuRequests(value: unknown): ComposeGpu[] {
     const driver = raw.driver ?? "nvidia";
     if (typeof driver !== "string" || driver.trim().toLowerCase() !== "nvidia")
       throw new ValidationError("GPU requests support only the NVIDIA driver");
-    const out: ComposeGpu = { driver: "nvidia" };
+    const out: NormalizedComposeGpu = { driver: "nvidia" };
     if (raw.count !== undefined) {
       if (
         raw.count !== "all" &&

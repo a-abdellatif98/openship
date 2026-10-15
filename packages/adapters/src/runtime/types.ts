@@ -815,6 +815,8 @@ export interface DockerContainerDetail {
   gpu?: import("@repo/core").ComposeGpuConfig;
   /** Inspection still succeeds; adoption refuses a GPU configuration it cannot replay. */
   gpuImportError?: string;
+  /** Live private /dev/shm size, retained when adopting an existing container. */
+  shmSize?: number;
   composeProject?: string;
   composeService?: string;
   /** com.docker.compose.project.config_files — absolute compose paths on the host. */

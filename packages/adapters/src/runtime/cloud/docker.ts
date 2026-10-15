@@ -872,7 +872,7 @@ export class CloudDockerRuntime extends DockerRuntime {
       await this.executor.exec(`rm -rf -- ${sq(this.projectPaths.mounts)}`);
     } else {
       await this.executor.exec(
-        `rm -rf -- ${sq(`${this.projectPaths.mounts}/releases`)} ${sq(`${this.projectPaths.mounts}/config`)}`,
+        `rm -rf -- ${sq(`${this.projectPaths.mounts}/releases`)} ${sq(`${this.projectPaths.mounts}/config`)} ${sq(`${this.projectPaths.bare}/.builds`)}`,
       );
     }
     await this.executor.exec(`rm -rf -- ${sq(this.projectPaths.routes)}`);

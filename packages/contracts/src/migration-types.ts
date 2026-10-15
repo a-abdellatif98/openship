@@ -13,6 +13,7 @@ export interface DiscoveredService {
   /** Live GPU settings; an empty object explicitly clears stale declarations. */
   gpu?: ComposeGpuConfig;
   gpuImportError?: string;
+  shmSize?: number;
   name: string;
   source: "compose" | "container";
   containerId?: string;

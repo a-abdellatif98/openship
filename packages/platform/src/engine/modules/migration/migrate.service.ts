@@ -458,6 +458,7 @@ export function buildAdoptedServiceRows(
           ...(s.healthcheck ? { healthcheck: s.healthcheck } : {}),
           ...(s.resources ? { resources: s.resources } : {}),
           ...(s.gpu ? { gpus: s.gpu.gpus ?? null, runtime: s.gpu.runtime ?? null } : {}),
+          ...(s.shmSize !== undefined ? { shmSize: s.shmSize } : {}),
         });
         return Object.keys(merged).length > 0 ? merged : undefined;
       })(),

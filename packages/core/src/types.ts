@@ -356,6 +356,8 @@ export type ComposeAdvanced = {
   gpus?: ComposeGpu | ComposeGpu[];
   /** Legacy NVIDIA runtime. Preserve NVIDIA_VISIBLE_DEVICES; this is not `gpus: all`. */
   runtime?: "nvidia";
+  /** Private /dev/shm capacity in bytes (Compose shm_size). Does not enable host IPC. */
+  shmSize?: number;
   /**
    * Compose `network_mode` — the network namespace this service SHARES instead of
    * getting its own. `"none"`, `"service:<name>"` (a sibling in this stack), or
