@@ -573,7 +573,7 @@
     "provision": "Sunucunı başlat",
     "resume": "Sunucunı sürdür",
     "resize": "Plan kapasitesini uygula",
-    "operation": "Sunucu etkinliği",
+    "operation": "Etkinlik",
     "nextAttempt": "Sonraki deneme:",
     "resizeConfirm": "Geçerli planın kapasitesi uygulansın mı?",
     "before": "Mevcut sunucu",
@@ -641,7 +641,7 @@
     "resourceSummary": "{cpu} vCPU · {memory} GB RAM · {disk} GB depolama",
     "switchingBilling": "{name} için faturalandırma yükleniyor…",
     "activity": {
-      "empty": "Henüz sunucu işlemi yok.",
+      "empty": "Henüz kurulum veya kapasite değişikliği yok.",
       "waitingForLogs": "İşlem günlükleri bekleniyor…",
       "noLogs": "Bu işlem için günlük kaydedilmedi.",
       "status": {
@@ -649,7 +649,8 @@
         "running": "Devam ediyor",
         "succeeded": "Tamamlandı",
         "failed": "Başarısız"
-      }
+      },
+      "description": "Bu Cloud alanının kurulumu, kapasite değişiklikleri ve kurtarma işlemleri."
     },
     "billingServers": "Bulut alanları",
     "billingServersUnavailable": "Bulut alanlarınız yüklenemedi."
@@ -719,7 +720,7 @@
   },
   "purchase": {
     "mode": "Faturalandırma modeli",
-    "monthly": "Aylık sunucular",
+    "monthly": "Aylık planlar",
     "payg": "Ön ödemeli kullanım",
     "title": "Ön ödemeli barındırma",
     "description": "Bir kaynak seviyesi seçin, kredi ekleyin ve sunucu kullanımına göre ödeyin.",
@@ -772,6 +773,7 @@
     }
   },
   "compute": {
+    "title": "Aylık kapsam",
     "covered": "İşlem kaynakları karşılanıyor",
     "needsAttention": "Kapsamı kontrol edin",
     "included": "CPU, RAM ve dahil depolama, ödediğiniz ay boyunca 7/24 karşılanır. İşlem kredisi veya yükleme gerekmez.",

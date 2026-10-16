@@ -200,7 +200,7 @@ export async function measureCloudWorkspace(
 }
 
 /** Admission ledger only. This result must not replace the user's build caps.
- * An uncapped dimension reserves the whole host dimension for this build. */
+ * Uncapped dimensions stay shared; only explicit caps reserve capacity. */
 export function workspaceBuildResources(
   capacity: ResourceConfig,
   usage: CloudWorkspaceUsage,

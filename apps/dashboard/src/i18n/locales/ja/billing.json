@@ -573,7 +573,7 @@
     "provision": "サーバーを起動",
     "resume": "サーバーを再開",
     "resize": "プランの容量を適用",
-    "operation": "サーバーのアクティビティ",
+    "operation": "アクティビティ",
     "nextAttempt": "次の再試行：",
     "resizeConfirm": "現在のプランの容量を適用しますか？",
     "before": "現在のホスト",
@@ -641,7 +641,7 @@
     "resourceSummary": "{cpu} vCPU · {memory} GB RAM · {disk} GB ストレージ",
     "switchingBilling": "{name} の請求情報を読み込み中…",
     "activity": {
-      "empty": "サーバー操作はまだありません。",
+      "empty": "セットアップや容量の変更はまだありません。",
       "waitingForLogs": "操作ログを待機中…",
       "noLogs": "この操作のログは記録されていません。",
       "status": {
@@ -649,7 +649,8 @@
         "running": "実行中",
         "succeeded": "完了",
         "failed": "失敗"
-      }
+      },
+      "description": "このクラウドスペースのセットアップ、容量変更、復旧の状況です。"
     },
     "billingServers": "クラウドスペース",
     "billingServersUnavailable": "クラウドスペースを読み込めませんでした。"
@@ -719,7 +720,7 @@
   },
   "purchase": {
     "mode": "課金方式",
-    "monthly": "月額ホスト",
+    "monthly": "月額プラン",
     "payg": "前払い従量課金",
     "title": "前払いホスティング",
     "description": "リソースティアを選び、クレジットを追加してサーバーの使用量に応じて支払います。",
@@ -772,6 +773,7 @@
     }
   },
   "compute": {
+    "title": "月額プランの適用範囲",
     "covered": "コンピュートは支払い済み",
     "needsAttention": "利用期間をご確認ください",
     "included": "CPU、RAM、付属ストレージは支払い済みの月に24時間利用できます。コンピュートクレジットや追加購入は不要です。",

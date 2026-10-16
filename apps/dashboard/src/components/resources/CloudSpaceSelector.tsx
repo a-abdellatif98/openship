@@ -3,7 +3,6 @@
 import { useI18n } from "@/components/i18n-provider";
 import type { ServerInfo } from "@/lib/api/system";
 import { ServerPicker, ServerRowContent } from "@/components/shared/ServerPicker";
-import { ManagedServerStatus } from "@/components/servers/managed/ManagedServerStatus";
 
 /** One compact destination selector; choices live in the shared accessible menu. */
 export function CloudSpaceSelector({
@@ -32,17 +31,13 @@ export function CloudSpaceSelector({
           label={copy.selectPool}
           showLabel={false}
           details="plan"
+          showStatus
         />
       ) : current ? (
         <div className="flex min-w-0 items-center gap-2.5">
-          <ServerRowContent server={current} active details="plan" />
+          <ServerRowContent server={current} active details="plan" showStatus />
         </div>
       ) : null}
-      {current?.managed && (
-        <div className="mt-3">
-          <ManagedServerStatus workspace={current.managed} />
-        </div>
-      )}
     </section>
   );
 }

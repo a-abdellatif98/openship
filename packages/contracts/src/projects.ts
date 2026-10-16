@@ -52,6 +52,7 @@ export const ProjectSchema = Type.Object({
   installCommand: Type.Optional(nullableString()),
   startCommand: Type.Optional(nullableString()),
   releaseCommands: EnsureProjectBody.properties.releaseCommands,
+  roles: EnsureProjectBody.properties.roles,
   outputDirectory: Type.Optional(nullableString()),
   rootDirectory: Type.Optional(nullableString()),
   hasServer: Type.Optional(Type.Boolean()),

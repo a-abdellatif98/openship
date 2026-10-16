@@ -122,3 +122,5 @@ export * from "./deployment-checks";
 export * from "./compose-gpu";
 export * from "./compose-shared-memory";
 export * from "./apps/gpu";
+
+export * from "./appearance";

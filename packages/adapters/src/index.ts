@@ -86,6 +86,7 @@ export {
   DockerRuntime,
   buildNetworkAliases,
   ownsBuiltImage,
+  toStopConfig,
   type BuildCachePruneOptions,
   type BuildCachePruneResult,
   type DockerConnectionOptions,

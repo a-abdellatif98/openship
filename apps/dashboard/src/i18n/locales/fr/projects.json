@@ -137,6 +137,7 @@
       "deployments": "Déploiements",
       "health": "Santé",
       "monitoring": "Surveillance",
+      "monitoringAndLogs": "Surveillance et journaux",
       "source": "Source",
       "sourceAndTriggers": "Source et déclencheurs",
       "webhooks": "Webhooks",

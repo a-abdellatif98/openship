@@ -1,6 +1,7 @@
 "use client";
 
 import { diagnostics as errorDiagnostics } from "@repo/core/diagnostics";
+import { IngressDestinationNotice } from "@/components/ingress/DomainIngressSettings";
 import React, { useCallback } from "react";
 import { isValidCustomHostname, withKeyedMutex } from "@repo/core";
 import { getApiErrorMessage, projectsApi } from "@/lib/api";
@@ -14,6 +15,7 @@ import { getApiRequestScopeVersion } from "@/lib/api/client";
 
 interface DomainSettingsProps {
   projectId?: string;
+  serverId?: string;
   projectName: string;
   endpoints: PublicEndpoint[];
   hasServer: boolean;
@@ -37,6 +39,7 @@ function saveDomains(projectId: string, fields: Record<string, unknown>) {
 
 const DomainSettings: React.FC<DomainSettingsProps> = ({
   projectId,
+  serverId,
   projectName,
   endpoints,
   hasServer,
@@ -147,7 +150,7 @@ const DomainSettings: React.FC<DomainSettingsProps> = ({
   );
 
   return (
-    <RoutingModePicker
+    <div className="space-y-3">{mode === "custom" && <IngressDestinationNotice serverId={serverId} />}<RoutingModePicker
       mode={mode}
       onModeChange={handleModeChange}
       labels={{
@@ -160,7 +163,7 @@ const DomainSettings: React.FC<DomainSettingsProps> = ({
       runtimePort={runtimePort}
       onEndpointsChange={handleChange}
       allowRedirects
-    />
+    /></div>
   );
 };
 

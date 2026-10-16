@@ -196,6 +196,7 @@
       "deployments": "Деплои",
       "health": "Состояние",
       "monitoring": "Мониторинг",
+      "monitoringAndLogs": "Мониторинг и логи",
       "source": "Исходный код",
       "sourceAndTriggers": "Исходный код и триггеры",
       "webhooks": "Вебхуки",

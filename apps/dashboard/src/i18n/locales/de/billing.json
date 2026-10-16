@@ -573,7 +573,7 @@
     "provision": "Server starten",
     "resume": "Server fortsetzen",
     "resize": "Tarifkapazität anwenden",
-    "operation": "Server-Aktivität",
+    "operation": "Aktivität",
     "nextAttempt": "Nächster Versuch:",
     "resizeConfirm": "Kapazität des aktuellen Tarifs anwenden?",
     "before": "Aktueller Host",
@@ -641,7 +641,7 @@
     "resourceSummary": "{cpu} vCPU · {memory} GB RAM · {disk} GB Speicherplatz",
     "switchingBilling": "Abrechnung für {name} wird geladen…",
     "activity": {
-      "empty": "Noch keine Servervorgänge.",
+      "empty": "Noch keine Einrichtung oder Kapazitätsänderungen.",
       "waitingForLogs": "Warten auf Vorgangsprotokolle…",
       "noLogs": "Für diesen Vorgang wurden keine Protokolle aufgezeichnet.",
       "status": {
@@ -649,7 +649,8 @@
         "running": "In Bearbeitung",
         "succeeded": "Abgeschlossen",
         "failed": "Fehlgeschlagen"
-      }
+      },
+      "description": "Einrichtung, Kapazitätsänderungen und Wiederherstellung dieses Cloud Space."
     },
     "billingServers": "Cloud-Bereiche",
     "billingServersUnavailable": "Deine Cloud-Bereiche konnten nicht geladen werden."
@@ -719,7 +720,7 @@
   },
   "purchase": {
     "mode": "Abrechnungsmodell",
-    "monthly": "Monatliche Server",
+    "monthly": "Monatliche Tarife",
     "payg": "Prepaid-Nutzung",
     "title": "Prepaid-Hosting",
     "description": "Wähle eine Ressourcenstufe, kaufe Guthaben und bezahle die Servernutzung.",
@@ -772,6 +773,7 @@
     }
   },
   "compute": {
+    "title": "Monatliche Abdeckung",
     "covered": "Rechenleistung abgedeckt",
     "needsAttention": "Abdeckung prüfen",
     "included": "CPU, RAM und enthaltener Speicher sind im bezahlten Monat rund um die Uhr abgedeckt. Keine Compute-Credits oder Aufladungen.",

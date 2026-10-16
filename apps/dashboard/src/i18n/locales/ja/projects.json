@@ -137,6 +137,7 @@
       "deployments": "デプロイ",
       "health": "ヘルス",
       "monitoring": "モニタリング",
+      "monitoringAndLogs": "モニタリングとログ",
       "source": "ソース",
       "sourceAndTriggers": "ソースとトリガー",
       "webhooks": "Webhook",

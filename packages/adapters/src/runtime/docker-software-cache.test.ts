@@ -86,6 +86,11 @@ describe("immutable public software images", () => {
       unavailable: true,
     });
   });
+  it("reports a missing software mount instead of silently implying shared images were used", async () => {
+    expect(await readSoftwareCache({ exec: async () => "" } as never, "/tmp/Dockerfile")).toEqual({
+      args: "", unavailable: true,
+    });
+  });
   it("never swallows deployment cancellation", async () => {
     const abort = new AbortController();
     const reason = new Error("cancelled");

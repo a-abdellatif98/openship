@@ -101,9 +101,9 @@ export async function readSoftwareCache(
 ): Promise<{ args: string; unavailable: boolean }> {
   try {
     signal?.throwIfAborted();
-    const candidates = softwareImageCandidates(
-      await executor.exec(readSoftwareCacheCommand(dockerfile), { timeout: 5_000 }),
-    );
+    const raw = await executor.exec(readSoftwareCacheCommand(dockerfile), { timeout: 5_000 });
+    if (!raw.trim()) return { args: "", unavailable: true };
+    const candidates = softwareImageCandidates(raw);
     const args: string[] = [];
     for (const entry of candidates) {
       signal?.throwIfAborted();

@@ -1,4 +1,5 @@
 "use client";
+import { ServerIngressCard } from "@/components/ingress/ServerIngressCard";
 
 import { reportCaughtError as observeCaughtError } from "@repo/core/diagnostics";
 import { useCloudResourceKey } from "@/context/CloudResourceContext";
@@ -768,6 +769,7 @@ function ServerDetail({ serverId }: { serverId: string }) {
 
             {activeTab === "security" && (
               <div className="space-y-6">
+                {hostConfiguration && <ServerIngressCard serverId={serverId} />}
                 <ExposedPortsCard serverId={serverId} />
                 {hostConfiguration && <RateLimitSettings serverId={serverId} />}
               </div>

@@ -21,6 +21,7 @@ import type {
   OpenshipReadiness,
   ClusterWorkloadConfig,
   GitHubDeploymentChecks,
+  StackRole,
   ProjectLifecycleOperation,
 } from "@repo/core";
 import { organization } from "./organization";
@@ -219,6 +220,14 @@ export const project = pgTable(
      * redeploy of an old release replays the commands as they were.
      */
     releaseCommands: jsonb("release_commands").$type<string[] | null>(),
+    /**
+     * Extra processes (queue workers, a scheduler) that run from the same built
+     * image as the web app (#935). NULL = web only, which is every existing
+     * project, so nothing changes for them; `[]` = explicitly no roles. Stored
+     * without the preset-only `when`/`unless` fields. Seeded from
+     * `openship.json`'s `roles`; snapshotted onto each deployment.
+     */
+    roles: jsonb("roles").$type<StackRole[] | null>(),
     /** Docker image for build environment (e.g. node:22, oven/bun:latest) */
     buildImage: text("build_image"),
     /** Explicit runtime version, validated by the selected stack; null preserves its defaults. */

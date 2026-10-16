@@ -573,7 +573,7 @@
     "provision": "Iniciar servidor",
     "resume": "Retomar servidor",
     "resize": "Aplicar capacidade do plano",
-    "operation": "Atividade do servidor",
+    "operation": "Atividade",
     "nextAttempt": "Próxima tentativa:",
     "resizeConfirm": "Aplicar a capacidade do plano atual?",
     "before": "Host atual",
@@ -641,7 +641,7 @@
     "resourceSummary": "{cpu} vCPU · {memory} GB de RAM · {disk} GB de armazenamento",
     "switchingBilling": "Carregando faturamento de {name}…",
     "activity": {
-      "empty": "Nenhuma operação do servidor ainda.",
+      "empty": "Ainda não há operações de configuração nem alterações de capacidade.",
       "waitingForLogs": "Aguardando logs da operação…",
       "noLogs": "Nenhum log foi registrado para esta operação.",
       "status": {
@@ -649,7 +649,8 @@
         "running": "Em andamento",
         "succeeded": "Concluída",
         "failed": "Falhou"
-      }
+      },
+      "description": "Configuração, alterações de capacidade e recuperação deste espaço Cloud."
     },
     "billingServers": "Espaços Cloud",
     "billingServersUnavailable": "Não foi possível carregar seus espaços Cloud."
@@ -719,7 +720,7 @@
   },
   "purchase": {
     "mode": "Modelo de cobrança",
-    "monthly": "Servidores mensais",
+    "monthly": "Planos mensais",
     "payg": "Uso pré-pago",
     "title": "Hospedagem pré-paga",
     "description": "Escolha um nível de recursos, adicione créditos e pague pela utilização dos servidores.",
@@ -772,6 +773,7 @@
     }
   },
   "compute": {
+    "title": "Cobertura mensal",
     "covered": "Computação coberta",
     "needsAttention": "Verifique a cobertura",
     "included": "CPU, RAM e armazenamento incluído estão cobertos 24 horas por dia durante o mês pago. Sem créditos de computação ou recargas.",

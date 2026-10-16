@@ -83,7 +83,9 @@ without rejecting a build; disk pressure must still be resolved before proceedin
 When a build host executor is available, free storage is measured on Docker's
 filesystem. Disk pressure triggers unused-cache cleanup; a build is refused when
 free storage remains below 10% of the filesystem, capped at a 2 GiB reserve, or
-when filesystem inodes are exhausted. Cloud state collection sizes only recognized
+when supported inode statistics confirm exhaustion. Filesystems without meaningful
+inode totals, such as Btrfs, are treated as having unknown inode availability;
+the free-space check still applies. Cloud state collection sizes only recognized
 cache volumes, avoiding scans of application/database volumes.
 Attached or command-protected caches are not walked for size while their files
 can change. They enter the reclaimable retention budget after confirmed exit;

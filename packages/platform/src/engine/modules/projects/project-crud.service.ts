@@ -40,6 +40,7 @@ import {
   resolveWorkload,
   resolveGitHubDeploymentChecks,
   toWorkloadType,
+  parseOpenshipConfig,
   type ReleaseSource,
   type UpdatableIdentity,
   type WorkloadType,
@@ -589,6 +590,23 @@ function normalizeComposePath(value: string | null | undefined): string | null {
   return value?.trim() ? value.trim() : null;
 }
 
+/**
+ * Roles enter through the same rules as `openship.json`'s `roles`: run the value
+ * through the config parser so a hand-built request cannot persist what a repo
+ * file could not declare. undefined = not sent (leave unchanged / create NULL),
+ * null and [] pass through as given. The parsed result is what gets stored, so
+ * it never carries the preset-only `when`/`unless` fields.
+ */
+function validateRoles(roles: unknown): TCreateProjectBody["roles"] {
+  if (roles === undefined || roles === null) return roles;
+  const { config, errors } = parseOpenshipConfig({ roles });
+  if (errors.length > 0) {
+    throw new ValidationError(`Invalid roles: ${errors.join("; ")}`);
+  }
+  // parseRoles rejects kind "web", so the result fits the wire shape.
+  return (config?.roles ?? []) as NonNullable<TCreateProjectBody["roles"]>;
+}
+
 function environmentNameFromSlug(slug: string) {
   return (
     slug
@@ -730,6 +748,9 @@ function buildProductionProjectInput(
     // undefined (not declared) leaves the column NULL = no release phase, which
     // is what every project did before the phase existed.
     releaseCommands: data.releaseCommands ?? null,
+    // undefined (not declared) leaves the column NULL = web only, which is what
+    // every project was before roles existed.
+    roles: data.roles ?? null,
     buildImage: data.buildImage,
     runtimeVersion: data.runtimeVersion,
     runtimeImage: data.runtimeImage,
@@ -904,6 +925,9 @@ async function createProductionProject(
   // Reject incompatible runtime settings before any group/project insert.
   assertRuntimeVersionTarget(data);
   data = { ...data, ...runtimeProjectUpdate(null, data) };
+  // Same rules as openship.json; before any group/project insert.
+  const roles = validateRoles(data.roles);
+  if (roles !== undefined) data = { ...data, roles };
   // The project type is derived from persisted service rows. Accepting an
   // explicit monorepo without app metadata creates a different project from
   // the one requested (including CLI --type monorepo). Reject before writes.
@@ -1540,6 +1564,7 @@ export async function ensureProject(data: EnsureProjectBody, organizationId: str
     if (data.composePath !== undefined) update.composePath = normalizeComposePath(data.composePath);
     if (data.startCommand !== undefined) update.startCommand = data.startCommand;
     if (data.releaseCommands !== undefined) update.releaseCommands = data.releaseCommands;
+    if (data.roles !== undefined) update.roles = validateRoles(data.roles);
     if (data.buildImage !== undefined) update.buildImage = data.buildImage;
     Object.assign(update, runtimeProjectUpdate(project, data));
     assertRuntimeVersionTarget({ ...project, ...data, ...update });
@@ -2152,6 +2177,7 @@ export async function createProjectEnvironment(
     composePath: base.composePath,
     startCommand: base.startCommand,
     releaseCommands: base.releaseCommands,
+    roles: base.roles,
     buildImage: base.buildImage,
     runtimeVersion: base.runtimeVersion,
     runtimeImage: base.runtimeImage,
@@ -2758,6 +2784,7 @@ export async function updateOptions(
     }
     update.releaseCommands = options.releaseCommands;
   }
+  if (options.roles !== undefined) update.roles = validateRoles(options.roles);
   if (options.productionPort !== undefined) update.port = options.productionPort;
   if (options.packageManager !== undefined) update.packageManager = options.packageManager;
   if (options.buildImage !== undefined) update.buildImage = options.buildImage;

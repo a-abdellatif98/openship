@@ -204,6 +204,7 @@ import {
   parseComposeShmSize,
   type ComposeGpuConfig,
   type ComposeHealthcheck,
+  type StackRole,
 } from "@repo/core";
 import {
   dockerResourceLimits,
@@ -1141,7 +1142,8 @@ function deploymentContainerEnv(config: DeployConfig): { env: string[]; dropped:
 
 export class DockerRuntime implements RuntimeAdapter {
   readonly name: string = "docker";
-  readonly capabilities: ReadonlySet<RuntimeCapability> = new Set<RuntimeCapability>([
+  /** Declared as a list so a subclass can narrow it (see CloudDockerRuntime). */
+  static readonly CAPABILITIES: readonly RuntimeCapability[] = [
     "build",
     "prebuiltImage",
     "deploy",
@@ -1172,7 +1174,9 @@ export class DockerRuntime implements RuntimeAdapter {
     "isolatedExec",
     "dockerHost",
     "releaseCommand",
-  ]);
+    "roles",
+  ];
+  readonly capabilities: ReadonlySet<RuntimeCapability> = new Set(DockerRuntime.CAPABILITIES);
 
   /** Docker honors every extended compose key we currently support. */
   readonly unsupportedComposeKeys: ReadonlySet<keyof ComposeAdvanced> = new Set();
@@ -1786,7 +1790,7 @@ export class DockerRuntime implements RuntimeAdapter {
     if (isolatedBuildKit) {
       const software = await readSoftwareCache(executor, `${remoteBuildDir}/${dockerfileName || "Dockerfile"}`, signal);
       if (software.args) log.log("Shared public build images are available; private build cache remains project-owned.\n");
-      else if (software.unavailable) log.log("Shared build images are unavailable; using the normal build cache.\n", "warn");
+      else if (software.unavailable) log.log("Shared base images are unavailable on this Cloud space; uncached image layers will download from the registry. Project build cache remains enabled.\n", "warn");
       const driverOptions = [
         ...(cloudLimits.memory ? [`memory=${cloudLimits.memory}`, `memory-swap=${cloudLimits.memory}`] : []),
         ...(cloudLimits.cpuquota ? [`cpu-quota=${cloudLimits.cpuquota}`, `cpu-period=${cloudLimits.cpuperiod}`] : []),
@@ -2844,6 +2848,7 @@ export class DockerRuntime implements RuntimeAdapter {
         force: config.forcePull,
         refreshMutableTag: config.refreshMutableTag,
         signal: abort.signal,
+        logger: log,
       });
 
       // A pull cannot currently be interrupted through every Docker transport,
@@ -3991,6 +3996,142 @@ export class DockerRuntime implements RuntimeAdapter {
   }
 
   /**
+   * Start ONE replica of a runtime role (a worker or scheduler process) from the
+   * deployment's image, next to the web container `deploy` starts.
+   *
+   * Mirrors `deploy` above: the image and its entrypoint (the role command runs
+   * as `sh -c` exactly like a web start command), the env, the persistent
+   * mounts, the restart policy, the resource caps, the log config and
+   * membership of the project network, so a role reaches the same database and
+   * volumes as the app it ships with.
+   *
+   * Deliberately NOT mirrored: any port (no PORT env, nothing exposed or
+   * published, whatever `config.port` says: a role listens on nothing the edge
+   * could route to) and the network identity (no alias, no hostname, no
+   * `openship.service` label), so a role never answers to the web app's DNS
+   * name and `reconcileNetworkMembership` never re-aliases it as the app. The
+   * role's stop signal and grace period are set on the container itself so
+   * Docker's own stop and remove honor them.
+   */
+  async deployRole(
+    config: DeployConfig,
+    role: Pick<StackRole, "name" | "command" | "stopSignal" | "stopGracePeriod">,
+    replica: number,
+    onLog?: LogCallback,
+    opts?: { beforeStart?: (containerId: string) => Promise<void> },
+  ): Promise<{ containerId: string }> {
+    const log = onLog ?? (() => {});
+    const imageRef = config.imageRef;
+    if (!imageRef) {
+      throw new Error("Docker role containers require an imageRef (built image tag)");
+    }
+    if (!Number.isInteger(replica) || replica < 1) {
+      throw new Error(`Role replica must be an integer >= 1, got ${replica}`);
+    }
+
+    const containerName =
+      `openship-${config.runtimeName || config.projectId}-${config.deploymentId}-${role.name}-${replica}`;
+
+    // The web container's env, minus PORT: a role binds no port. `portless` only
+    // omits the generated value, so a project-set PORT is filtered here too, and
+    // the bare "PORT" entry tells Docker to unset one inherited from the image's ENV.
+    const { env: webEnv, dropped } = deploymentContainerEnv({ ...config, portless: true });
+    const env = [...webEnv.filter((entry) => !entry.startsWith("PORT=")), "PORT"];
+    if (dropped.length > 0) {
+      log({
+        timestamp: new Date().toISOString(),
+        level: "warn",
+        message: droppedRuntimeEnvMessage(dropped),
+      });
+    }
+
+    const scopedBinds = await this.deploymentVolumeBinds(config);
+    const binds = scopedBinds.length > 0 ? scopedBinds : undefined;
+
+    log({
+      timestamp: new Date().toISOString(),
+      message: `Creating ${role.name} container ${containerName} (replica ${replica}) from ${imageRef}...\n`,
+      level: "info",
+    });
+    if (binds) {
+      log({
+        timestamp: new Date().toISOString(),
+        message: `Persistent storage: ${binds.join(", ")}\n`,
+        level: "info",
+      });
+    }
+    log({
+      timestamp: new Date().toISOString(),
+      message: `Resource limits: ${describeResourceLimits(config.resources)}\n`,
+      level: "info",
+    });
+
+    // Join the project network so the role reaches what the app reaches, but
+    // with no alias: only the web container answers to the network alias.
+    // Best-effort, like deploy.
+    let networkId: string | undefined;
+    if (config.networkAlias) {
+      try {
+        networkId = await this.ensureNetwork(config.slug || config.runtimeName || config.projectId);
+      } catch (err) {
+        observeCaughtError(err, "adapters/runtime/docker");
+        log({
+          timestamp: new Date().toISOString(),
+          message: `Warning: internal network setup failed for role ${role.name}: ${
+            err instanceof Error ? err.message : String(err)
+          }\n`,
+          level: "warn",
+        });
+      }
+    }
+
+    return this.withDeploymentLock(async () => {
+      const container = await this.docker.createContainer({
+        name: containerName,
+        Image: imageRef,
+        Cmd: ["sh", "-c", role.command],
+        // The image's probe targets the web process. Roles are portless and
+        // receive their process/exec startup checks from the role rollout.
+        Healthcheck: { Test: ["NONE"] },
+        Env: env,
+        Labels: {
+          ...this.labels({ deploymentId: config.deploymentId, projectId: config.projectId }),
+          [OPENSHIP_LABEL.role]: role.name,
+        },
+        ...toStopConfig({ stopSignal: role.stopSignal, stopGracePeriod: role.stopGracePeriod }),
+        HostConfig: {
+          RestartPolicy: resolveRestartPolicy(config.restartPolicy),
+          LogConfig: DEFAULT_CONTAINER_LOG_CONFIG,
+          Binds: binds,
+          ...(networkId ? { NetworkMode: networkId } : {}),
+          ...dockerResourceLimits(config.resources),
+        },
+      });
+
+      try {
+        // Joins linked networks before the process starts, like a release container.
+        await opts?.beforeStart?.(container.id);
+        await container.start();
+      } catch (error) {
+        // Nobody holds this id yet, so a container left here would be orphaned.
+        try {
+          await container.remove({ force: true });
+        } catch (removeError) {
+          observeCaughtError(removeError, "adapters/runtime/docker");
+        }
+        throw error;
+      }
+
+      log({
+        timestamp: new Date().toISOString(),
+        message: `Container ${container.id.slice(0, 12)} started.\n`,
+        level: "info",
+      });
+      return { containerId: container.id };
+    });
+  }
+
+  /**
    * Run one release command in a THROWAWAY container off the freshly-built
    * image, before anything is activated.
    *
@@ -4147,7 +4288,7 @@ export class DockerRuntime implements RuntimeAdapter {
   async stop(containerId: string): Promise<void> {
     await this.assertContainerAccess(containerId);
     const container = this.docker.getContainer(containerId);
-    await container.stop();
+    await gracefulStopBeforeRemoval(container);
   }
 
   async start(containerId: string): Promise<void> {
@@ -4640,7 +4781,8 @@ export class DockerRuntime implements RuntimeAdapter {
    * followProgress hangs forever (this was the cross-server migration stall).
    * A local socket has no such issue, so it keeps the native dockerode pull.
    */
-  async pullImage(ref: string, opts?: { force?: boolean }): Promise<void> {
+  async pullImage(ref: string, opts?: { force?: boolean; signal?: AbortSignal; logger?: BuildLogger }): Promise<void> {
+    opts?.signal?.throwIfAborted();
     if (!opts?.force) {
       try {
         await this.docker.getImage(ref).inspect();
@@ -4654,7 +4796,7 @@ export class DockerRuntime implements RuntimeAdapter {
     // mutable tag (:latest/:1) rolls forward on an "update" deploy.
     const executor = this.connectionOptions?.executor;
     if (executor) {
-      await this.runRemoteRegistryCommand("pull", ref);
+      await this.runRemoteRegistryCommand("pull", ref, opts?.signal, opts?.logger);
       return;
     }
     // dockerode does not read `~/.docker/config.json` the way the CLI does, so this pull
@@ -4697,7 +4839,10 @@ export class DockerRuntime implements RuntimeAdapter {
   async prepareDeploymentImage(ref: string, options: DockerImagePreparationOptions = {}) {
     return prepareDockerImage(ref, options, {
       inspect: image => this.inspectDeploymentImage(image),
-      pull: (image, intent) => this.pullImage(image, intent),
+      pull: (image, intent) => this.pullImage(image, { ...intent,
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.logger ? { logger: options.logger } : {}),
+      }),
     });
   }
 
@@ -4806,32 +4951,38 @@ export class DockerRuntime implements RuntimeAdapter {
 
   /** The same bounded host path for pulls and pushes, with one disposable
    * registry credential. Docker progress streams over SSH may never end. */
-  private async runRemoteRegistryCommand(action: "pull" | "push", ref: string, signal?: AbortSignal): Promise<string> {
+  private async runRemoteRegistryCommand(action: "pull" | "push", ref: string, signal?: AbortSignal, logger?: BuildLogger): Promise<string> {
     const executor = this.connectionOptions!.executor!;
     const auth = await this.connectionOptions?.resolveRegistryAuth?.(ref);
     const config = auth ? dockerConfigJsonFor(auth) : null;
     const dir = `/tmp/openship-${action}-${randomUUID()}`;
     let ownsDirectory = false;
+    const bounded = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10 * 60_000)]);
+    const execute = async (command: string) => {
+      if (!logger || typeof executor.streamExec !== "function")
+        return executor.exec(command, { timeout: 10 * 60_000 });
+      const result = await executor.streamExec(command, logger.callback, { signal: bounded });
+      if (result.code !== 0) throw new Error(`Docker ${action} failed (exit ${result.code}): ${result.output.slice(-2000)}`);
+      return result.output;
+    };
     const run = async () => {
-      signal?.throwIfAborted();
-      const timeout = 10 * 60_000;
+      bounded.throwIfAborted();
       // Without a saved credential, preserve the target's own Docker login.
-      if (!config) return executor.exec(`docker ${action} ${sq(ref)}`, { timeout });
+      if (!config) return execute(`docker ${action} ${sq(ref)}`);
       // Credentials go through file writes, never process arguments. Creation
       // is exclusive and private; cleanup also runs after interruption.
       await executor.exec(`mkdir -m 700 ${sq(dir)}`);
       ownsDirectory = true;
       await executor.writeFile(`${dir}/config.json`, config);
       await executor.exec(`chmod 600 ${sq(dir)}/config.json`);
-      signal?.throwIfAborted();
-      return executor.exec(
+      bounded.throwIfAborted();
+      return execute(
         `DOCKER_CONFIG=${sq(dir)} docker ${action} ${sq(ref)}; rc=$?; rm -rf ${sq(dir)}; exit $rc`,
-        { timeout },
       );
     };
     try {
-      return signal && executor.runWithAbortSignal
-        ? await executor.runWithAbortSignal(signal, run)
+      return executor.runWithAbortSignal
+        ? await executor.runWithAbortSignal(bounded, run)
         : await run();
     } finally {
       if (ownsDirectory) {

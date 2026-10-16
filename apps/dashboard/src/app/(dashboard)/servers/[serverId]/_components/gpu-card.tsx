@@ -1,12 +1,13 @@
 "use client";
 
 import { Icon as UiIcon } from "@repo/ui/icons";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { systemApi, type ServerInfo } from "@/lib/api/system";
 import { getApiErrorMessage } from "@/lib/api/client";
 import { useI18n, interpolate } from "@/components/i18n-provider";
 import { useToast } from "@/context/ToastContext";
 import { gpuMismatch } from "@/lib/server-gpu";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 type Mode = "auto" | "yes" | "no";
 const toMode = (o: "yes" | "no" | null | undefined): Mode => o ?? "auto";
@@ -27,6 +28,7 @@ export function GpuCard({
   const { t } = useI18n();
   const s = t.servers.gpu;
   const { showToast } = useToast();
+  const controlId = useId();
   const [mode, setMode] = useState<Mode>(toMode(server.gpu?.override));
   const [saving, setSaving] = useState(false);
   const gpu = server.gpu;
@@ -63,7 +65,7 @@ export function GpuCard({
   }
 
   return (
-    <div className="bg-card rounded-2xl">
+    <div className="bg-card rounded-2xl @container/gpu">
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-border/50">
         <div className="flex min-w-0 items-center gap-3">
           <div className="w-9 h-9 bg-info/10 rounded-xl flex items-center justify-center">
@@ -81,24 +83,41 @@ export function GpuCard({
         </span>
       </div>
       <div className="space-y-3 px-5 py-4">
-        <fieldset disabled={saving} className="space-y-2">
-          <legend className="text-xs font-medium text-muted-foreground">{s.modeLabel}</legend>
-          {(["auto", "yes", "no"] as const).map((m) => (
-            <label
-              key={m}
-              className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
-            >
-              <input
-                type="radio"
-                name={`gpu-mode-${server.id}`}
-                checked={mode === m}
-                onChange={() => void choose(m)}
-              />
-              {m === "auto" ? s.modeAuto : m === "yes" ? s.modeYes : s.modeNo}
-            </label>
-          ))}
-        </fieldset>
-        <p className="text-xs text-muted-foreground">{s.modeHint}</p>
+        <div className="flex flex-col gap-3 @min-[32rem]/gpu:flex-row @min-[32rem]/gpu:items-center @min-[32rem]/gpu:justify-between @min-[32rem]/gpu:gap-6">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <label htmlFor={controlId} className="text-sm font-medium text-foreground">
+                {s.modeLabel}
+              </label>
+              {saving && (
+                <span
+                  role="status"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                >
+                  <UiIcon name="spinner" className="size-3 motion-safe:animate-spin" />
+                  {s.saving}
+                </span>
+              )}
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">{s.modeHint}</p>
+          </div>
+          <div className="w-full shrink-0 @min-[32rem]/gpu:w-52">
+            <CustomSelect<Mode>
+              id={controlId}
+              aria-label={s.modeLabel}
+              value={mode}
+              options={[
+                { value: "auto", label: s.modeAuto },
+                { value: "yes", label: s.modeYes },
+                { value: "no", label: s.modeNo },
+              ]}
+              onChange={(next) => void choose(next)}
+              disabled={saving}
+              variant="filled"
+              triggerClassName="bg-muted/60 hover:bg-muted"
+            />
+          </div>
+        </div>
         {mismatch && (
           <p role="status" className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
             {mismatch === "yes-not-detected" ? s.mismatchYes : s.mismatchNo}

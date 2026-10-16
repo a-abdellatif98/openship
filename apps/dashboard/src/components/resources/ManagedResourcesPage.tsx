@@ -122,7 +122,7 @@ function Resources({ serverId }: { serverId?: string }) {
       ) : (
         <section className="mt-6 flex min-h-72 flex-col items-center justify-center rounded-2xl bg-card p-8 text-center">
           <div className="mb-4 rounded-2xl bg-muted/50 p-4">
-            <Icon name="layers" className="size-8 text-muted-foreground" />
+            <Icon name="cloud" className="size-8 text-muted-foreground" />
           </div>
           <h2 className="text-lg font-medium">{copy.emptyTitle}</h2>
           <p className="mt-2 max-w-md text-sm text-muted-foreground">{copy.emptyDescription}</p>

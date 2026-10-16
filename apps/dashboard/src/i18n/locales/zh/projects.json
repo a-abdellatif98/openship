@@ -137,6 +137,7 @@
       "deployments": "部署",
       "health": "健康",
       "monitoring": "监控",
+      "monitoringAndLogs": "监控与日志",
       "source": "源",
       "sourceAndTriggers": "源与触发器",
       "webhooks": "Webhook",

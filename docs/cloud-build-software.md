@@ -18,6 +18,11 @@ restores ordinary creation; already-created workspaces keep their pinned softwar
 revision. Keep the setting stable while a workspace creation request is unresolved,
 so its provider idempotency key continues to describe the same request.
 
+Redeploying the SaaS API does not attach the disk to an existing Cloud space. Build
+logs now report when the shared image pack is unavailable; a new project's private
+BuildKit cache can still start empty and then be reused by later builds. The public
+image pack and that private cache are independent.
+
 The provider uses its existing software catalog, owned disk references, attachment
 permissions, placement checks and boot readiness. Software storage is platform
 owned; private writable build-cache storage keeps its existing limits and cleanup.

@@ -861,6 +861,19 @@ export async function verifyDomain(
 ) {
   const { domain, project } = await getMutableDomainWithAuth(domainId, ctx.organizationId);
   try {
+    const ingress = domain.externalIngress ? await repos.ingress.forDomain(domainId) : undefined;
+    if (ingress) {
+      opts.onLog?.("Checking managed tunnel, DNS and Access setup…");
+      await (await import("../ingress/service")).reconcileHostname(ingress);
+      const current = await repos.ingress.forDomain(domainId);
+      const verified = current?.status === "ready";
+      return {
+        verified, cnameVerified: verified, txtVerified: verified,
+        message: verified ? "Cloudflare Tunnel, DNS and Access setup is complete."
+          : current?.error ?? "Managed ingress setup is still in progress.",
+        sslStatus: verified ? "external" : domain.sslStatus,
+      };
+    }
     return await checkDomain(ctx, domainId, domain, project, opts);
   } catch (error) {
     // The ordinary negative results below already persist their reason. This

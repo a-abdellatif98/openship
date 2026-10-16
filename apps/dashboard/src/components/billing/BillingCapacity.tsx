@@ -11,7 +11,6 @@ import { ResourceLabel, ResourceMeter, ResourceRing } from "./ResourceMeter";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { CloudActivationSteps } from "./CloudActivationSteps";
-import { BillingComputeCoverage } from "./BillingComputeCoverage";
 
 export type { BillingState };
 
@@ -95,7 +94,6 @@ export function BillingCapacity({ state }: { state: BillingState }) {
 
   return (
     <>
-      <BillingComputeCoverage state={state} />
       <section className="@container/capacity rounded-2xl bg-card p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

@@ -617,7 +617,7 @@ describe("customer credit limits", () => {
     const monthly = { ...paid, compute: monthlyCompute(), monthlyCreditLimit: null,
       balance: { total: null, quotaLimit: null, quotaUsed: 0, quotaRemaining: null },
       plan: { ...hobby, billingMode: "monthly" as const, monthlyCredits: null } };
-    await render(<BillingCapacity state={monthly} />);
+    await render(<BillingOverview state={monthly} />);
     expect(visibleText()).toContain(copy.compute.covered);
     expect(visibleText()).toContain("Paid through Nov 1, 2026");
     expect(container.querySelector('[role="meter"][aria-label="Cloud usage"]')).toBeNull();
@@ -632,7 +632,7 @@ describe("customer credit limits", () => {
   it("separates retained storage charges from expired compute coverage", async () => {
     const compute = monthlyCompute({ covered: false, status: "storage_payment_required" });
     compute.retention.amountDue = 1.25;
-    await render(<BillingCapacity state={{ ...paid, compute }} />);
+    await render(<BillingOverview state={{ ...paid, compute }} />);
     expect(visibleText()).toContain(copy.compute.needsAttention);
     expect(visibleText()).toContain("Retained storage balance: $1.25");
     expect(visibleText()).not.toContain(copy.creditAlert.exhaustedTitle);

@@ -135,6 +135,7 @@
       "deployments": "Dağıtımlar",
       "health": "Sağlık",
       "monitoring": "İzleme",
+      "monitoringAndLogs": "İzleme ve günlükler",
       "source": "Kaynak",
       "sourceAndTriggers": "Kaynak ve Tetikleyiciler",
       "webhooks": "Webhook'lar",

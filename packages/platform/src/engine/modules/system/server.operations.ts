@@ -578,6 +578,10 @@ async function deleteServerUnderLock(
     return failServer({ error: "This is the current host and can't be removed." }, 400);
   }
 
+  if (await repos.ingress.byServer(id)) return failServer({
+    error: "Disconnect this server’s Cloudflare Tunnel and finish its hostname cleanup before deleting the server.",
+    code: "SERVER_INGRESS_CONNECTED",
+  }, 409);
   const destroyOnSource = input.destroyOnSource === true;
 
   if (await repos.serverCluster.membership(id)) {

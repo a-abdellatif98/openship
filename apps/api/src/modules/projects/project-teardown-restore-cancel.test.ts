@@ -82,6 +82,7 @@ vi.mock("@repo/platform/engine/modules/projects/project-cleanup.service", () => 
   hasPendingTimedOutCleanup: vi.fn(() => false),
 }));
 vi.mock("@repo/platform/engine/lib/project-runtime-lock", () => ({
+  withProjectStateLock: async (_id: string, work: () => Promise<unknown>) => work(),
   withProjectRuntimeLock: async (_projectId: string, run: () => Promise<unknown>) => run(),
 }));
 vi.mock("@repo/platform/engine/lib/openship-manifest-sync", () => ({

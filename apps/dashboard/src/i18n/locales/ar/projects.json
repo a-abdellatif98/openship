@@ -137,6 +137,7 @@
       "deployments": "عمليات النشر",
       "health": "الصحة",
       "monitoring": "المراقبة",
+      "monitoringAndLogs": "المراقبة والسجلات",
       "source": "المصدر",
       "sourceAndTriggers": "المصدر والمشغلات",
       "webhooks": "الويب هوكس",

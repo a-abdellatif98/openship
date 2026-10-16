@@ -14,7 +14,7 @@ function fixture(transport = "cloud", buildKit = true, resources = config.resour
   const executor = {
     exec: vi.fn(async (command: string): Promise<string> =>
       command.includes("buildx version") ? (buildKit ? "OPENSHIP_BUILDKIT_OK\n" : "") :
-      command.includes("df -Pk") ? "104857600 52428800\n100000\n" : "",
+      command.includes("df -Pk") ? "104857600 52428800\n200000 100000\n" : "",
     ),
     writeFile: vi.fn(async () => {}),
     streamExec: vi.fn(async (_command: string, _logger: unknown, _options: unknown) => ({
@@ -106,6 +106,40 @@ describe("Cloud Docker build execution limits", () => {
     expect(h.executor.streamExec).not.toHaveBeenCalled();
     expect(h.commands()).not.toContain("buildx create");
   });
+  it.each([
+    ["cloud", true],
+    ["cloud", false],
+    ["ssh", true],
+    ["ssh", false],
+  ] as const)(
+    "builds with unsupported inode statistics on %s (BuildKit: %s)",
+    async (transport, buildKit) => {
+      const h = fixture(transport, buildKit);
+      const exec = h.executor.exec.getMockImplementation()!;
+      h.executor.exec.mockImplementation((command) =>
+        command.includes("df -Pk")
+          ? Promise.resolve("OPENSHIP_STORAGE 524288000 301989888\nOPENSHIP_INODES 0 0\n")
+          : exec(command),
+      );
+      await expect(h.run()).resolves.toBeUndefined();
+      expect(h.executor.streamExec).toHaveBeenCalledOnce();
+    },
+  );
+  it.each(["cloud", "ssh"])(
+    "refuses confirmed inode exhaustion before building on %s",
+    async (transport) => {
+      const h = fixture(transport);
+      const exec = h.executor.exec.getMockImplementation()!;
+      h.executor.exec.mockImplementation((command) =>
+        command.includes("df -Pk")
+          ? Promise.resolve("OPENSHIP_STORAGE 524288000 301989888\nOPENSHIP_INODES 1000 0\n")
+          : exec(command),
+      );
+      await expect(h.run()).rejects.toMatchObject({ code: "BUILD_STORAGE_LOW" });
+      expect(h.executor.streamExec).not.toHaveBeenCalled();
+      expect(h.commands()).not.toContain("buildx create");
+    },
+  );
   it.each(["cloud", "ssh"])("preserves fragmented %s terminal output without adding line breaks", async transport => {
     const h = fixture(transport);
     const original = "#5 installing dependencies\r\n#5 café ready\r\n";

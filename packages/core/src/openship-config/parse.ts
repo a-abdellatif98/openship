@@ -432,6 +432,11 @@ function parseRoleHealth(ctx: Ctx, v: unknown, path: string): RoleHealth | undef
   };
 }
 
+/** Role names land in container names and labels, so they must be DNS labels. */
+const ROLE_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+/** Matches the existing app-scaling limit (1-100). */
+const MAX_ROLE_REPLICAS = 100;
+
 /**
  * Runtime roles beyond the web process (issue #935). Presence of the field at
  * all - including `[]` - overrides the stack's own `defaultRoles` presets;
@@ -455,6 +460,13 @@ function parseRoles(ctx: Ctx, v: unknown, path: string): StackRole[] | undefined
     const name = ctx.str(item.name, `${p}.name`);
     if (!name?.trim()) {
       ctx.err(`${p}.name`, "requires a non-empty `name`");
+      return;
+    }
+    if (!ROLE_NAME_RE.test(name)) {
+      ctx.err(
+        `${p}.name`,
+        "must be a DNS label: lowercase letters, digits and dashes, starting and ending with a letter or digit, at most 63 characters",
+      );
       return;
     }
     if (seen.has(name)) {
@@ -492,6 +504,17 @@ function parseRoles(ctx: Ctx, v: unknown, path: string): StackRole[] | undefined
     }
     const stopSignal = parseStopSignal(ctx, item.stopSignal, `${p}.stopSignal`);
     const stopGracePeriod = parseStopGracePeriod(ctx, item.stopGracePeriod, `${p}.stopGracePeriod`);
+    // Preset gating only (see StackRole): a declared role always runs. Say so,
+    // or a role copied from a preset silently loses the condition it relied on.
+    const gateKeys = (["when", "unless"] as const).filter((key) => item[key] !== undefined);
+    if (gateKeys.length > 0) {
+      const keys = gateKeys.map((key) => `\`${key}\``).join(" and ");
+      const verbs =
+        gateKeys.length === 1
+          ? "applies only to stack presets and is"
+          : "apply only to stack presets and are";
+      ctx.warnings.push(`${p} ("${name}"): ${keys} ${verbs} ignored, so this role always runs`);
+    }
     out.push({
       name,
       kind,
@@ -531,8 +554,8 @@ function parseStopGracePeriod(ctx: Ctx, v: unknown, path: string): string | unde
 
 function parseReplicas(ctx: Ctx, v: unknown, path: string): number | undefined {
   if (v === undefined) return undefined;
-  if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 1) {
-    ctx.err(path, "must be a safe integer >= 1");
+  if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 1 || v > MAX_ROLE_REPLICAS) {
+    ctx.err(path, `must be an integer between 1 and ${MAX_ROLE_REPLICAS}`);
     return undefined;
   }
   return v;

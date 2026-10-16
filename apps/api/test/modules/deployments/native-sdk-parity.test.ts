@@ -96,6 +96,7 @@ vi.mock("@repo/db", () => ({
   schema: {},
   getDriver: () => "postgres",
   repos: {
+    ingress: { byServer: async () => null },
     serverCluster: { membership: async () => null },
     clusterDatabase: { list: async () => [] },
     user: { findFoundingAdmin: async () => ({ id: "founder" }) },

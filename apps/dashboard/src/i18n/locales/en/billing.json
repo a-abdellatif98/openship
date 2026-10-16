@@ -618,7 +618,7 @@
     "resize": "Apply plan capacity",
     "operation": "Activity",
     "activity": {
-      "empty": "No capacity changes yet.",
+      "empty": "No setup or capacity changes yet.",
       "waitingForLogs": "Waiting for operation logs…",
       "noLogs": "No logs were recorded for this operation.",
       "status": {
@@ -626,7 +626,8 @@
         "running": "In progress",
         "succeeded": "Completed",
         "failed": "Failed"
-      }
+      },
+      "description": "Setup, capacity changes and recovery for this Cloud space."
     },
     "nextAttempt": "Next retry:",
     "resizeConfirm": "Apply the current plan’s capacity?",
@@ -719,7 +720,7 @@
   },
   "purchase": {
     "mode": "Billing model",
-    "monthly": "Monthly hosts",
+    "monthly": "Monthly plans",
     "payg": "Prepaid PAYG",
     "title": "Prepaid hosting",
     "description": "Choose capacity, add credits, and pay for usage.",
@@ -772,6 +773,7 @@
     }
   },
   "compute": {
+    "title": "Monthly coverage",
     "covered": "Compute covered",
     "needsAttention": "Coverage needs attention",
     "included": "CPU, RAM and included storage are covered 24/7 for your paid month. No compute credits or top-ups.",

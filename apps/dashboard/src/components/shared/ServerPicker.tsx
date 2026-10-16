@@ -9,9 +9,10 @@ import { cloudSpacePlanLabel } from "@/lib/cloud-spaces";
 import { usePlatform } from "@/context/PlatformContext";
 import { DESKTOP_LOCAL_DEPLOY_ENABLED } from "@/hooks/useLocalDeployGate";
 import type { ServerInfo } from "@/lib/api/system";
+import { ManagedServerStatus } from "@/components/servers/managed/ManagedServerStatus";
 
 /** The wizard's server row, shared by connected and managed destinations. */
-export function ServerRowContent({ server, active = false, details = "capacity" }: { server: ServerInfo; active?: boolean; details?: "capacity" | "plan" }) {
+export function ServerRowContent({ server, active = false, details = "capacity", showStatus = false }: { server: ServerInfo; active?: boolean; details?: "capacity" | "plan"; showStatus?: boolean }) {
   const { t, locale } = useI18n();
   const { deployMode } = usePlatform();
   const localComingSoon = server.isLocal && deployMode === "desktop" && !DESKTOP_LOCAL_DEPLOY_ENABLED;
@@ -20,7 +21,7 @@ export function ServerRowContent({ server, active = false, details = "capacity" 
   return (
     <>
       <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${active ? "bg-primary/15 text-primary" : "bg-muted/50 text-muted-foreground"}`}>
-        <Icon name={managed ? "layers" : "server"} className="size-3.5" />
+        <Icon name={managed ? "cloud" : "server"} className="size-3.5" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col text-start">
         <span className="truncate text-sm font-medium text-foreground">
@@ -41,6 +42,7 @@ export function ServerRowContent({ server, active = false, details = "capacity" 
               : <bdi dir="ltr">{server.sshUser || "root"}@<BlurIp>{server.sshHost}</BlurIp>:{server.sshPort || 22}</bdi>}
         </span>
       </span>
+      {managed && showStatus && <ManagedServerStatus workspace={managed} compact />}
     </>
   );
 }
@@ -55,11 +57,12 @@ interface ServerPickerProps<T extends ServerInfo> {
   showLabel?: boolean;
   disabled?: boolean;
   details?: "capacity" | "plan";
+  showStatus?: boolean;
 }
 
 /** Existing wizard picker, using the shared menu's positioning and keyboard handling. */
 export function ServerPicker<T extends ServerInfo>({
-  servers, selectedId, onSelect, onAddServer, addServerLabel, label, showLabel = true, disabled, details = "capacity",
+  servers, selectedId, onSelect, onAddServer, addServerLabel, label, showLabel = true, disabled, details = "capacity", showStatus = false,
 }: ServerPickerProps<T>) {
   const { t } = useI18n();
   const { selfHosted } = usePlatform();
@@ -81,7 +84,7 @@ export function ServerPicker<T extends ServerInfo>({
           label: server.name || server.sshHost || server.id,
           description: server.managed ? undefined : `${server.sshUser || "root"}@${server.sshHost}:${server.sshPort || 22}`,
         }))}
-        renderOption={(option, selected) => <ServerRowContent server={servers.find(server => server.id === option.value)!} active={selected} details={details} />}
+        renderOption={(option, selected) => <ServerRowContent server={servers.find(server => server.id === option.value)!} active={selected} details={details} showStatus={showStatus} />}
         onChange={id => {
           const server = servers.find(server => server.id === id);
           if (server) onSelect(server);

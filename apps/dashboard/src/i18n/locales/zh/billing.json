@@ -573,7 +573,7 @@
     "provision": "启动服务器",
     "resume": "恢复服务器",
     "resize": "应用套餐容量",
-    "operation": "服务器活动",
+    "operation": "活动",
     "nextAttempt": "下次重试：",
     "resizeConfirm": "应用当前套餐的容量？",
     "before": "当前主机",
@@ -641,7 +641,7 @@
     "resourceSummary": "{cpu} vCPU · {memory} GB 内存 · {disk} GB 存储",
     "switchingBilling": "正在加载 {name} 的账单…",
     "activity": {
-      "empty": "暂无服务器操作。",
+      "empty": "暂无设置或容量调整记录。",
       "waitingForLogs": "正在等待操作日志…",
       "noLogs": "此操作未记录日志。",
       "status": {
@@ -649,7 +649,8 @@
         "running": "进行中",
         "succeeded": "已完成",
         "failed": "失败"
-      }
+      },
+      "description": "此云空间的设置、容量调整和恢复记录。"
     },
     "billingServers": "云空间",
     "billingServersUnavailable": "无法加载您的云空间。"
@@ -719,7 +720,7 @@
   },
   "purchase": {
     "mode": "计费方式",
-    "monthly": "包月主机",
+    "monthly": "月付套餐",
     "payg": "预付按量计费",
     "title": "预付费托管",
     "description": "选择资源等级、添加额度，并按服务器用量付费。",
@@ -772,6 +773,7 @@
     }
   },
   "compute": {
+    "title": "月度保障",
     "covered": "计算资源已包含",
     "needsAttention": "请检查计算保障状态",
     "included": "已付款月份内全天包含 CPU、内存和配套存储，无需计算积分或充值。",

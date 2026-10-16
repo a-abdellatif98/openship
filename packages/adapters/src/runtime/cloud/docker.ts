@@ -24,6 +24,7 @@ import type {
   MultiServiceDeployConfig,
   MultiServiceDeployResult,
   MultiServiceGroupHandle,
+  RuntimeCapability,
 } from "../types";
 import { CloudWorkspaceExecutor } from "./workspace-executor";
 import { CLOUD_DOCKER_BRIDGE_PORT } from "./docker-bridge-source";
@@ -68,6 +69,10 @@ function notFound(error: unknown): boolean {
  * stays explicit: container IDs identify containers; workspaceId identifies the
  * shared host. Inherited retention/rollback never stop or delete that host. */
 export class CloudDockerRuntime extends DockerRuntime {
+  // Managed cloud refuses role containers for now; every other Docker capability is kept.
+  override readonly capabilities: ReadonlySet<RuntimeCapability> = new Set(
+    DockerRuntime.CAPABILITIES.filter(cap => cap !== "roles"),
+  );
   readonly workspaceId: string;
   readonly projectId: string;
   readonly executor: CloudWorkspaceExecutor;
@@ -189,15 +194,45 @@ export class CloudDockerRuntime extends DockerRuntime {
     return id;
   }
   override async removeNetwork(slug: string) {
-    try {
-      const network = await this.docker.getNetwork(`openship-${slug}`).inspect();
-      if (network.Labels?.["openship.project"] !== this.projectId)
-        throw new AppError("Network belongs to another project", 409, "CLOUD_NETWORK_CONFLICT");
-    } catch (error) {
-      if (notFound(error)) return;
-      throw error;
-    }
-    return super.removeNetwork(slug);
+    return this.removeScopedNetwork(slug, "strict");
+  }
+  /** A slug retained after migration can now name another project's network.
+   * Cleanup leaves a proven foreign owner alone; unknown ownership still fails. */
+  async removeProjectNetwork(slug: string): Promise<void> {
+    return this.removeScopedNetwork(slug, "project-cleanup");
+  }
+  private async removeScopedNetwork(
+    slug: string,
+    mode: "strict" | "project-cleanup",
+  ): Promise<void> {
+    return this.options.provisionLock.run(async () => {
+      try {
+        const network = await this.docker.getNetwork(`openship-${slug}`).inspect();
+        const owner = network.Labels?.["openship.project"];
+        if (owner !== this.projectId) {
+          if (
+            mode === "project-cleanup" &&
+            typeof owner === "string" &&
+            owner.length > 0 &&
+            owner.trim() === owner
+          )
+            return;
+          throw new AppError("Network belongs to another project", 409, "CLOUD_NETWORK_CONFLICT");
+        }
+        if (typeof network.Id !== "string" || !/^[a-f0-9]{64}$/.test(network.Id))
+          throw new AppError(
+            "Could not verify the network identity",
+            409,
+            "CLOUD_NETWORK_CONFLICT",
+          );
+        // Network names are reusable. Removing the inspected ID cannot target a
+        // replacement created with the same name after the ownership read.
+        await this.docker.getNetwork(network.Id).remove();
+      } catch (error) {
+        if (notFound(error)) return;
+        throw error;
+      }
+    });
   }
   override async listProjectContainerIds(id: string) {
     this.assertProject(id);

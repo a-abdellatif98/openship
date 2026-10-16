@@ -137,6 +137,7 @@
       "deployments": "Bereitstellungen",
       "health": "Zustand",
       "monitoring": "Überwachung",
+      "monitoringAndLogs": "Überwachung & Protokolle",
       "source": "Quelle",
       "sourceAndTriggers": "Quelle & Auslöser",
       "webhooks": "Webhooks",
